@@ -20,6 +20,7 @@ from code_monet.types import (
     PausedMessage,
     PauseReason,
     PieceStateMessage,
+    get_style_config,
     Point,
 )
 
