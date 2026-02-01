@@ -44,7 +44,6 @@ from code_monet.types.messages import (
     PausedMessage,
     PieceStateMessage,
     ServerMessage,
-    StyleChangeMessage,
     ThinkingDeltaMessage,
 )
 from code_monet.types.paths import Path
@@ -120,6 +119,5 @@ __all__ = [
     "PausedMessage",
     "PieceStateMessage",
     "ServerMessage",
-    "StyleChangeMessage",
     "ThinkingDeltaMessage",
 ]

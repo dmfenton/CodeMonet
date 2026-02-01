@@ -20,7 +20,6 @@ import type {
   PausedMessage,
   PieceStateMessage,
   ServerMessage,
-  StyleChangeMessage,
   ThinkingDeltaMessage,
 } from '../types';
 
@@ -219,14 +218,6 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
   });
 };
 
-export const handleStyleChange: MessageHandler<StyleChangeMessage> = (message, dispatch) => {
-  dispatch({
-    type: 'SET_STYLE',
-    drawingStyle: message.drawing_style,
-    styleConfig: message.style_config,
-  });
-};
-
 export const handleAgentStrokesReady: MessageHandler<AgentStrokesReadyMessage> = (
   message,
   dispatch
@@ -257,7 +248,6 @@ const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessa
   load_canvas: handleLoadCanvas as MessageHandler<ServerMessage>,
   init: handleInit as MessageHandler<ServerMessage>,
   agent_strokes_ready: handleAgentStrokesReady as MessageHandler<ServerMessage>,
-  style_change: handleStyleChange as MessageHandler<ServerMessage>,
 };
 
 /**

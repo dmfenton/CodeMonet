@@ -21,8 +21,6 @@ from code_monet.types import (
     PauseReason,
     PieceStateMessage,
     Point,
-    StyleChangeMessage,
-    get_style_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,17 +85,13 @@ async def handle_new_canvas(
         workspace.agent.add_nudge(direction)
         logger.info(f"User {workspace.user_id}: new canvas with direction: {direction}")
 
-    # If drawing_style provided, set it atomically with the new canvas
+    # If drawing_style provided, persist it so the agent gets the right prompt
     style_str = message.get("drawing_style") if message else None
     if style_str:
         try:
             new_style = DrawingStyleType(style_str)
             workspace.state.canvas.drawing_style = new_style
             await workspace.state.save()
-            style_config = get_style_config(new_style)
-            await workspace.connections.broadcast(
-                StyleChangeMessage(drawing_style=new_style, style_config=style_config)
-            )
             logger.info(f"User {workspace.user_id}: new canvas with style: {new_style.value}")
         except ValueError:
             logger.warning(f"User {workspace.user_id}: invalid style in new_canvas: {style_str}")
