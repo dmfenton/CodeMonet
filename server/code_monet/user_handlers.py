@@ -20,8 +20,8 @@ from code_monet.types import (
     PausedMessage,
     PauseReason,
     PieceStateMessage,
-    get_style_config,
     Point,
+    get_style_config,
 )
 
 logger = logging.getLogger(__name__)

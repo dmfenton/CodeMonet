@@ -89,10 +89,15 @@ function App(): React.ReactElement {
     send({ type: 'pause' });
   }, [setPaused, send]);
 
-  const handleResume = useCallback((direction?: string) => {
+  const handleStart = useCallback((direction?: string) => {
     setPaused(false);
-    send({ type: 'resume', direction });
-  }, [setPaused, send]);
+    send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle });
+    send({ type: 'resume' });
+  }, [setPaused, send, state.drawingStyle]);
+
+  const handleNewCanvas = useCallback(() => {
+    send({ type: 'new_canvas', drawing_style: state.drawingStyle });
+  }, [send, state.drawingStyle]);
 
   const handleStyleChange = useCallback((style: DrawingStyleType) => {
     dispatch({
@@ -139,7 +144,8 @@ function App(): React.ReactElement {
         onStyleChange={handleStyleChange}
         onToggleDrawing={toggleDrawing}
         onPause={handlePause}
-        onResume={handleResume}
+        onStart={handleStart}
+        onNewCanvas={handleNewCanvas}
       />
 
       <div className="thinking-strip">
