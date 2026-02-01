@@ -3,9 +3,10 @@
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import type { PendingStroke, ServerMessage } from '@code-monet/shared';
+import type { DrawingStyleType, PendingStroke, ServerMessage } from '@code-monet/shared';
 import {
   deriveAgentStatus,
+  getStyleConfig,
   shouldShowIdleAnimation,
   STATUS_LABELS,
   useCanvas,
@@ -88,10 +89,23 @@ function App(): React.ReactElement {
     send({ type: 'pause' });
   }, [setPaused, send]);
 
-  const handleResume = useCallback((direction?: string) => {
+  const handleStart = useCallback((direction?: string) => {
     setPaused(false);
-    send({ type: 'resume', direction });
-  }, [setPaused, send]);
+    send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle });
+    send({ type: 'resume' });
+  }, [setPaused, send, state.drawingStyle]);
+
+  const handleNewCanvas = useCallback(() => {
+    send({ type: 'new_canvas', drawing_style: state.drawingStyle });
+  }, [send, state.drawingStyle]);
+
+  const handleStyleChange = useCallback((style: DrawingStyleType) => {
+    dispatch({
+      type: 'SET_STYLE',
+      drawingStyle: style,
+      styleConfig: getStyleConfig(style),
+    });
+  }, [dispatch]);
 
   // Keep sendRef in sync for stroke completion callback
   useEffect(() => {
@@ -127,9 +141,11 @@ function App(): React.ReactElement {
         drawingEnabled={state.drawingEnabled}
         drawingStyle={state.drawingStyle}
         onSend={send}
+        onStyleChange={handleStyleChange}
         onToggleDrawing={toggleDrawing}
         onPause={handlePause}
-        onResume={handleResume}
+        onStart={handleStart}
+        onNewCanvas={handleNewCanvas}
       />
 
       <div className="thinking-strip">

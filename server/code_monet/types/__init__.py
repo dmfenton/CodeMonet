@@ -33,7 +33,6 @@ from code_monet.types.messages import (
     ClientMessage,
     ClientNewCanvasMessage,
     ClientNudgeMessage,
-    ClientSetStyleMessage,
     ClientStrokeMessage,
     CodeExecutionMessage,
     ErrorMessage,
@@ -45,7 +44,6 @@ from code_monet.types.messages import (
     PausedMessage,
     PieceStateMessage,
     ServerMessage,
-    StyleChangeMessage,
     ThinkingDeltaMessage,
 )
 from code_monet.types.paths import Path
@@ -110,7 +108,6 @@ __all__ = [
     "ClientMessage",
     "ClientNewCanvasMessage",
     "ClientNudgeMessage",
-    "ClientSetStyleMessage",
     "ClientStrokeMessage",
     "CodeExecutionMessage",
     "ErrorMessage",
@@ -122,6 +119,5 @@ __all__ = [
     "PausedMessage",
     "PieceStateMessage",
     "ServerMessage",
-    "StyleChangeMessage",
     "ThinkingDeltaMessage",
 ]

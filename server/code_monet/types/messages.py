@@ -110,22 +110,7 @@ class AgentStrokesReadyMessage(BaseModel):
     piece_number: int  # Canvas/piece number to prevent cross-canvas rendering
 
 
-class StyleChangeMessage(BaseModel):
-    """Drawing style changed."""
-
-    type: Literal["style_change"] = "style_change"
-    drawing_style: DrawingStyleType
-    style_config: DrawingStyleConfig  # Full config for frontend
-
-
 # Client -> Server messages
-
-
-class ClientSetStyleMessage(BaseModel):
-    """Client request to change drawing style."""
-
-    type: Literal["set_style"] = "set_style"
-    drawing_style: DrawingStyleType
 
 
 class ClientStrokeMessage(BaseModel):
@@ -178,7 +163,6 @@ ServerMessage = (
     | PieceStateMessage
     | IterationMessage
     | AgentStrokesReadyMessage
-    | StyleChangeMessage
 )
 
 ClientMessage = (
@@ -186,7 +170,6 @@ ClientMessage = (
     | ClientNudgeMessage
     | ClientControlMessage
     | ClientNewCanvasMessage
-    | ClientSetStyleMessage
     | ClientAnimationDoneMessage
 )
 

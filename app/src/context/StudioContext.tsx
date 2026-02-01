@@ -18,6 +18,7 @@ import type {
 } from '@code-monet/shared';
 import {
   deriveAgentStatus,
+  getStyleConfig,
   usePerformer,
   usePendingStrokes,
 } from '@code-monet/shared';
@@ -338,9 +339,14 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   // Home screen handlers
   const handleStyleChange = useCallback(
     (style: DrawingStyleType) => {
-      send({ type: 'set_style', drawing_style: style });
+      // Update local state only - style is sent to server when canvas starts
+      dispatch({
+        type: 'SET_STYLE',
+        drawingStyle: style,
+        styleConfig: getStyleConfig(style),
+      });
     },
-    [send]
+    [dispatch]
   );
 
   const handleContinue = useCallback(() => {
@@ -359,7 +365,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       tracer.newSession();
       // Optimistic update: update UI immediately, then notify server
       canvas.setPaused(false);
-      send({ type: 'new_canvas', direction: prompt });
+      send({ type: 'new_canvas', direction: prompt, drawing_style: canvas.state.drawingStyle });
       send({ type: 'resume' });
       enterStudio();
     },
@@ -371,7 +377,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
     tracer.newSession();
     // Optimistic update: update UI immediately, then notify server
     canvas.setPaused(false);
-    send({ type: 'new_canvas' });
+    send({ type: 'new_canvas', drawing_style: canvas.state.drawingStyle });
     send({ type: 'resume' });
     enterStudio();
   }, [send, canvas, enterStudio]);

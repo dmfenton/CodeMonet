@@ -11,9 +11,11 @@ interface ActionBarProps {
   drawingEnabled: boolean;
   drawingStyle: DrawingStyleType;
   onSend: (message: ClientMessage) => void;
+  onStyleChange: (style: DrawingStyleType) => void;
   onToggleDrawing: () => void;
   onPause: () => void;
-  onResume: (direction?: string) => void;
+  onStart: (direction?: string) => void;
+  onNewCanvas: () => void;
 }
 
 export function ActionBar({
@@ -21,9 +23,11 @@ export function ActionBar({
   drawingEnabled,
   drawingStyle,
   onSend,
+  onStyleChange,
   onToggleDrawing,
   onPause,
-  onResume,
+  onStart,
+  onNewCanvas,
 }: ActionBarProps): React.ReactElement {
   const [inputText, setInputText] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -32,8 +36,8 @@ export function ActionBar({
 
   const handleStyleToggle = useCallback(() => {
     const newStyle: DrawingStyleType = drawingStyle === 'plotter' ? 'paint' : 'plotter';
-    onSend({ type: 'set_style', drawing_style: newStyle });
-  }, [drawingStyle, onSend]);
+    onStyleChange(newStyle);
+  }, [drawingStyle, onStyleChange]);
 
   // Focus modal input when opened
   useEffect(() => {
@@ -49,10 +53,10 @@ export function ActionBar({
 
   const handleModalStart = useCallback(() => {
     const direction = modalDirection.trim();
-    onResume(direction || undefined);
+    onStart(direction || undefined);
     setShowModal(false);
     setModalDirection('');
-  }, [modalDirection, onResume]);
+  }, [modalDirection, onStart]);
 
   const handleModalCancel = useCallback(() => {
     setShowModal(false);
@@ -77,10 +81,6 @@ export function ActionBar({
 
   const handleClear = useCallback(() => {
     onSend({ type: 'clear' });
-  }, [onSend]);
-
-  const handleNewCanvas = useCallback(() => {
-    onSend({ type: 'new_canvas' });
   }, [onSend]);
 
   const handleNudge = useCallback(() => {
@@ -149,7 +149,7 @@ export function ActionBar({
           <button className="text-btn" onClick={handleClear}>
             Clear
           </button>
-          <button className="text-btn" onClick={handleNewCanvas}>
+          <button className="text-btn" onClick={onNewCanvas}>
             New Piece
           </button>
         </div>

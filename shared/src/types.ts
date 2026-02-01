@@ -585,12 +585,6 @@ export interface AgentStrokesReadyMessage {
   piece_number: number;
 }
 
-export interface StyleChangeMessage {
-  type: 'style_change';
-  drawing_style: DrawingStyleType;
-  style_config: DrawingStyleConfig;
-}
-
 /**
  * A pending stroke ready for client-side rendering.
  * Contains the original path and pre-interpolated points.
@@ -614,8 +608,7 @@ export type ServerMessage =
   | CodeExecutionMessage
   | ErrorMessage
   | IterationMessage
-  | AgentStrokesReadyMessage
-  | StyleChangeMessage;
+  | AgentStrokesReadyMessage;
 
 // WebSocket messages - Client to Server
 export interface ClientStrokeMessage {
@@ -652,11 +645,6 @@ export interface ClientLoadCanvasMessage {
   piece_number: number;
 }
 
-export interface ClientSetStyleMessage {
-  type: 'set_style';
-  drawing_style: DrawingStyleType;
-}
-
 export interface ClientAnimationDoneMessage {
   type: 'animation_done';
   batch_id: number;
@@ -670,7 +658,6 @@ export type ClientMessage =
   | ClientResumeMessage
   | ClientNewCanvasMessage
   | ClientLoadCanvasMessage
-  | ClientSetStyleMessage
   | ClientAnimationDoneMessage;
 
 // Agent message types for MessageStream component
