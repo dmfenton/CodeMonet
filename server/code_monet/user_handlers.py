@@ -200,50 +200,6 @@ async def handle_animation_done(
     logger.info(f"User {workspace.user_id}: animation_done received (batch_id={batch_id})")
 
 
-async def handle_set_style(workspace: ActiveWorkspace, message: dict[str, Any]) -> None:
-    """Handle drawing style change request.
-
-    Changes the active drawing style for this workspace. The agent will use
-    a style-appropriate system prompt on its next turn.
-    """
-    style_str = message.get("drawing_style", "plotter")
-
-    try:
-        new_style = DrawingStyleType(style_str)
-    except ValueError:
-        logger.warning(f"User {workspace.user_id}: invalid style: {style_str}")
-        await workspace.connections.broadcast(
-            {"type": "error", "message": f"Invalid drawing style: {style_str}"}
-        )
-        return
-
-    # Get the old style for comparison
-    old_style = workspace.state.canvas.drawing_style
-
-    if new_style == old_style:
-        logger.info(f"User {workspace.user_id}: style unchanged ({new_style.value})")
-        return
-
-    # Update the canvas state
-    workspace.state.canvas.drawing_style = new_style
-    await workspace.state.save()
-
-    # Get the style config to send to clients
-    style_config = get_style_config(new_style)
-
-    # Broadcast the style change to all connected clients
-    await workspace.connections.broadcast(
-        StyleChangeMessage(drawing_style=new_style, style_config=style_config)
-    )
-
-    # Reset the agent session so it gets the new style-specific prompt
-    workspace.agent.reset_container()
-
-    logger.info(
-        f"User {workspace.user_id}: style changed from {old_style.value} to {new_style.value}"
-    )
-
-
 # Dispatch table
 HANDLERS: dict[str, Any] = {
     "stroke": handle_stroke,
@@ -253,7 +209,6 @@ HANDLERS: dict[str, Any] = {
     "load_canvas": handle_load_canvas,
     "pause": handle_pause,
     "resume": handle_resume,
-    "set_style": handle_set_style,
     "animation_done": handle_animation_done,
 }
 
@@ -273,7 +228,6 @@ async def handle_user_message(workspace: ActiveWorkspace, message: dict[str, Any
             "load_canvas",
             "new_canvas",
             "resume",
-            "set_style",
             "animation_done",
         ):
             await handler(workspace, message)

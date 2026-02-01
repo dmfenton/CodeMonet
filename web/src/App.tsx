@@ -3,9 +3,10 @@
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';
-import type { PendingStroke, ServerMessage } from '@code-monet/shared';
+import type { DrawingStyleType, PendingStroke, ServerMessage } from '@code-monet/shared';
 import {
   deriveAgentStatus,
+  getStyleConfig,
   shouldShowIdleAnimation,
   STATUS_LABELS,
   useCanvas,
@@ -93,6 +94,14 @@ function App(): React.ReactElement {
     send({ type: 'resume', direction });
   }, [setPaused, send]);
 
+  const handleStyleChange = useCallback((style: DrawingStyleType) => {
+    dispatch({
+      type: 'SET_STYLE',
+      drawingStyle: style,
+      styleConfig: getStyleConfig(style),
+    });
+  }, [dispatch]);
+
   // Keep sendRef in sync for stroke completion callback
   useEffect(() => {
     sendRef.current = send;
@@ -127,6 +136,7 @@ function App(): React.ReactElement {
         drawingEnabled={state.drawingEnabled}
         drawingStyle={state.drawingStyle}
         onSend={send}
+        onStyleChange={handleStyleChange}
         onToggleDrawing={toggleDrawing}
         onPause={handlePause}
         onResume={handleResume}

@@ -652,11 +652,6 @@ export interface ClientLoadCanvasMessage {
   piece_number: number;
 }
 
-export interface ClientSetStyleMessage {
-  type: 'set_style';
-  drawing_style: DrawingStyleType;
-}
-
 export interface ClientAnimationDoneMessage {
   type: 'animation_done';
   batch_id: number;
@@ -670,7 +665,6 @@ export type ClientMessage =
   | ClientResumeMessage
   | ClientNewCanvasMessage
   | ClientLoadCanvasMessage
-  | ClientSetStyleMessage
   | ClientAnimationDoneMessage;
 
 // Agent message types for MessageStream component

@@ -11,6 +11,7 @@ interface ActionBarProps {
   drawingEnabled: boolean;
   drawingStyle: DrawingStyleType;
   onSend: (message: ClientMessage) => void;
+  onStyleChange: (style: DrawingStyleType) => void;
   onToggleDrawing: () => void;
   onPause: () => void;
   onResume: (direction?: string) => void;
@@ -21,6 +22,7 @@ export function ActionBar({
   drawingEnabled,
   drawingStyle,
   onSend,
+  onStyleChange,
   onToggleDrawing,
   onPause,
   onResume,
@@ -32,8 +34,8 @@ export function ActionBar({
 
   const handleStyleToggle = useCallback(() => {
     const newStyle: DrawingStyleType = drawingStyle === 'plotter' ? 'paint' : 'plotter';
-    onSend({ type: 'set_style', drawing_style: newStyle });
-  }, [drawingStyle, onSend]);
+    onStyleChange(newStyle);
+  }, [drawingStyle, onStyleChange]);
 
   // Focus modal input when opened
   useEffect(() => {

@@ -121,13 +121,6 @@ class StyleChangeMessage(BaseModel):
 # Client -> Server messages
 
 
-class ClientSetStyleMessage(BaseModel):
-    """Client request to change drawing style."""
-
-    type: Literal["set_style"] = "set_style"
-    drawing_style: DrawingStyleType
-
-
 class ClientStrokeMessage(BaseModel):
     """Human stroke from client."""
 
@@ -186,7 +179,6 @@ ClientMessage = (
     | ClientNudgeMessage
     | ClientControlMessage
     | ClientNewCanvasMessage
-    | ClientSetStyleMessage
     | ClientAnimationDoneMessage
 )
 

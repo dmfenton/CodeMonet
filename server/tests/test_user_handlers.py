@@ -9,7 +9,6 @@ from code_monet.user_handlers import (
     handle_new_canvas,
     handle_pause,
     handle_resume,
-    handle_set_style,
     handle_user_message,
 )
 
@@ -131,55 +130,6 @@ class TestHandleNewCanvas:
         await handle_new_canvas(mock_workspace, {"direction": "test"})
 
         mock_workspace.start_agent_loop.assert_awaited_once()
-
-
-class TestHandleSetStyle:
-    """Test handle_set_style function."""
-
-    @pytest.fixture
-    def mock_workspace(self) -> MagicMock:
-        """Create a mock workspace for style tests."""
-        workspace = MagicMock()
-        workspace.user_id = 1
-        workspace.state = MagicMock()
-        workspace.state.canvas = MagicMock()
-        workspace.state.canvas.drawing_style = DrawingStyleType.PLOTTER
-        workspace.state.save = AsyncMock()
-        workspace.agent = MagicMock()
-        workspace.agent.reset_container = MagicMock()
-        workspace.connections = MagicMock()
-        workspace.connections.broadcast = AsyncMock()
-        return workspace
-
-    @pytest.mark.asyncio
-    async def test_set_style_changes_style(self, mock_workspace: MagicMock) -> None:
-        """Setting style should update canvas and broadcast change."""
-        await handle_set_style(mock_workspace, {"drawing_style": "paint"})
-
-        assert mock_workspace.state.canvas.drawing_style == DrawingStyleType.PAINT
-        mock_workspace.state.save.assert_called_once()
-        mock_workspace.agent.reset_container.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_set_style_same_style_no_op(self, mock_workspace: MagicMock) -> None:
-        """Setting same style should not trigger any changes."""
-        await handle_set_style(mock_workspace, {"drawing_style": "plotter"})
-
-        # Style unchanged, should not save or broadcast
-        mock_workspace.state.save.assert_not_called()
-        mock_workspace.agent.reset_container.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_set_style_invalid_style(self, mock_workspace: MagicMock) -> None:
-        """Invalid style should broadcast error."""
-        await handle_set_style(mock_workspace, {"drawing_style": "invalid"})
-
-        # Should broadcast error
-        broadcast_calls = mock_workspace.connections.broadcast.call_args_list
-        assert len(broadcast_calls) == 1
-        error_msg = broadcast_calls[0][0][0]
-        assert error_msg["type"] == "error"
-        assert "Invalid drawing style" in error_msg["message"]
 
 
 class TestHandleResume:
