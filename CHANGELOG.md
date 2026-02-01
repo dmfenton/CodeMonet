@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.9] - 2026-02-01
+
+### Fixed
+
+- Drawing style toggle (plotter/paint) now works correctly — style is applied locally and sent with new canvas instead of via separate WebSocket message
+
+### Removed
+
+- Removed unused `set_style` WebSocket message type and server handler
+
 ## [1.35.8] - 2026-01-31
 
 ### Fixed
@@ -1003,7 +1013,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.8...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.9...HEAD
+[1.35.9]: https://github.com/dmfenton/sketchpad/compare/v1.35.8...v1.35.9
 [1.35.8]: https://github.com/dmfenton/sketchpad/compare/v1.35.7...v1.35.8
 [1.35.7]: https://github.com/dmfenton/sketchpad/compare/v1.35.6...v1.35.7
 [1.35.6]: https://github.com/dmfenton/sketchpad/compare/v1.35.5...v1.35.6
