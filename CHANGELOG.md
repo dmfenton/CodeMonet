@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Allow typing drawing prompt while WebSocket is connecting (submit still requires connection)
+- Fix prompt input focus on iOS (ScrollView + KeyboardAvoidingView conflict)
+
 ## [1.35.10] - 2026-02-07
 
 ### Fixed

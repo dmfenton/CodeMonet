@@ -14,6 +14,7 @@ interface PromptInputProps {
   value: string;
   onChange: (text: string) => void;
   onSubmit: () => void;
+  /** When true, submission is blocked but typing is still allowed */
   disabled?: boolean;
 }
 
@@ -24,7 +25,7 @@ export function PromptInput({
   disabled = false,
 }: PromptInputProps): React.JSX.Element {
   const { colors } = useTheme();
-  const canSubmit = value.trim() && !disabled;
+  const canSubmit = Boolean(value.trim()) && !disabled;
 
   const handleSubmit = () => {
     if (canSubmit) {
@@ -49,7 +50,6 @@ export function PromptInput({
         placeholderTextColor={colors.textMuted}
         returnKeyType="go"
         onSubmitEditing={handleSubmit}
-        editable={!disabled}
       />
       <Pressable
         testID="home-prompt-submit"
