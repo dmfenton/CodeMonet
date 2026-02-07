@@ -77,6 +77,7 @@ export function useWebSocket({
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) return;
         console.log('[WebSocket] Connected!');
         tracer.recordEvent('ws.connected');
         setState({ connected: true, error: null });
@@ -88,6 +89,16 @@ export function useWebSocket({
           code: event.code,
           reason: event.reason || '',
         });
+
+        // Only update state if this is still the current connection.
+        // When token refreshes, a new WS replaces wsRef before the old
+        // one's onclose fires — without this guard, the stale close event
+        // would wipe the new connection's state.
+        if (wsRef.current !== ws) {
+          console.log(`[WebSocket] Stale close event ignored (code=${event.code}, replaced by new connection)`);
+          return;
+        }
+
         setState((prev) => ({ ...prev, connected: false }));
         wsRef.current = null;
 
@@ -106,10 +117,13 @@ export function useWebSocket({
       ws.onerror = (e) => {
         console.error('[WebSocket] Error:', e);
         tracer.recordError('ws.error', new Error('WebSocket connection error'));
-        setState((prev) => ({ ...prev, error: 'Connection error' }));
+        if (wsRef.current === ws) {
+          setState((prev) => ({ ...prev, error: 'Connection error' }));
+        }
       };
 
       ws.onmessage = (event: MessageEvent<string>) => {
+        if (wsRef.current !== ws) return;
         try {
           const message = JSON.parse(event.data) as ServerMessage;
 
