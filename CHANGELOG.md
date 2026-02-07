@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Prompt text input on mobile home screen could not be focused/selected
+
 ## [1.35.9] - 2026-02-01
 
 ### Fixed
