@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- WebSocket auth token stripped by nginx proxy — query params lost when proxy_pass uses variable (regression from v1.35.5 DNS fix)
+
 ## [1.35.13] - 2026-02-07
 
 ### Fixed
