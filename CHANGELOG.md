@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Submit button on iOS HomePanel not responding when keyboard is open (restore ScrollView with keyboardShouldPersistTaps)
+
 ## [1.35.11] - 2026-02-07
 
 ### Fixed

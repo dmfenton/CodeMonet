@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -72,9 +73,12 @@ export function HomePanel({
   };
 
   return (
-    <View
+    <ScrollView
       testID="home-panel"
-      style={[styles.container, { backgroundColor: colors.surface }, shadows.md]}
+      style={[styles.scrollView, { backgroundColor: colors.surface }, shadows.md]}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      bounces={false}
     >
       {/* Start Drawing Section */}
       <View style={styles.startSection}>
@@ -164,13 +168,15 @@ export function HomePanel({
           </Text>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     borderRadius: borderRadius.lg,
+  },
+  container: {
     padding: spacing.lg,
     gap: spacing.lg,
   },
