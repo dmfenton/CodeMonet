@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.11] - 2026-02-07
+
 ### Fixed
 
 - Allow typing drawing prompt while WebSocket is connecting (submit still requires connection)
@@ -1024,7 +1026,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.10...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.11...HEAD
+[1.35.11]: https://github.com/dmfenton/sketchpad/compare/v1.35.10...v1.35.11
 [1.35.10]: https://github.com/dmfenton/sketchpad/compare/v1.35.9...v1.35.10
 [1.35.9]: https://github.com/dmfenton/sketchpad/compare/v1.35.8...v1.35.9
 [1.35.8]: https://github.com/dmfenton/sketchpad/compare/v1.35.7...v1.35.8
