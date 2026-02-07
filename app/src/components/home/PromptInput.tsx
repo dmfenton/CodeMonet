@@ -14,6 +14,7 @@ interface PromptInputProps {
   value: string;
   onChange: (text: string) => void;
   onSubmit: () => void;
+  /** When true, submission is blocked but typing is still allowed */
   disabled?: boolean;
 }
 
