@@ -6,11 +6,10 @@
 
 import React, { useState } from 'react';
 import {
-  Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -74,11 +73,13 @@ export function HomePanel({
   };
 
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <View
-        testID="home-panel"
-        style={[styles.container, { backgroundColor: colors.surface }, shadows.md]}
-      >
+    <ScrollView
+      testID="home-panel"
+      style={[styles.scrollView, { backgroundColor: colors.surface }, shadows.md]}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      bounces={false}
+    >
         {/* Start Drawing Section */}
         <View style={styles.startSection}>
           <Text style={[styles.sectionHeader, { color: colors.textPrimary }]}>Start Drawing</Text>
@@ -167,14 +168,15 @@ export function HomePanel({
             </Text>
           </View>
         )}
-      </View>
-    </TouchableWithoutFeedback>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  scrollView: {
     borderRadius: borderRadius.lg,
+  },
+  container: {
     padding: spacing.lg,
     gap: spacing.lg,
   },
