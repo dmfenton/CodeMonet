@@ -80,94 +80,94 @@ export function HomePanel({
       keyboardShouldPersistTaps="handled"
       bounces={false}
     >
-        {/* Start Drawing Section */}
-        <View style={styles.startSection}>
-          <Text style={[styles.sectionHeader, { color: colors.textPrimary }]}>Start Drawing</Text>
+      {/* Start Drawing Section */}
+      <View style={styles.startSection}>
+        <Text style={[styles.sectionHeader, { color: colors.textPrimary }]}>Start Drawing</Text>
 
-          <PromptInput
-            value={prompt}
-            onChange={setPrompt}
-            onSubmit={handleSubmitPrompt}
+        <PromptInput
+          value={prompt}
+          onChange={setPrompt}
+          onSubmit={handleSubmitPrompt}
+          disabled={!connected}
+        />
+
+        <StylePicker
+          value={drawingStyle}
+          onChange={onStyleChange}
+          variant="segmented"
+          label="Style"
+        />
+
+        <RendererPicker
+          value={config.renderer}
+          onChange={setRenderer}
+          label="Renderer"
+        />
+
+        <Pressable
+          testID="home-surprise-me"
+          style={({ pressed }) => [
+            styles.surpriseMeButton,
+            { backgroundColor: colors.surfaceElevated },
+            pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
+            !connected && styles.disabled,
+          ]}
+          onPress={onSurpriseMe}
+          disabled={!connected}
+        >
+          <Ionicons name="sparkles" size={20} color={colors.primary} />
+          <Text style={[styles.surpriseMeText, { color: colors.textPrimary }]}>Surprise Me</Text>
+        </Pressable>
+      </View>
+
+      {/* OR Divider */}
+      {hasRecentWork && (
+        <View style={styles.divider}>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+          <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR</Text>
+          <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+        </View>
+      )}
+
+      {/* Continue Section */}
+      {hasRecentWork && (
+        <View style={styles.continueSection}>
+          <Text style={[styles.sectionHeader, { color: colors.textPrimary }]}>
+            {hasCurrentWork ? 'Continue where you left off' : 'Recent work'}
+          </Text>
+
+          <ContinueCard
+            api={api}
+            recentCanvas={recentCanvas}
+            hasCurrentWork={hasCurrentWork}
+            strokes={strokes}
+            styleConfig={styleConfig}
+            onContinue={onContinue}
             disabled={!connected}
-          />
-
-          <StylePicker
-            value={drawingStyle}
-            onChange={onStyleChange}
-            variant="segmented"
-            label="Style"
-          />
-
-          <RendererPicker
-            value={config.renderer}
-            onChange={setRenderer}
-            label="Renderer"
           />
 
           <Pressable
-            testID="home-surprise-me"
-            style={({ pressed }) => [
-              styles.surpriseMeButton,
-              { backgroundColor: colors.surfaceElevated },
-              pressed && { opacity: 0.8, transform: [{ scale: 0.98 }] },
-              !connected && styles.disabled,
-            ]}
-            onPress={onSurpriseMe}
-            disabled={!connected}
+            testID="home-gallery"
+            style={({ pressed }) => [styles.galleryLink, pressed && { opacity: 0.7 }]}
+            onPress={onOpenGallery}
           >
-            <Ionicons name="sparkles" size={20} color={colors.primary} />
-            <Text style={[styles.surpriseMeText, { color: colors.textPrimary }]}>Surprise Me</Text>
+            <Ionicons name="images-outline" size={16} color={colors.textSecondary} />
+            <Text style={[styles.galleryLinkText, { color: colors.textSecondary }]}>
+              View Gallery{galleryCount > 0 ? ` (${galleryCount})` : ''}
+            </Text>
           </Pressable>
         </View>
+      )}
 
-        {/* OR Divider */}
-        {hasRecentWork && (
-          <View style={styles.divider}>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-            <Text style={[styles.dividerText, { color: colors.textMuted }]}>OR</Text>
-            <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
-          </View>
-        )}
-
-        {/* Continue Section */}
-        {hasRecentWork && (
-          <View style={styles.continueSection}>
-            <Text style={[styles.sectionHeader, { color: colors.textPrimary }]}>
-              {hasCurrentWork ? 'Continue where you left off' : 'Recent work'}
-            </Text>
-
-            <ContinueCard
-              api={api}
-              recentCanvas={recentCanvas}
-              hasCurrentWork={hasCurrentWork}
-              strokes={strokes}
-              styleConfig={styleConfig}
-              onContinue={onContinue}
-              disabled={!connected}
-            />
-
-            <Pressable
-              testID="home-gallery"
-              style={({ pressed }) => [styles.galleryLink, pressed && { opacity: 0.7 }]}
-              onPress={onOpenGallery}
-            >
-              <Ionicons name="images-outline" size={16} color={colors.textSecondary} />
-              <Text style={[styles.galleryLinkText, { color: colors.textSecondary }]}>
-                View Gallery{galleryCount > 0 ? ` (${galleryCount})` : ''}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Connection Status */}
-        {!connected && (
-          <View style={styles.connectionHint}>
-            <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
-            <Text style={[styles.connectionHintText, { color: colors.textMuted }]}>
-              Connecting...
-            </Text>
-          </View>
-        )}
+      {/* Connection Status */}
+      {!connected && (
+        <View style={styles.connectionHint}>
+          <Ionicons name="cloud-offline-outline" size={14} color={colors.textMuted} />
+          <Text style={[styles.connectionHintText, { color: colors.textMuted }]}>
+            Connecting...
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
