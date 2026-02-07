@@ -77,6 +77,7 @@ export function useWebSocket({
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
+        if (wsRef.current !== ws) return;
         console.log('[WebSocket] Connected!');
         tracer.recordEvent('ws.connected');
         setState({ connected: true, error: null });
@@ -94,7 +95,7 @@ export function useWebSocket({
         // one's onclose fires — without this guard, the stale close event
         // would wipe the new connection's state.
         if (wsRef.current !== ws) {
-          console.log('[WebSocket] Stale close event ignored (replaced by new connection)');
+          console.log(`[WebSocket] Stale close event ignored (code=${event.code}, replaced by new connection)`);
           return;
         }
 
@@ -122,6 +123,7 @@ export function useWebSocket({
       };
 
       ws.onmessage = (event: MessageEvent<string>) => {
+        if (wsRef.current !== ws) return;
         try {
           const message = JSON.parse(event.data) as ServerMessage;
 
