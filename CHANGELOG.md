@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- WebSocket stays stuck on "Connecting..." after token refresh due to stale close event race condition
+
 ## [1.35.12] - 2026-02-07
 
 ### Fixed
