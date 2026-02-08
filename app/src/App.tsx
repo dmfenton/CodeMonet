@@ -38,7 +38,7 @@ import {
   useStudio,
 } from './context';
 import { useDeepLinks } from './hooks';
-import { AuthScreen, GalleryScreen, HomeScreen, StudioScreen } from './screens';
+import { AuthScreen, GalleryScreen, HomeScreen, ImageViewScreen, StudioScreen } from './screens';
 import { spacing, useTheme } from './theme';
 import { tracer } from './utils/tracing';
 
@@ -48,7 +48,7 @@ import { tracer } from './utils/tracing';
  */
 function MainApp(): React.JSX.Element {
   const { colors, isDark } = useTheme();
-  const { screen, closeGallery, galleryFromStudio } = useNavigation();
+  const { screen, closeGallery, galleryFromStudio, viewingPieceNumber } = useNavigation();
   const {
     canvasState,
     agentStatus,
@@ -90,7 +90,15 @@ function MainApp(): React.JSX.Element {
         />
 
         <View style={styles.content}>
-          {screen === 'gallery' ? (
+          {screen === 'imageView' && viewingPieceNumber !== null ? (
+            <ImageViewScreen
+              api={api}
+              pieceNumber={viewingPieceNumber}
+              gallery={canvasState.gallery}
+              onBack={actions.handleImageViewBack}
+              onHome={actions.handleImageViewHome}
+            />
+          ) : screen === 'gallery' ? (
             <GalleryScreen
               api={api}
               canvases={canvasState.gallery}

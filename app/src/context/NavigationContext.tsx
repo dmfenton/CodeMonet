@@ -27,7 +27,7 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 
 /** Navigation screen type */
-export type Screen = 'home' | 'studio' | 'gallery';
+export type Screen = 'home' | 'studio' | 'gallery' | 'imageView';
 
 export interface NavigationContextValue {
   /** Current screen */
@@ -48,6 +48,12 @@ export interface NavigationContextValue {
   galleryToHome: () => void;
   /** Whether gallery was opened from the studio screen */
   galleryFromStudio: boolean;
+  /** Navigate to image view for a gallery piece */
+  openImageView: (pieceNumber: number) => void;
+  /** Navigate back from image view to gallery */
+  closeImageView: () => void;
+  /** Piece number being viewed in image view */
+  viewingPieceNumber: number | null;
 }
 
 const NavigationContext = createContext<NavigationContextValue | null>(null);
@@ -72,6 +78,8 @@ export function NavigationProvider({
   const [screen, setScreen] = useState<Screen>('home');
   // Track which screen the gallery was opened from
   const [previousScreen, setPreviousScreen] = useState<Screen>('home');
+  // Track which piece is being viewed in image view
+  const [viewingPieceNumber, setViewingPieceNumber] = useState<number | null>(null);
 
   // Track screen in ref for back button handler (avoids stale closure)
   const screenRef = useRef(screen);
@@ -113,6 +121,18 @@ export function NavigationProvider({
     setScreen('home');
   }, []);
 
+  // Navigate to image view for a gallery piece
+  const openImageView = useCallback((pieceNumber: number) => {
+    setViewingPieceNumber(pieceNumber);
+    setScreen('imageView');
+  }, []);
+
+  // Navigate back from image view to gallery
+  const closeImageView = useCallback(() => {
+    setViewingPieceNumber(null);
+    setScreen('gallery');
+  }, []);
+
   // Note: Android back button is handled in StudioProvider, which has
   // access to both navigation and the WebSocket (needed to pause agent).
 
@@ -128,8 +148,11 @@ export function NavigationProvider({
       closeGallery,
       galleryToHome,
       galleryFromStudio,
+      openImageView,
+      closeImageView,
+      viewingPieceNumber,
     }),
-    [screen, inStudio, enterStudio, exitStudio, setInStudio, openGallery, closeGallery, galleryToHome, galleryFromStudio]
+    [screen, inStudio, enterStudio, exitStudio, setInStudio, openGallery, closeGallery, galleryToHome, galleryFromStudio, openImageView, closeImageView, viewingPieceNumber]
   );
 
   return <NavigationContext.Provider value={value}>{children}</NavigationContext.Provider>;

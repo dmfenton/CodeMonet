@@ -90,6 +90,10 @@ export interface StudioContextValue {
     handleNewCanvasStart: (direction?: string, style?: DrawingStyleType) => void;
     handleGallerySelect: (pieceNumber: number) => void;
     handleGalleryToHome: () => void;
+
+    // Image view handlers
+    handleImageViewBack: () => void;
+    handleImageViewHome: () => void;
   };
 }
 
@@ -107,7 +111,7 @@ export interface StudioProviderProps {
  */
 export function StudioProvider({ children }: StudioProviderProps): React.JSX.Element {
   const { accessToken, signOut, refreshToken } = useAuth();
-  const { screen, inStudio, enterStudio, exitStudio, setInStudio, openGallery, closeGallery, galleryToHome } = useNavigation();
+  const { screen, inStudio, enterStudio, exitStudio, setInStudio, openGallery, closeGallery, galleryToHome, openImageView, closeImageView } = useNavigation();
 
   const api = useMemo(() => createApiClient(accessToken), [accessToken]);
 
@@ -193,6 +197,10 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
     if (Platform.OS !== 'android') return;
 
     const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'imageView') {
+        closeImageView();
+        return true;
+      }
       if (screen === 'gallery') {
         closeGallery();
         return true;
@@ -210,7 +218,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
     });
 
     return () => handler.remove();
-  }, [screen, closeGallery, exitStudio, canvas, send]);
+  }, [screen, closeImageView, closeGallery, exitStudio, canvas, send]);
 
   // Pending strokes fetching
   const pendingStrokes = canvas.state.pendingStrokes;
@@ -436,39 +444,27 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   );
 
   const handleGallerySelect = useCallback(
-    async (pieceNumber: number) => {
-      // Navigate directly to studio (replacing gallery screen)
-      setInStudio(true);
-      try {
-        const response = await api.fetch(`/gallery/${pieceNumber}/strokes`);
-        if (response.ok) {
-          const data = await response.json();
-          dispatch({
-            type: 'LOAD_CANVAS',
-            strokes: data.strokes,
-            pieceNumber: data.piece_number,
-            drawingStyle: data.drawing_style,
-            styleConfig: data.style_config,
-          });
-        } else {
-          console.warn(`[StudioContext] Failed to load gallery piece ${pieceNumber}: ${response.status}`);
-          if (!canvas.state.paused) {
-            canvas.setPaused(true);
-            send({ type: 'pause' });
-          }
-          exitStudio();
-        }
-      } catch (error) {
-        console.warn('[StudioContext] Failed to load gallery piece:', error);
-        if (!canvas.state.paused) {
-          canvas.setPaused(true);
-          send({ type: 'pause' });
-        }
-        exitStudio();
-      }
+    (pieceNumber: number) => {
+      // Navigate to dedicated image view screen (not studio)
+      openImageView(pieceNumber);
     },
-    [setInStudio, api, dispatch, canvas, send, exitStudio]
+    [openImageView]
   );
+
+  // Navigate back from image view to gallery
+  const handleImageViewBack = useCallback(() => {
+    closeImageView();
+  }, [closeImageView]);
+
+  // Navigate from image view directly to home
+  const handleImageViewHome = useCallback(() => {
+    tracer.recordEvent('session.back_to_home');
+    if (!canvas.state.paused) {
+      canvas.setPaused(true);
+      send({ type: 'pause' });
+    }
+    galleryToHome();
+  }, [canvas, send, galleryToHome]);
 
   // Navigate from gallery to home, pausing the agent if it was running
   const handleGalleryToHome = useCallback(() => {
@@ -498,6 +494,8 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       handleNewCanvasStart,
       handleGallerySelect,
       handleGalleryToHome,
+      handleImageViewBack,
+      handleImageViewHome,
     }),
     [
       handleStudioAction,
@@ -512,6 +510,8 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       handleNewCanvasStart,
       handleGallerySelect,
       handleGalleryToHome,
+      handleImageViewBack,
+      handleImageViewHome,
     ]
   );
 
