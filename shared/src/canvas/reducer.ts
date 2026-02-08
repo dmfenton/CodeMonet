@@ -33,12 +33,6 @@ const generateThinkingId = (): string =>
 const generatePerformanceId = (): string =>
   `perf_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-export interface PendingStrokesInfo {
-  count: number;
-  batchId: number;
-  pieceNumber: number;
-}
-
 // ============================================================================
 // Performance Model Types
 // ============================================================================
@@ -89,6 +83,8 @@ export interface PerformanceState {
   agentStroke: Point[];
   /** Style for in-progress agent stroke */
   agentStrokeStyle: Partial<StrokeStyle> | null;
+  /** Where pen is traveling to between strokes (null = not traveling) */
+  travelTarget: Point | null;
 }
 
 /**
@@ -106,6 +102,7 @@ export const initialPerformanceState: PerformanceState = {
   penDown: false,
   agentStroke: [],
   agentStrokeStyle: null,
+  travelTarget: null,
 };
 
 /**
@@ -139,7 +136,6 @@ export interface CanvasHookState {
   paused: boolean;
   currentIteration: number;
   maxIterations: number;
-  pendingStrokes: PendingStrokesInfo | null; // Strokes ready to be fetched
   drawingStyle: DrawingStyleType; // Current drawing style
   styleConfig: DrawingStyleConfig; // Full style configuration
   /** Saved canvas state before viewing a gallery piece (for restoring on exit) */
@@ -196,7 +192,7 @@ export function hasInProgressEvents(messages: AgentMessage[]): boolean {
  * 2. error - last message is error
  * 3. thinking - words in buffer/onStage OR thinking text
  * 4. executing - code_execution started but not completed
- * 5. drawing - strokes in buffer/onStage or pendingStrokes
+ * 5. drawing - strokes in buffer/onStage
  * 6. idle - default
  */
 export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
@@ -228,9 +224,6 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   // Drawing = strokes being animated or waiting
   if (hasStrokesOnStage || hasStrokesInBuffer) return 'drawing';
 
-  // Pending strokes = drawing phase (legacy check)
-  if (state.pendingStrokes !== null) return 'drawing';
-
   return 'idle';
 }
 
@@ -261,6 +254,9 @@ export type PerformanceAction =
   | { type: 'STROKE_PROGRESS'; point: Point; style?: Partial<StrokeStyle> }
   | { type: 'STROKE_PROGRESS_BATCH'; points: Point[]; style?: Partial<StrokeStyle> }
   | { type: 'STROKE_COMPLETE' }
+  // Pen travel (between strokes)
+  | { type: 'PEN_TRAVEL_BATCH'; points: Point[] }
+  | { type: 'PEN_TRAVEL_COMPLETE' }
   // Control
   | { type: 'CLEAR_PERFORMANCE' };
 
@@ -298,8 +294,6 @@ export type CanvasAction =
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_ITERATION'; current: number; max: number }
   | { type: 'RESET_TURN' }
-  | { type: 'STROKES_READY'; count: number; batchId: number; pieceNumber: number }
-  | { type: 'CLEAR_PENDING_STROKES' }
   | { type: 'CLEAR_VIEWING' }
   | { type: 'SET_STYLE'; drawingStyle: DrawingStyleType; styleConfig: DrawingStyleConfig }
   // Performance actions (merged into CanvasAction for single reducer)
@@ -327,7 +321,6 @@ export const initialState: CanvasHookState = {
   paused: true, // Start paused - status derived from this + messages
   currentIteration: 0,
   maxIterations: 5,
-  pendingStrokes: null,
   drawingStyle: 'plotter',
   styleConfig: PLOTTER_STYLE,
   savedCanvas: null,
@@ -354,7 +347,6 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         currentStroke: [],
         viewingPiece: null,
         savedCanvas: null,
-        pendingStrokes: null,
         messages: [],
         thinking: '',
       };
@@ -426,7 +418,6 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         strokes: action.strokes,
         currentStroke: [],
         viewingPiece: action.pieceNumber,
-        pendingStrokes: null,
         drawingStyle: loadedStyle,
         styleConfig: loadedStyleConfig,
         // Save current canvas state so we can restore when exiting gallery view
@@ -473,7 +464,6 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         drawingStyle: initStyle,
         styleConfig: initStyleConfig,
         // Reset transient state on init
-        pendingStrokes: null,
         messages: [],
         thinking: '',
         currentStroke: [],
@@ -495,36 +485,6 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
 
     case 'RESET_TURN':
       return { ...state, thinking: '', currentIteration: 0 };
-
-    case 'STROKES_READY': {
-      // When viewing gallery, ignore new strokes entirely
-      if (state.viewingPiece !== null) {
-        return state;
-      }
-
-      // Reject strokes for OLD pieces (stale messages)
-      if (action.pieceNumber < state.pieceNumber) {
-        return state;
-      }
-
-      // Accept strokes for current OR newer pieces
-      // If newer, sync pieceNumber (handles race condition where
-      // strokes_ready arrives before piece_state)
-      const newPieceNumber = Math.max(state.pieceNumber, action.pieceNumber);
-
-      return {
-        ...state,
-        pieceNumber: newPieceNumber,
-        pendingStrokes: {
-          count: action.count,
-          batchId: action.batchId,
-          pieceNumber: action.pieceNumber,
-        },
-      };
-    }
-
-    case 'CLEAR_PENDING_STROKES':
-      return { ...state, pendingStrokes: null };
 
     // ========================================================================
     // Performance Actions
@@ -614,6 +574,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           // Reset stroke state when strokes start
           agentStroke: next.type === 'strokes' ? [] : perf.agentStroke,
           agentStrokeStyle: next.type === 'strokes' ? null : perf.agentStrokeStyle,
+          travelTarget: null,
         },
       };
     }
@@ -699,6 +660,10 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       const currentStroke = perf.onStage.strokes[perf.strokeIndex];
       if (!currentStroke) return state;
 
+      // Look ahead to next stroke's first point for pen travel
+      const nextStroke = perf.onStage.strokes[perf.strokeIndex + 1];
+      const nextFirstPoint = nextStroke?.points[0] ?? null;
+
       return {
         ...state,
         performance: {
@@ -708,9 +673,31 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           agentStroke: [],
           agentStrokeStyle: null,
           penDown: false,
+          travelTarget: nextFirstPoint,
         },
         // Add stroke to main strokes array
         strokes: [...state.strokes, currentStroke.path],
+      };
+    }
+
+    case 'PEN_TRAVEL_BATCH': {
+      const perf = state.performance;
+      if (action.points.length === 0) return state;
+      const lastPoint = action.points[action.points.length - 1];
+      return {
+        ...state,
+        performance: {
+          ...perf,
+          penPosition: lastPoint ?? perf.penPosition,
+          penDown: false,
+        },
+      };
+    }
+
+    case 'PEN_TRAVEL_COMPLETE': {
+      return {
+        ...state,
+        performance: { ...state.performance, travelTarget: null },
       };
     }
 
@@ -731,6 +718,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           penDown: false,
           agentStroke: [],
           agentStrokeStyle: null,
+          travelTarget: null,
         },
       };
     }

@@ -145,7 +145,22 @@ export const InProgressStroke = memo(function InProgressStroke({
       return { tailPath: '', tailBristles: [] };
     }
 
-    const tailOutline = getFreehandOutline(tailPoints, options);
+    // Derive pressure factor from average inter-point spacing in the tail
+    // Closer points = slower movement = more pressure = thicker stroke
+    let velocityOptions = options;
+    if (tailPoints.length > 1) {
+      let totalTailDist = 0;
+      for (let i = 1; i < tailPoints.length; i++) {
+        const dx = tailPoints[i]!.x - tailPoints[i - 1]!.x;
+        const dy = tailPoints[i]!.y - tailPoints[i - 1]!.y;
+        totalTailDist += Math.sqrt(dx * dx + dy * dy);
+      }
+      const avgDist = totalTailDist / (tailPoints.length - 1);
+      const pressureFactor = Math.max(0.6, Math.min(1.2, 1.0 / (1 + avgDist * 0.015)));
+      velocityOptions = { ...options, size: (options.size ?? strokeWidth) * pressureFactor };
+    }
+
+    const tailOutline = getFreehandOutline(tailPoints, velocityOptions);
     const tailPath = outlineToSvgPath(tailOutline);
 
     let tailBristles: string[] = [];
@@ -156,7 +171,7 @@ export const InProgressStroke = memo(function InProgressStroke({
         tailPoints,
         tailBristleCount,
         brushPreset.bristleSpread * strokeWidth,
-        options
+        velocityOptions
       );
       tailBristles = bristleOutlines.map((o) => outlineToSvgPath(o)).filter((d) => d.length > 0);
     }

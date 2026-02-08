@@ -7,6 +7,7 @@ from code_monet.interpolation import (
     dedupe_close_points,
     estimate_path_length,
     interpolate_path,
+    interpolate_polyline_adaptive,
     lerp,
     lerp_point,
     quadratic_bezier,
@@ -175,3 +176,88 @@ class TestDedupeClosePoints:
         # With min_distance=6, (5,0) should be removed
         result = dedupe_close_points(points, min_distance=6)
         assert len(result) == 2
+
+
+class TestInterpolatePolylineAdaptive:
+    """Tests for curvature-adaptive polyline interpolation."""
+
+    def test_zigzag_produces_more_points_than_straight(self) -> None:
+        """Zigzag path has higher curvature, should produce more points."""
+        # Straight line: total length ~300
+        straight = [
+            Point(x=0, y=0),
+            Point(x=100, y=0),
+            Point(x=200, y=0),
+            Point(x=300, y=0),
+        ]
+        # Zigzag: same total length but high curvature at each vertex
+        zigzag = [
+            Point(x=0, y=0),
+            Point(x=100, y=50),
+            Point(x=200, y=0),
+            Point(x=300, y=50),
+        ]
+
+        straight_points = interpolate_polyline_adaptive(straight, 0.2)
+        zigzag_points = interpolate_polyline_adaptive(zigzag, 0.2)
+
+        assert len(zigzag_points) > len(straight_points)
+
+    def test_preserves_first_and_last_points(self) -> None:
+        """Output should include first and last input points."""
+        points = [
+            Point(x=10, y=20),
+            Point(x=50, y=80),
+            Point(x=100, y=30),
+        ]
+        result = interpolate_polyline_adaptive(points, 0.2)
+
+        assert len(result) >= 3
+        assert result[0].x == pytest.approx(10)
+        assert result[0].y == pytest.approx(20)
+        assert result[-1].x == pytest.approx(100)
+        assert result[-1].y == pytest.approx(30)
+
+    def test_single_point_returns_as_is(self) -> None:
+        """Single point input returns single point."""
+        points = [Point(x=5, y=5)]
+        result = interpolate_polyline_adaptive(points, 0.2)
+        assert len(result) == 1
+
+    def test_two_points_returns_interpolated(self) -> None:
+        """Two points should interpolate the segment."""
+        points = [Point(x=0, y=0), Point(x=100, y=0)]
+        result = interpolate_polyline_adaptive(points, 0.2)
+        assert len(result) >= 2
+        assert result[0].x == pytest.approx(0)
+        assert result[-1].x == pytest.approx(100)
+
+    def test_dedup_works_after_adaptive_interpolation(self) -> None:
+        """Adaptive interpolation output should work with dedupe."""
+        points = [
+            Point(x=0, y=0),
+            Point(x=50, y=50),
+            Point(x=100, y=0),
+        ]
+        result = interpolate_polyline_adaptive(points, 0.2)
+        deduped = dedupe_close_points(result, min_distance=1.5)
+        # Should still have first and last
+        assert deduped[0].x == pytest.approx(0)
+        assert deduped[-1].x == pytest.approx(100)
+
+    def test_interpolate_path_uses_adaptive_for_polyline(self) -> None:
+        """interpolate_path should use adaptive interpolation for polylines."""
+        # Zigzag polyline
+        path = Path(
+            type=PathType.POLYLINE,
+            points=[
+                Point(x=0, y=0),
+                Point(x=100, y=50),
+                Point(x=200, y=0),
+                Point(x=300, y=50),
+            ],
+        )
+        result = interpolate_path(path, steps_per_unit=0.2)
+        assert len(result) >= 4
+        assert result[0].x == pytest.approx(0)
+        assert result[-1].x == pytest.approx(300)

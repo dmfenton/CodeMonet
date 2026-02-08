@@ -6,7 +6,7 @@
  * Works without Skia, providing painterly effects via SVG.
  */
 
-import React, { useMemo, memo } from 'react';
+import React, { useMemo, memo, useRef, useState, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, G, Path as SvgPath, Filter, FeGaussianBlur } from 'react-native-svg';
 
@@ -215,6 +215,10 @@ function PenIndicator({
   );
 }
 
+/** Settling opacity for newly committed strokes (200ms transition) */
+const SETTLE_OPACITY = 0.85;
+const SETTLE_DURATION_MS = 200;
+
 /**
  * FreehandSvgRenderer - SVG renderer with perfect-freehand strokes.
  *
@@ -222,6 +226,7 @@ function PenIndicator({
  * - Natural pressure-sensitive stroke outlines
  * - Bristle texture simulation
  * - SVG blur filter for soft edges
+ * - Stroke settling effect (new strokes fade in)
  */
 export function FreehandSvgRenderer({
   strokes,
@@ -240,6 +245,31 @@ export function FreehandSvgRenderer({
   void _width;
   void _height;
   const isPaintMode = styleConfig.type === 'paint';
+
+  // Track settling strokes (newly committed strokes get brief opacity transition)
+  const prevStrokeCountRef = useRef(strokes.length);
+  const [settlingIndices, setSettlingIndices] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const prevCount = prevStrokeCountRef.current;
+    const newCount = strokes.length;
+    prevStrokeCountRef.current = newCount;
+
+    if (newCount > prevCount) {
+      // Mark new strokes as settling
+      const newIndices = new Set<number>();
+      for (let i = prevCount; i < newCount; i++) {
+        newIndices.add(i);
+      }
+      setSettlingIndices(newIndices);
+
+      // Clear settling after duration
+      const timer = setTimeout(() => {
+        setSettlingIndices(new Set());
+      }, SETTLE_DURATION_MS);
+      return () => clearTimeout(timer);
+    }
+  }, [strokes.length]);
 
   return (
     <Svg
@@ -261,12 +291,13 @@ export function FreehandSvgRenderer({
 
       {/* Completed strokes - using MemoizedStroke to prevent re-computation */}
       {strokes.map((stroke, index) => (
-        <MemoizedStroke
-          key={index}
-          stroke={stroke}
-          styleConfig={styleConfig}
-          isPaintMode={isPaintMode}
-        />
+        <G key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
+          <MemoizedStroke
+            stroke={stroke}
+            styleConfig={styleConfig}
+            isPaintMode={isPaintMode}
+          />
+        </G>
       ))}
 
       {/* Current human stroke */}
