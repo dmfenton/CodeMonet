@@ -1,9 +1,11 @@
 /**
  * LiveStatus - Always-visible display of current agent activity.
  *
- * Shows:
- * - Streaming thoughts as they arrive (from performance.revealedText)
- * - Current action: Drawing, Executing, etc.
+ * Adapts its presentation to what's currently happening:
+ * - Events: Tool-specific icon + action text as a single activity row
+ * - Thinking: Streaming text with cursor (no header needed)
+ * - Active with no content: Minimal pulsing status indicator
+ * - Paused/Error: Simple icon + label
  */
 
 import React, { useEffect, useMemo, useRef } from 'react';
@@ -86,7 +88,7 @@ export function LiveStatus({
       const message = performance.onStage.message;
       const toolName = message.metadata?.tool_name ?? 'unknown';
       const iconConfig = TOOL_ICONS[toolName];
-      const borderColor = getToolBorderColor(toolName, colors);
+      const toolColor = getToolBorderColor(toolName, colors);
       const isInProgress =
         message.text.includes('...') &&
         !message.text.includes('Drew') &&
@@ -97,7 +99,8 @@ export function LiveStatus({
         icon: isInProgress
           ? (iconConfig?.activeIcon ?? iconConfig?.name ?? 'ellipse-outline')
           : (iconConfig?.name ?? 'ellipse-outline'),
-        borderColor,
+        toolColor,
+        isInProgress,
       };
     }
     return null;
@@ -139,7 +142,7 @@ export function LiveStatus({
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 0.6,
+            toValue: 0.4,
             duration: 800,
             useNativeDriver: true,
           }),
@@ -163,49 +166,44 @@ export function LiveStatus({
     return null;
   }
 
-  const statusLabel = getStatusLabel(status, currentTool);
-  const statusIcon = getStatusIcon(status);
   const isActive = status === 'thinking' || status === 'drawing' || status === 'executing';
 
-  return (
-    <View
-      testID="live-status"
-      style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
-    >
-      {/* Status indicator */}
-      <View style={styles.statusRow}>
-        <Animated.View style={{ opacity: pulseAnim }}>
-          <Ionicons
-            name={statusIcon}
-            size={16}
-            color={isActive ? colors.primary : colors.textMuted}
-          />
-        </Animated.View>
-        <Text style={[styles.statusText, { color: isActive ? colors.primary : colors.textMuted }]}>
-          {statusLabel}
-          {isActive && '...'}
-        </Text>
-      </View>
-
-      {/* Event replaces thinking text permanently - displayed like message bubbles */}
-      {eventDisplay ? (
-        <View
-          style={[
-            styles.eventBubble,
-            {
-              backgroundColor: colors.surfaceElevated,
-              borderLeftColor: eventDisplay.borderColor,
-            },
-          ]}
-        >
-          <View style={styles.eventHeader}>
-            <Ionicons name={eventDisplay.icon} size={16} color={eventDisplay.borderColor} />
-            <Text style={[styles.eventText, { color: colors.textPrimary }]} numberOfLines={2}>
-              {eventDisplay.message.text}
-            </Text>
-          </View>
+  // Event on stage → event becomes the entire display
+  if (eventDisplay) {
+    return (
+      <View
+        testID="live-status"
+        style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
+      >
+        <View style={styles.activityRow}>
+          <Animated.View style={eventDisplay.isInProgress ? { opacity: pulseAnim } : undefined}>
+            <Ionicons
+              name={eventDisplay.icon}
+              size={18}
+              color={eventDisplay.isInProgress ? eventDisplay.toolColor : colors.textMuted}
+            />
+          </Animated.View>
+          <Text
+            style={[
+              styles.activityText,
+              { color: eventDisplay.isInProgress ? colors.textPrimary : colors.textMuted },
+            ]}
+            numberOfLines={2}
+          >
+            {eventDisplay.message.text}
+          </Text>
         </View>
-      ) : displayedWords.length > 0 ? (
+      </View>
+    );
+  }
+
+  // Thinking text → show text directly, no header
+  if (displayedWords.length > 0) {
+    return (
+      <View
+        testID="live-status"
+        style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
+      >
         <Text style={[styles.thoughtText, { color: colors.textPrimary }]} numberOfLines={3}>
           {displayedWords.map((word, i) => (
             <React.Fragment key={`${i}-${word}`}>
@@ -215,21 +213,72 @@ export function LiveStatus({
           ))}
           {isBuffering && <Text style={{ color: colors.textMuted }}> ▍</Text>}
         </Text>
-      ) : null}
-    </View>
-  );
+      </View>
+    );
+  }
+
+  // Active but no content yet → minimal pulsing indicator
+  if (isActive) {
+    const statusLabel = getStatusLabel(status, currentTool);
+    return (
+      <View
+        testID="live-status"
+        style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
+      >
+        <View style={styles.activityRow}>
+          <Animated.View style={{ opacity: pulseAnim }}>
+            <View style={[styles.activityDot, { backgroundColor: colors.primary }]} />
+          </Animated.View>
+          <Text style={[styles.statusText, { color: colors.primary }]}>
+            {statusLabel}...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // Paused/Error → simple indicator
+  if (status !== 'idle') {
+    const statusLabel = getStatusLabel(status);
+    const statusIcon = getStatusIcon(status);
+    const statusColor = status === 'error' ? colors.error : colors.textMuted;
+    return (
+      <View
+        testID="live-status"
+        style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
+      >
+        <View style={styles.activityRow}>
+          <Ionicons name={statusIcon} size={16} color={statusColor} />
+          <Text style={[styles.statusText, { color: statusColor }]}>
+            {statusLabel}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 const styles = StyleSheet.create({
   container: {
     borderRadius: borderRadius.md,
     padding: spacing.md,
-    gap: spacing.sm,
   },
-  statusRow: {
+  activityRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  activityText: {
+    ...typography.caption,
+    fontWeight: '500',
+    flex: 1,
   },
   statusText: {
     ...typography.small,
@@ -238,19 +287,5 @@ const styles = StyleSheet.create({
   thoughtText: {
     ...typography.body,
     lineHeight: 22,
-  },
-  eventBubble: {
-    borderRadius: borderRadius.sm,
-    borderLeftWidth: 3,
-    padding: spacing.sm,
-  },
-  eventHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  eventText: {
-    ...typography.body,
-    flex: 1,
   },
 });
