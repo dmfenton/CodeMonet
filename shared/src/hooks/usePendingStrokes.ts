@@ -16,6 +16,7 @@ export interface UsePendingStrokesOptions {
   clearPending: () => void;
   retryDelayMs?: number;
   onError?: (error: unknown) => void;
+  connectionId?: number;
 }
 
 export function usePendingStrokes({
@@ -25,9 +26,17 @@ export function usePendingStrokes({
   clearPending,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   onError,
+  connectionId,
 }: UsePendingStrokesOptions): void {
   const lastFetchedBatchRef = useRef<number>(0);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Reset batch tracking on WS reconnection so re-sent batches are re-fetched
+  useEffect(() => {
+    if (connectionId !== undefined) {
+      lastFetchedBatchRef.current = 0;
+    }
+  }, [connectionId]);
 
   const pendingBatchId = pendingStrokes?.batchId;
 
