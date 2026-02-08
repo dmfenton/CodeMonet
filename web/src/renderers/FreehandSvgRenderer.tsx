@@ -5,7 +5,7 @@
  * stroke outlines, then renders them as filled SVG paths.
  */
 
-import React, { useMemo, memo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, memo } from 'react';
 
 import type { Point, RendererProps, StrokeStyle, BrushName, Path, DrawingStyleConfig } from '@code-monet/shared';
 import {
@@ -19,6 +19,8 @@ import {
   brushPresetToFreehandOptions,
   pathToSvgD,
   samplePathPoints,
+  useSettlingStrokes,
+  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -213,10 +215,6 @@ function PenIndicator({
   );
 }
 
-/** Settling opacity for newly committed strokes (200ms transition) */
-const SETTLE_OPACITY = 0.85;
-const SETTLE_DURATION_MS = 200;
-
 /**
  * FreehandSvgRenderer - SVG renderer with perfect-freehand strokes (web version).
  *
@@ -238,29 +236,7 @@ export function FreehandSvgRenderer({
   primaryColor,
 }: RendererProps): React.ReactElement {
   const isPaintMode = styleConfig.type === 'paint';
-
-  // Track settling strokes (newly committed strokes get brief opacity transition)
-  const prevStrokeCountRef = useRef(strokes.length);
-  const [settlingIndices, setSettlingIndices] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    const prevCount = prevStrokeCountRef.current;
-    const newCount = strokes.length;
-    prevStrokeCountRef.current = newCount;
-
-    if (newCount > prevCount) {
-      const newIndices = new Set<number>();
-      for (let i = prevCount; i < newCount; i++) {
-        newIndices.add(i);
-      }
-      setSettlingIndices(newIndices);
-
-      const timer = setTimeout(() => {
-        setSettlingIndices(new Set());
-      }, SETTLE_DURATION_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [strokes.length]);
+  const settlingIndices = useSettlingStrokes(strokes.length);
 
   return (
     <>

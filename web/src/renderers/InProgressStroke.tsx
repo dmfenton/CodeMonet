@@ -19,6 +19,7 @@ import {
   getBrushPreset,
   brushPresetToFreehandOptions,
   getBristleOutlines,
+  applyVelocityPressure,
   type FreehandStrokeOptions,
 } from '@code-monet/shared';
 
@@ -145,20 +146,8 @@ export const InProgressStroke = memo(function InProgressStroke({
       return { tailPath: '', tailBristles: [] };
     }
 
-    // Derive pressure factor from average inter-point spacing in the tail
-    // Closer points = slower movement = more pressure = thicker stroke
-    let velocityOptions = options;
-    if (tailPoints.length > 1) {
-      let totalTailDist = 0;
-      for (let i = 1; i < tailPoints.length; i++) {
-        const dx = tailPoints[i]!.x - tailPoints[i - 1]!.x;
-        const dy = tailPoints[i]!.y - tailPoints[i - 1]!.y;
-        totalTailDist += Math.sqrt(dx * dx + dy * dy);
-      }
-      const avgDist = totalTailDist / (tailPoints.length - 1);
-      const pressureFactor = Math.max(0.6, Math.min(1.2, 1.0 / (1 + avgDist * 0.015)));
-      velocityOptions = { ...options, size: (options.size ?? strokeWidth) * pressureFactor };
-    }
+    // Derive pressure from velocity (inter-point spacing)
+    const velocityOptions = applyVelocityPressure(tailPoints, options, strokeWidth);
 
     const tailOutline = getFreehandOutline(tailPoints, velocityOptions);
     const tailPath = outlineToSvgPath(tailOutline);

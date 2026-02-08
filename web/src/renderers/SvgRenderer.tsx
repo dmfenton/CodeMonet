@@ -6,7 +6,7 @@
  * The "green" renderer will be SkiaRenderer (using canvaskit-wasm).
  */
 
-import React, { memo, useMemo, useRef, useState, useEffect } from 'react';
+import React, { memo, useMemo } from 'react';
 
 import type { Path, DrawingStyleConfig, RendererProps } from '@code-monet/shared';
 import {
@@ -14,6 +14,8 @@ import {
   getEffectiveStyle,
   pathToSvgD,
   pointsToSvgD,
+  useSettlingStrokes,
+  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -68,10 +70,6 @@ const MemoizedStroke = memo(function MemoizedStroke({
   );
 });
 
-/** Settling opacity for newly committed strokes (200ms transition) */
-const SETTLE_OPACITY = 0.85;
-const SETTLE_DURATION_MS = 200;
-
 export function SvgRenderer({
   strokes,
   currentStroke,
@@ -83,28 +81,7 @@ export function SvgRenderer({
   showIdleAnimation,
   primaryColor,
 }: RendererProps): React.ReactElement {
-  // Track settling strokes (newly committed strokes get brief opacity transition)
-  const prevStrokeCountRef = useRef(strokes.length);
-  const [settlingIndices, setSettlingIndices] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
-    const prevCount = prevStrokeCountRef.current;
-    const newCount = strokes.length;
-    prevStrokeCountRef.current = newCount;
-
-    if (newCount > prevCount) {
-      const newIndices = new Set<number>();
-      for (let i = prevCount; i < newCount; i++) {
-        newIndices.add(i);
-      }
-      setSettlingIndices(newIndices);
-
-      const timer = setTimeout(() => {
-        setSettlingIndices(new Set());
-      }, SETTLE_DURATION_MS);
-      return () => clearTimeout(timer);
-    }
-  }, [strokes.length]);
+  const settlingIndices = useSettlingStrokes(strokes.length);
 
   return (
     <>
