@@ -22,15 +22,15 @@ interface StatusOverlayProps {
 }
 
 // Tool-specific symbols for web (matches mobile Ionicons)
-const TOOL_SYMBOLS: Record<string, { active: string; done: string }> = {
-  draw_paths: { active: '🖌', done: '🖌' },
-  generate_svg: { active: '⟨/⟩', done: '⟨/⟩' },
-  view_canvas: { active: '◎', done: '◎' },
-  mark_piece_done: { active: '✓', done: '✓' },
-  imagine: { active: '✧', done: '✧' },
-  sign_canvas: { active: '✍', done: '✍' },
-  name_piece: { active: 'Aa', done: 'Aa' },
-  unknown: { active: '◦', done: '◦' },
+const TOOL_SYMBOLS: Record<string, string> = {
+  draw_paths: '🖌',
+  generate_svg: '⟨/⟩',
+  view_canvas: '◎',
+  mark_piece_done: '✓',
+  imagine: '✧',
+  sign_canvas: '✍',
+  name_piece: 'Aa',
+  unknown: '◦',
 };
 
 // Tool-specific CSS colors (matches mobile getToolBorderColor)
@@ -60,9 +60,8 @@ export function StatusOverlay({
 
   // Event on stage -> tool symbol + action text
   if (display.type === 'event') {
-    const symbols = TOOL_SYMBOLS[display.toolName] ?? TOOL_SYMBOLS.unknown;
+    const symbol = TOOL_SYMBOLS[display.toolName] ?? TOOL_SYMBOLS.unknown;
     const toolColor = TOOL_COLORS[display.toolName] ?? TOOL_COLORS.unknown;
-    const symbol = display.isInProgress ? symbols.active : symbols.done;
 
     return (
       <div className="status-overlay">

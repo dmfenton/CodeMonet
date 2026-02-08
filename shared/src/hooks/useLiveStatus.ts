@@ -22,7 +22,7 @@ export interface EventDisplay {
   /** The event text, e.g. "Drawing 3 paths..." or "Drew 3 paths" */
   text: string;
   /** Tool name for icon/color lookup (e.g. 'draw_paths') */
-  toolName: string;
+  toolName: ToolName | 'unknown';
   /** Whether the event is still in progress */
   isInProgress: boolean;
 }
@@ -97,11 +97,9 @@ export function useLiveStatus(
   const eventDisplay = useMemo((): EventDisplay | null => {
     if (performance.onStage?.type !== 'event') return null;
     const message = performance.onStage.message;
-    const toolName = (message.metadata?.tool_name as string) ?? 'unknown';
-    const isInProgress =
-      message.text.includes('...') &&
-      !message.text.includes('Drew') &&
-      !message.text.includes('generated');
+    const toolName: ToolName | 'unknown' =
+      (message.metadata?.tool_name as ToolName | undefined) ?? 'unknown';
+    const isInProgress = message.status === 'started';
     return { type: 'event', text: message.text, toolName, isInProgress };
   }, [performance.onStage]);
 
