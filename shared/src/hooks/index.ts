@@ -10,3 +10,13 @@ export type { UsePerformerOptions } from './usePerformer';
 
 export { usePendingStrokes } from './usePendingStrokes';
 export type { UsePendingStrokesOptions } from './usePendingStrokes';
+
+export { useLiveStatus, getStatusLabel } from './useLiveStatus';
+export type {
+  LiveStatusDisplay,
+  EventDisplay,
+  ThinkingDisplay,
+  ActiveDisplay,
+  InactiveDisplay,
+  HiddenDisplay,
+} from './useLiveStatus';

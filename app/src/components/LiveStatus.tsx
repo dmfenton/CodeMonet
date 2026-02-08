@@ -6,17 +6,19 @@
  * - Thinking: Streaming text with cursor (no header needed)
  * - Active with no content: Minimal pulsing status indicator
  * - Paused/Error: Simple icon + label
+ *
+ * Display logic lives in shared useLiveStatus hook -
+ * this component is a thin React Native renderer.
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import type { AgentStatus, PerformanceState, ToolName } from '@code-monet/shared';
-import { TOOL_DISPLAY_NAMES } from '@code-monet/shared';
+import { useLiveStatus } from '@code-monet/shared';
 import { borderRadius, spacing, typography, useTheme } from '../theme';
 import { TOOL_ICONS, getToolBorderColor } from './messages/types';
-import { debugRender } from '../utils/debugLog';
 
 interface LiveStatusProps {
   /** Performance state (used for revealedText display) */
@@ -27,47 +29,8 @@ interface LiveStatusProps {
   currentTool?: ToolName | null;
 }
 
-function getStatusIcon(status: AgentStatus): keyof typeof Ionicons.glyphMap {
-  switch (status) {
-    case 'thinking':
-      return 'bulb-outline';
-    case 'drawing':
-      return 'brush';
-    case 'executing':
-      return 'code-working';
-    case 'paused':
-      return 'pause';
-    case 'error':
-      return 'alert-circle';
-    default:
-      return 'ellipse-outline';
-  }
-}
-
-function getStatusLabel(status: AgentStatus, currentTool?: ToolName | null): string {
-  if (status === 'executing' && currentTool) {
-    return TOOL_DISPLAY_NAMES[currentTool] ?? 'Running code';
-  }
-
-  switch (status) {
-    case 'thinking':
-      return 'Thinking';
-    case 'drawing':
-      return 'Drawing';
-    case 'executing':
-      return 'Running code';
-    case 'paused':
-      return 'Paused';
-    case 'error':
-      return 'Error';
-    default:
-      return '';
-  }
-}
-
-/** Renders a word (bionic reading disabled - renders as plain text) */
-function BionicWord({ word }: { word: string }): React.JSX.Element {
-  return <Text>{word}</Text>;
+function getStatusIcon(status: 'paused' | 'error'): keyof typeof Ionicons.glyphMap {
+  return status === 'error' ? 'alert-circle' : 'pause';
 }
 
 export function LiveStatus({
@@ -77,68 +40,13 @@ export function LiveStatus({
 }: LiveStatusProps): React.JSX.Element | null {
   const { colors, shadows } = useTheme();
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const prevDisplayedCountRef = useRef(0);
 
-  // Get revealed text from performance state
-  const revealedText = performance.revealedText;
-
-  // Get event message, icon, and styling if an event is currently on stage
-  const eventDisplay = useMemo(() => {
-    if (performance.onStage?.type === 'event') {
-      const message = performance.onStage.message;
-      const toolName = message.metadata?.tool_name ?? 'unknown';
-      const iconConfig = TOOL_ICONS[toolName];
-      const toolColor = getToolBorderColor(toolName, colors);
-      const isInProgress =
-        message.text.includes('...') &&
-        !message.text.includes('Drew') &&
-        !message.text.includes('generated');
-      return {
-        message,
-        toolName,
-        icon: isInProgress
-          ? (iconConfig?.activeIcon ?? iconConfig?.name ?? 'ellipse-outline')
-          : (iconConfig?.name ?? 'ellipse-outline'),
-        toolColor,
-        isInProgress,
-      };
-    }
-    return null;
-  }, [performance.onStage, colors]);
-
-  // Split revealed text into words for bionic rendering
-  const displayedWords = useMemo(
-    () => revealedText.split(/\s+/).filter((w) => w.length > 0),
-    [revealedText]
-  );
-
-  // Check if there are more words to reveal (buffer has words OR stage has words with more to reveal)
-  const isBuffering = useMemo(() => {
-    // Check if there are words items in the buffer
-    const hasWordsInBuffer = performance.buffer.some((item) => item.type === 'words');
-    // Check if current stage item is words and has more words to reveal
-    if (performance.onStage?.type === 'words') {
-      const totalWords = performance.onStage.text.split(/\s+/).filter((w) => w.length > 0).length;
-      if (performance.wordIndex < totalWords) {
-        return true;
-      }
-    }
-    return hasWordsInBuffer;
-  }, [performance.buffer, performance.onStage, performance.wordIndex]);
-
-  const wordCount = displayedWords.length;
-
-  // Log progressive text state changes
-  if (displayedWords.length !== prevDisplayedCountRef.current) {
-    debugRender(
-      `LiveStatus: displayed=${displayedWords.length}/${wordCount} words, buffering=${isBuffering}`
-    );
-    prevDisplayedCountRef.current = displayedWords.length;
-  }
+  const display = useLiveStatus(performance, status, currentTool);
 
   // Pulse animation for active states
+  const isActive = status === 'thinking' || status === 'drawing' || status === 'executing';
   useEffect(() => {
-    if (status === 'thinking' || status === 'drawing' || status === 'executing') {
+    if (isActive) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -158,68 +66,69 @@ export function LiveStatus({
     } else {
       pulseAnim.setValue(1);
     }
-  }, [status, pulseAnim]);
+  }, [isActive, pulseAnim]);
 
-  // Don't show anything when idle and no content
-  const hasContent = displayedWords.length > 0 || performance.buffer.length > 0 || !!eventDisplay;
-  if (status === 'idle' && !hasContent) {
+  if (display.type === 'hidden') {
     return null;
   }
 
-  const isActive = status === 'thinking' || status === 'drawing' || status === 'executing';
+  // Event on stage -> tool icon + action text
+  if (display.type === 'event') {
+    const iconConfig = TOOL_ICONS[display.toolName] ?? TOOL_ICONS.unknown;
+    const toolColor = getToolBorderColor(display.toolName, colors);
+    const icon = display.isInProgress
+      ? (iconConfig.activeIcon ?? iconConfig.name)
+      : iconConfig.name;
 
-  // Event on stage → event becomes the entire display
-  if (eventDisplay) {
     return (
       <View
         testID="live-status"
         style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
       >
         <View style={styles.activityRow}>
-          <Animated.View style={eventDisplay.isInProgress ? { opacity: pulseAnim } : undefined}>
+          <Animated.View style={display.isInProgress ? { opacity: pulseAnim } : undefined}>
             <Ionicons
-              name={eventDisplay.icon}
+              name={icon}
               size={18}
-              color={eventDisplay.isInProgress ? eventDisplay.toolColor : colors.textMuted}
+              color={display.isInProgress ? toolColor : colors.textMuted}
             />
           </Animated.View>
           <Text
             style={[
               styles.activityText,
-              { color: eventDisplay.isInProgress ? colors.textPrimary : colors.textMuted },
+              { color: display.isInProgress ? colors.textPrimary : colors.textMuted },
             ]}
             numberOfLines={2}
           >
-            {eventDisplay.message.text}
+            {display.text}
           </Text>
         </View>
       </View>
     );
   }
 
-  // Thinking text → show text directly, no header
-  if (displayedWords.length > 0) {
+  // Thinking text -> show text directly, no header
+  if (display.type === 'thinking') {
     return (
       <View
         testID="live-status"
         style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
       >
         <Text style={[styles.thoughtText, { color: colors.textPrimary }]} numberOfLines={3}>
-          {displayedWords.map((word, i) => (
+          {display.words.map((word, i) => (
             <React.Fragment key={`${i}-${word}`}>
-              <BionicWord word={word} />
-              {i < displayedWords.length - 1 && ' '}
+              <Text>{word}</Text>
+              {i < display.words.length - 1 && ' '}
             </React.Fragment>
           ))}
-          {isBuffering && <Text style={{ color: colors.textMuted }}> ▍</Text>}
+          {display.isBuffering && <Text style={{ color: colors.textMuted }}> ▍</Text>}
         </Text>
       </View>
     );
   }
 
-  // Active but no content yet → minimal pulsing indicator
-  if (isActive) {
-    const statusLabel = getStatusLabel(status, currentTool);
+  // Active but no content yet -> pulsing dot + label
+  if (display.type === 'active') {
     return (
       <View
         testID="live-status"
@@ -230,27 +139,25 @@ export function LiveStatus({
             <View style={[styles.activityDot, { backgroundColor: colors.primary }]} />
           </Animated.View>
           <Text style={[styles.statusText, { color: colors.primary }]}>
-            {statusLabel}...
+            {display.label}...
           </Text>
         </View>
       </View>
     );
   }
 
-  // Paused/Error → simple indicator
-  if (status !== 'idle') {
-    const statusLabel = getStatusLabel(status);
-    const statusIcon = getStatusIcon(status);
-    const statusColor = status === 'error' ? colors.error : colors.textMuted;
+  // Paused / Error -> icon + label
+  if (display.type === 'inactive') {
+    const statusColor = display.statusType === 'error' ? colors.error : colors.textMuted;
     return (
       <View
         testID="live-status"
         style={[styles.container, { backgroundColor: colors.surface }, shadows.sm]}
       >
         <View style={styles.activityRow}>
-          <Ionicons name={statusIcon} size={16} color={statusColor} />
+          <Ionicons name={getStatusIcon(display.statusType)} size={16} color={statusColor} />
           <Text style={[styles.statusText, { color: statusColor }]}>
-            {statusLabel}
+            {display.label}
           </Text>
         </View>
       </View>

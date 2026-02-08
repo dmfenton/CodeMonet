@@ -651,7 +651,12 @@
 }
 
 /* ============================================
-   STATUS OVERLAY - Bionic reading teleprompter
+   STATUS OVERLAY - Adaptive activity display
+   Matches mobile LiveStatus design:
+   - Events: tool icon + action text
+   - Thinking: streaming text with cursor
+   - Active: pulsing dot + label
+   - Paused/Error: icon + label
    ============================================ */
 
 .status-overlay {
@@ -662,20 +667,74 @@
   line-height: 1.5;
 }
 
-.status-overlay .status-text {
-  color: var(--text-primary);
+/* Activity row - single-line display for events, active, paused/error */
+.activity-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.status-overlay .status-text.muted {
+/* Pulsing dot for "active but no content" state */
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--atelier-indigo);
+}
+
+.activity-dot.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* Tool icon in event rows */
+.activity-icon {
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.activity-icon.pulse {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* Event action text */
+.activity-text {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Status label for active/paused/error */
+.activity-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--atelier-indigo);
+}
+
+.activity-label.paused {
   color: var(--text-muted);
-  font-style: italic;
 }
 
-.status-overlay .status-text.error {
+.activity-label.error {
   color: var(--atelier-rose);
 }
 
-/* Bionic reading */
+.activity-icon.paused {
+  color: var(--text-muted);
+}
+
+.activity-icon.error {
+  color: var(--atelier-rose);
+}
+
+/* Completed events */
+.activity-row.completed .activity-text {
+  color: var(--text-muted);
+}
+
+/* Bionic reading / thinking display */
 .thinking-display {
   transition: opacity 50ms ease-out;
 }
@@ -688,101 +747,4 @@
 .bionic-word strong {
   font-weight: 700;
   color: var(--atelier-indigo);
-}
-
-/* Executing mode */
-.executing-display {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--atelier-ochre);
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-/* Drawing mode */
-.drawing-display {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  color: var(--atelier-sage);
-}
-
-.drawing-icon {
-  font-size: 18px;
-  animation: draw-bounce 0.6s ease-in-out infinite;
-}
-
-@keyframes draw-bounce {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
-}
-
-/* Paused mode */
-.paused-display {
-  opacity: 0.6;
-}
-
-/* Error mode */
-.error-display {
-  animation: error-pulse 1s infinite;
-}
-
-@keyframes error-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-/* ============================================
-   STATUS BADGE
-   ============================================ */
-
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: var(--radius-lg);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  margin-top: 8px;
-}
-
-.status-badge.executing {
-  background: var(--status-warning-bg);
-  color: var(--atelier-ochre);
-}
-
-.status-badge.drawing {
-  background: var(--status-success-bg);
-  color: var(--atelier-sage);
-}
-
-.status-badge .spinner {
-  width: 12px;
-  height: 12px;
-  border-width: 1.5px;
-}
-
-.status-badge .drawing-icon {
-  font-size: 12px;
 }

@@ -1,38 +1,12 @@
 /**
- * Tests for LiveStatus component logic.
+ * Tests for LiveStatus / useLiveStatus shared logic.
  *
  * Tests the status label derivation and visibility logic.
- * Note: We can't import directly from the component due to React Native
- * dependencies, so we test the same logic inline.
+ * getStatusLabel now lives in shared useLiveStatus hook.
  */
 
-import { TOOL_DISPLAY_NAMES } from '@code-monet/shared';
-import type { AgentStatus, ToolName } from '@code-monet/shared';
-
-/**
- * Get human-readable label for agent status.
- * This mirrors the implementation in LiveStatus.tsx.
- */
-function getStatusLabel(status: AgentStatus, currentTool?: ToolName | null): string {
-  if (status === 'executing' && currentTool) {
-    return TOOL_DISPLAY_NAMES[currentTool] ?? 'Running code';
-  }
-
-  switch (status) {
-    case 'thinking':
-      return 'Thinking';
-    case 'drawing':
-      return 'Drawing';
-    case 'executing':
-      return 'Running code';
-    case 'paused':
-      return 'Paused';
-    case 'error':
-      return 'Error';
-    default:
-      return '';
-  }
-}
+import { getStatusLabel } from '@code-monet/shared';
+import type { AgentStatus } from '@code-monet/shared';
 
 describe('LiveStatus', () => {
   describe('getStatusLabel', () => {

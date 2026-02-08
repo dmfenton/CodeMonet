@@ -1,20 +1,19 @@
 /**
- * StatusOverlay - Shows agent status in a fixed position above the canvas.
+ * StatusOverlay - Shows agent status above the canvas.
  *
- * Modes:
- * - Thinking: Bionic reading display from performance.revealedText
- * - Executing: "Running [tool_name]..." with spinner
- * - Drawing: "Drawing..." with animated indicator
- * - Idle/Paused: Subtle indicator
+ * Uses the same shared useLiveStatus hook as the mobile LiveStatus
+ * component, rendering with HTML/CSS instead of React Native primitives.
+ *
+ * Display modes:
+ * - Events: Tool icon + action text as a single activity row
+ * - Thinking: Streaming text with cursor (no header)
+ * - Active with no content: Pulsing dot + status label
+ * - Paused/Error: Icon + label
  */
 
-import React, { useMemo } from 'react';
-import type { AgentMessage, AgentStatus, PerformanceState } from '@code-monet/shared';
-import {
-  getLastToolCall,
-  splitWords,
-  TOOL_DISPLAY_NAMES,
-} from '@code-monet/shared';
+import React from 'react';
+import type { AgentMessage, AgentStatus, PerformanceState, ToolName } from '@code-monet/shared';
+import { getLastToolCall, useLiveStatus } from '@code-monet/shared';
 
 interface StatusOverlayProps {
   status: AgentStatus;
@@ -22,126 +21,110 @@ interface StatusOverlayProps {
   messages: AgentMessage[];
 }
 
-/**
- * Render a word (bionic reading disabled - renders as plain text).
- */
-function BionicWord({ word }: { word: string }): React.ReactElement {
-  return <span className="bionic-word">{word}</span>;
-}
+// Tool-specific symbols for web (matches mobile Ionicons)
+const TOOL_SYMBOLS: Record<string, { active: string; done: string }> = {
+  draw_paths: { active: '🖌', done: '🖌' },
+  generate_svg: { active: '⟨/⟩', done: '⟨/⟩' },
+  view_canvas: { active: '◎', done: '◎' },
+  mark_piece_done: { active: '✓', done: '✓' },
+  imagine: { active: '✧', done: '✧' },
+  sign_canvas: { active: '✍', done: '✍' },
+  name_piece: { active: 'Aa', done: 'Aa' },
+  unknown: { active: '◦', done: '◦' },
+};
 
-/**
- * Thinking display with bionic reading.
- * Uses performance.revealedText which is already progressively revealed by usePerformer.
- */
-function ThinkingDisplay({
-  performance,
-}: {
-  performance: PerformanceState;
-}): React.ReactElement {
-  // Get revealed text from performance state (already progressively revealed)
-  const displayedWords = useMemo(
-    () => splitWords(performance.revealedText),
-    [performance.revealedText]
-  );
-
-  // Check if there are more words to reveal
-  const isBuffering = useMemo(() => {
-    const hasWordsInBuffer = performance.buffer.some((item) => item.type === 'words');
-    if (performance.onStage?.type === 'words') {
-      const totalWords = splitWords(performance.onStage.text).length;
-      if (performance.wordIndex < totalWords) return true;
-    }
-    return hasWordsInBuffer;
-  }, [performance.buffer, performance.onStage, performance.wordIndex]);
-
-  if (displayedWords.length === 0) {
-    return <span className="status-text">Thinking...</span>;
-  }
-
-  return (
-    <div className="thinking-display">
-      {displayedWords.map((word, i) => (
-        <React.Fragment key={`${i}-${word}`}>
-          <BionicWord word={word} />
-          {i < displayedWords.length - 1 && ' '}
-        </React.Fragment>
-      ))}
-      {isBuffering && <span className="cursor"> ▍</span>}
-    </div>
-  );
-}
+// Tool-specific CSS colors (matches mobile getToolBorderColor)
+const TOOL_COLORS: Record<string, string> = {
+  draw_paths: 'var(--atelier-indigo)',
+  generate_svg: 'var(--atelier-lavender)',
+  view_canvas: 'var(--text-muted)',
+  mark_piece_done: 'var(--atelier-sage)',
+  imagine: 'var(--atelier-ochre)',
+  sign_canvas: 'var(--atelier-indigo)',
+  name_piece: 'var(--atelier-indigo)',
+  unknown: 'var(--atelier-indigo)',
+};
 
 export function StatusOverlay({
   status,
   performance,
   messages,
 }: StatusOverlayProps): React.ReactElement | null {
-  const lastTool = getLastToolCall(messages);
+  // Derive currentTool from messages (same as mobile StudioContext)
+  const currentTool: ToolName | null = getLastToolCall(messages);
+  const display = useLiveStatus(performance, status, currentTool);
 
-  // Check if there's any revealed text
-  const hasContent = performance.revealedText.length > 0 || performance.buffer.length > 0;
-
-  // Show status indicator for non-thinking active states
-  const renderStatusBadge = (): React.ReactElement | null => {
-    switch (status) {
-      case 'executing': {
-        const toolLabel = lastTool ? TOOL_DISPLAY_NAMES[lastTool] : 'executing';
-        return (
-          <div className="status-badge executing">
-            <span className="spinner" />
-            <span>{toolLabel}</span>
-          </div>
-        );
-      }
-      case 'drawing':
-        return (
-          <div className="status-badge drawing">
-            <span className="drawing-icon">✏</span>
-            <span>Drawing</span>
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
-
-  // Active states that should show thinking (if available) + status badge
-  const isActiveState = status === 'thinking' || status === 'executing' || status === 'drawing';
-
-  if (!isActiveState) {
-    // Paused, idle, error - show simple status
-    if (status === 'paused') {
-      return (
-        <div className="status-overlay">
-          <div className="paused-display">
-            <span className="status-text muted">Paused</span>
-          </div>
-        </div>
-      );
-    }
-    if (status === 'error') {
-      return (
-        <div className="status-overlay">
-          <div className="error-display">
-            <span className="status-text error">Error</span>
-          </div>
-        </div>
-      );
-    }
-    return null; // idle
+  if (display.type === 'hidden') {
+    return null;
   }
 
-  // Active state: show thinking text (if any) with status badge
-  const statusBadge = renderStatusBadge();
+  // Event on stage -> tool symbol + action text
+  if (display.type === 'event') {
+    const symbols = TOOL_SYMBOLS[display.toolName] ?? TOOL_SYMBOLS.unknown;
+    const toolColor = TOOL_COLORS[display.toolName] ?? TOOL_COLORS.unknown;
+    const symbol = display.isInProgress ? symbols.active : symbols.done;
 
-  return (
-    <div className="status-overlay">
-      {hasContent ? (
-        <ThinkingDisplay performance={performance} />
-      ) : (
-        <span className="status-text">Thinking...</span>
-      )}
-      {statusBadge}
-    </div>
-  );
+    return (
+      <div className="status-overlay">
+        <div className={`activity-row ${display.isInProgress ? 'in-progress' : 'completed'}`}>
+          <span
+            className={`activity-icon ${display.isInProgress ? 'pulse' : ''}`}
+            style={{ color: display.isInProgress ? toolColor : 'var(--text-muted)' }}
+          >
+            {symbol}
+          </span>
+          <span
+            className="activity-text"
+            style={{ color: display.isInProgress ? 'var(--text-primary)' : 'var(--text-muted)' }}
+          >
+            {display.text}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Thinking text -> show text directly, no header
+  if (display.type === 'thinking') {
+    return (
+      <div className="status-overlay">
+        <div className="thinking-display">
+          {display.words.map((word, i) => (
+            <React.Fragment key={`${i}-${word}`}>
+              <span className="bionic-word">{word}</span>
+              {i < display.words.length - 1 && ' '}
+            </React.Fragment>
+          ))}
+          {display.isBuffering && <span className="cursor"> ▍</span>}
+        </div>
+      </div>
+    );
+  }
+
+  // Active but no content yet -> pulsing dot + label
+  if (display.type === 'active') {
+    return (
+      <div className="status-overlay">
+        <div className="activity-row in-progress">
+          <span className="activity-dot pulse" />
+          <span className="activity-label">{display.label}...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Paused / Error -> icon + label
+  if (display.type === 'inactive') {
+    const icon = display.statusType === 'error' ? '⚠' : '⏸';
+    return (
+      <div className="status-overlay">
+        <div className="activity-row">
+          <span className={`activity-icon ${display.statusType}`}>{icon}</span>
+          <span className={`activity-label ${display.statusType}`}>{display.label}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
