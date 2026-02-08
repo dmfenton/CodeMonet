@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.15] - 2026-02-08
+
+### Fixed
+
+- Pending strokes not re-fetched after WebSocket reconnection — batch tracker (`lastFetchedBatchRef`) never reset on reconnect, causing canvas to stay idle (especially on iOS which aggressively kills background connections)
+
+### Added
+
+- Production tracing events at key stroke pipeline stages (`strokes.ready`, `strokes.fetch_start`, `strokes.fetch_complete`, `strokes.fetch_error`, `strokes.enqueued`) for visibility via `/diagnose`
+
 ## [1.35.14] - 2026-02-07
 
 ### Fixed
@@ -1044,7 +1054,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.14...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.15...HEAD
+[1.35.15]: https://github.com/dmfenton/sketchpad/compare/v1.35.14...v1.35.15
 [1.35.14]: https://github.com/dmfenton/sketchpad/compare/v1.35.13...v1.35.14
 [1.35.13]: https://github.com/dmfenton/sketchpad/compare/v1.35.12...v1.35.13
 [1.35.12]: https://github.com/dmfenton/sketchpad/compare/v1.35.11...v1.35.12
