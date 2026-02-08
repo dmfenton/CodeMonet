@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-02-08
+
+### Added
+
+- Animation realism: pen travel with ease-in-out interpolation between strokes, inter-stroke pauses (200ms), and pen settle delays (50ms) for natural drawing cadence
+- Speed easing within each stroke (sine curve: slow→fast→slow) to mimic hand movement
+- Stroke settling effect: newly committed strokes render at 85% opacity for 200ms before fading to full
+- Velocity-based pen pressure simulation in freehand stroke tails (closer points = thicker stroke)
+- Curvature-adaptive point density on server: curved segments get more points (slower animation), straight segments fewer (faster)
+- Smooth Catmull-Rom→Bezier curves for plotter mode agent strokes
+- `fetchStrokesWithRetry` shared utility replacing the old pending strokes polling pattern
+
+### Changed
+
+- Extracted `useSettlingStrokes` hook and `applyVelocityPressure` utility into shared library (deduplicated from 4 and 2 renderer files respectively)
+- Replaced `STROKES_READY`/`PendingStrokesInfo`/`usePendingStrokes` pattern with simpler REST-based fetch with retry and abort support
+
+### Removed
+
+- `interpolate_polyline` (replaced by `interpolate_polyline_adaptive`)
+- `usePendingStrokes` hook and `PendingStrokesInfo` type
+- `handleAgentStrokesReady` WebSocket handler
+
 ## [1.35.15] - 2026-02-08
 
 ### Fixed
@@ -1054,7 +1077,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.15...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.36.0...HEAD
+[1.36.0]: https://github.com/dmfenton/sketchpad/compare/v1.35.15...v1.36.0
 [1.35.15]: https://github.com/dmfenton/sketchpad/compare/v1.35.14...v1.35.15
 [1.35.14]: https://github.com/dmfenton/sketchpad/compare/v1.35.13...v1.35.14
 [1.35.13]: https://github.com/dmfenton/sketchpad/compare/v1.35.12...v1.35.13
