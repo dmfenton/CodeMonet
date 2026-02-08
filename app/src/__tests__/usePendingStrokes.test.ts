@@ -91,6 +91,64 @@ describe('usePendingStrokes', () => {
     expect(clearPending).toHaveBeenCalledTimes(1);
   });
 
+  it('re-fetches a previously fetched batch when connectionId changes', async () => {
+    const strokes = [makeStroke(5)];
+    const fetchPendingStrokes = jest.fn().mockResolvedValue(strokes);
+    const enqueueStrokes = jest.fn();
+    const clearPending = jest.fn();
+
+    const { rerender } = renderHook(
+      ({
+        pendingStrokes,
+        connectionId,
+      }: {
+        pendingStrokes: { count: number; batchId: number; pieceNumber: number } | null;
+        connectionId: number;
+      }) =>
+        usePendingStrokes({
+          pendingStrokes,
+          fetchPendingStrokes,
+          enqueueStrokes,
+          clearPending,
+          retryDelayMs: 50,
+          connectionId,
+        }),
+      {
+        initialProps: {
+          pendingStrokes: { count: 1, batchId: 5, pieceNumber: 0 } as {
+            count: number;
+            batchId: number;
+            pieceNumber: number;
+          } | null,
+          connectionId: 1,
+        },
+      }
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(fetchPendingStrokes).toHaveBeenCalledTimes(1);
+
+    // Simulate WS reconnection: connectionId changes, same batchId re-sent
+    rerender({
+      pendingStrokes: null,
+      connectionId: 2,
+    });
+    rerender({
+      pendingStrokes: { count: 1, batchId: 5, pieceNumber: 0 },
+      connectionId: 2,
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(fetchPendingStrokes).toHaveBeenCalledTimes(2);
+    expect(enqueueStrokes).toHaveBeenCalledTimes(2);
+  });
+
   it('does not refetch an already fetched batch', async () => {
     const strokes = [makeStroke(4)];
     const fetchPendingStrokes = jest.fn().mockResolvedValue(strokes);

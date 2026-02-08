@@ -34,6 +34,16 @@ function App(): React.ReactElement {
   // Derive status from messages
   const agentStatus = deriveAgentStatus(state);
 
+  const onMessage = useCallback(
+    (message: ServerMessage) => {
+      handleMessage(message);
+      logMessage(message);
+    },
+    [handleMessage, logMessage]
+  );
+
+  const { status: wsStatus, send, connectionCount } = useWebSocket({ onMessage, token: accessToken });
+
   const fetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
     if (!accessToken) {
       throw new Error('Missing access token');
@@ -54,6 +64,7 @@ function App(): React.ReactElement {
     onError: (error) => {
       console.error('[App] Failed to fetch strokes:', error);
     },
+    connectionId: connectionCount,
   });
 
   // Callback when stroke animation completes
@@ -72,16 +83,6 @@ function App(): React.ReactElement {
     inStudio: true, // Web app is always in studio mode
     onStrokesComplete: handleStrokesComplete,
   });
-
-  const onMessage = useCallback(
-    (message: ServerMessage) => {
-      handleMessage(message);
-      logMessage(message);
-    },
-    [handleMessage, logMessage]
-  );
-
-  const { status: wsStatus, send } = useWebSocket({ onMessage, token: accessToken });
 
   // Optimistic pause/resume handlers - update UI immediately, then notify server
   const handlePause = useCallback(() => {
