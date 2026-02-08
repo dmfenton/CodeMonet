@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.35.14] - 2026-02-07
+
 ### Fixed
 
 - WebSocket auth token stripped by nginx proxy — query params lost when proxy_pass uses variable (regression from v1.35.5 DNS fix)
@@ -1042,7 +1044,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.13...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.35.14...HEAD
+[1.35.14]: https://github.com/dmfenton/sketchpad/compare/v1.35.13...v1.35.14
 [1.35.13]: https://github.com/dmfenton/sketchpad/compare/v1.35.12...v1.35.13
 [1.35.12]: https://github.com/dmfenton/sketchpad/compare/v1.35.11...v1.35.12
 [1.35.11]: https://github.com/dmfenton/sketchpad/compare/v1.35.10...v1.35.11
