@@ -8,7 +8,6 @@ import contextlib
 import math
 import re
 from collections.abc import Callable
-from functools import reduce
 
 from code_monet.types import Path, PathType, Point
 
@@ -352,28 +351,6 @@ def interpolate_line(points: list[Point], num_steps: int) -> list[Point]:
     if len(points) < 2:
         return list(points)
     return [lerp_point(points[0], points[1], i / num_steps) for i in range(num_steps + 1)]
-
-
-def interpolate_polyline(points: list[Point], steps_per_unit: float) -> list[Point]:
-    """Interpolate a polyline into discrete points using functional reduce."""
-    if len(points) < 2:
-        return list(points)
-
-    def interpolate_segment(
-        acc: list[Point], segment: tuple[int, tuple[Point, Point]]
-    ) -> list[Point]:
-        seg_idx, (p1, p2) = segment
-        seg_length = distance(p1, p2)
-        seg_steps = max(1, int(seg_length * steps_per_unit))
-
-        new_points = [
-            lerp_point(p1, p2, i / seg_steps)
-            for i in range(0 if seg_idx == 0 else 1, seg_steps + 1)
-        ]
-        return acc + new_points
-
-    segments = list(enumerate(zip(points[:-1], points[1:], strict=True)))
-    return reduce(interpolate_segment, segments, [])
 
 
 def interpolate_polyline_adaptive(
