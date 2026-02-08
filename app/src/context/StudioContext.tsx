@@ -8,12 +8,14 @@ import { AppState, BackHandler, Platform } from 'react-native';
 
 import type {
   AgentStatus,
+  AgentStrokesReadyMessage,
   CanvasAction,
   CanvasHookState,
   ClientMessage,
   DrawingStyleType,
   PendingStroke,
   SavedCanvas,
+  ServerMessage,
   ToolName,
 } from '@code-monet/shared';
 import {
@@ -119,9 +121,9 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
 
   // Wrap handleMessage to trace agent_strokes_ready arrivals
   const tracedHandleMessage = useCallback(
-    (message: import('@code-monet/shared').ServerMessage) => {
+    (message: ServerMessage) => {
       if (message.type === 'agent_strokes_ready') {
-        const ready = message as { type: string; batch_id: number; piece_number: number; count: number };
+        const ready = message as AgentStrokesReadyMessage;
         tracer.recordEvent('strokes.ready', {
           batchId: ready.batch_id,
           pieceNumber: ready.piece_number,
@@ -214,6 +216,9 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
 
   // Pending strokes fetching
   const pendingStrokes = canvas.state.pendingStrokes;
+  const pendingBatchIdRef = useRef(0);
+  pendingBatchIdRef.current = pendingStrokes?.batchId ?? 0;
+
   const fetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
     const response = await api.fetch('/strokes/pending');
     if (!response.ok) throw new Error('Failed to fetch strokes');
@@ -222,11 +227,11 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   }, [api]);
 
   const tracedFetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
-    tracer.recordEvent('strokes.fetch_start', { batchId: pendingStrokes?.batchId ?? 0 });
+    tracer.recordEvent('strokes.fetch_start', { batchId: pendingBatchIdRef.current });
     const strokes = await fetchPendingStrokes();
     tracer.recordEvent('strokes.fetch_complete', { strokeCount: strokes.length });
     return strokes;
-  }, [fetchPendingStrokes, pendingStrokes?.batchId]);
+  }, [fetchPendingStrokes]);
 
   usePendingStrokes({
     pendingStrokes: accessToken ? pendingStrokes : null,
