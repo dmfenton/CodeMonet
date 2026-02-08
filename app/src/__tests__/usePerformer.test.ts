@@ -262,8 +262,9 @@ describe('usePerformer - Stroke Animation Flow', () => {
       }
     );
 
-    // Animate through both strokes (2 points each + complete)
-    for (let i = 0; i < 10; i++) {
+    // Animate through both strokes - need extra frames for inter-stroke pause (200ms)
+    // and potential pen travel/settle delays
+    for (let i = 0; i < 30; i++) {
       act(() => advanceFrame(20));
       rerender({
         performance: state.performance,
@@ -308,8 +309,8 @@ describe('usePerformer - Stroke Animation Flow', () => {
       }
     );
 
-    // Animate through everything
-    for (let i = 0; i < 15; i++) {
+    // Animate through everything - need extra frames for inter-stroke pause (200ms)
+    for (let i = 0; i < 30; i++) {
       act(() => advanceFrame(20));
       rerender({
         performance: state.performance,
@@ -942,5 +943,160 @@ describe('usePerformer - Buffer to Stage Flow', () => {
     // Buffer should be empty, stage should be clear
     expect(state.performance.buffer).toHaveLength(0);
     expect(state.performance.onStage).toBeNull();
+  });
+});
+
+// ============================================================================
+// Pen Travel Tests
+// ============================================================================
+
+describe('usePerformer - Pen Travel Between Strokes', () => {
+  it('dispatches PEN_TRAVEL_BATCH after STROKE_COMPLETE when strokes are far apart', () => {
+    // Two strokes far apart to trigger pen travel
+    const strokes = [
+      makeStroke([{ x: 0, y: 0 }, { x: 10, y: 10 }]),
+      makeStroke([{ x: 200, y: 200 }, { x: 210, y: 210 }]),
+    ];
+
+    const dispatchedActions: CanvasAction[] = [];
+    let state = makeStateWithStrokesOnStage(strokes);
+
+    const dispatch = jest.fn((action: CanvasAction) => {
+      dispatchedActions.push(action);
+      state = canvasReducer(state, action);
+    });
+
+    const { rerender } = renderHook(
+      (props: UsePerformerOptions) => usePerformer(props),
+      {
+        initialProps: {
+          performance: state.performance,
+          dispatch,
+          paused: false,
+          inStudio: true,
+          frameDelayMs: 16.67,
+        },
+      }
+    );
+
+    // Animate through both strokes with enough frames
+    for (let i = 0; i < 40; i++) {
+      act(() => advanceFrame(20));
+      rerender({
+        performance: state.performance,
+        dispatch,
+        paused: false,
+        inStudio: true,
+        frameDelayMs: 16.67,
+      });
+    }
+
+    // Should see PEN_TRAVEL_BATCH actions between the two strokes
+    const travelActions = dispatchedActions.filter((a) => a.type === 'PEN_TRAVEL_BATCH');
+    const travelCompleteActions = dispatchedActions.filter((a) => a.type === 'PEN_TRAVEL_COMPLETE');
+
+    // Travel should occur (strokes are 200+ pixels apart)
+    expect(travelActions.length).toBeGreaterThan(0);
+    expect(travelCompleteActions.length).toBeGreaterThan(0);
+  });
+
+  it('skips pen travel when strokes are very close', () => {
+    // Two strokes very close together (< PEN_LIFT_THRESHOLD of 2px)
+    const strokes = [
+      makeStroke([{ x: 0, y: 0 }, { x: 10, y: 10 }]),
+      makeStroke([{ x: 10.5, y: 10.5 }, { x: 20, y: 20 }]),
+    ];
+
+    const dispatchedActions: CanvasAction[] = [];
+    let state = makeStateWithStrokesOnStage(strokes);
+
+    const dispatch = jest.fn((action: CanvasAction) => {
+      dispatchedActions.push(action);
+      state = canvasReducer(state, action);
+    });
+
+    const { rerender } = renderHook(
+      (props: UsePerformerOptions) => usePerformer(props),
+      {
+        initialProps: {
+          performance: state.performance,
+          dispatch,
+          paused: false,
+          inStudio: true,
+          frameDelayMs: 16.67,
+        },
+      }
+    );
+
+    // Animate through
+    for (let i = 0; i < 30; i++) {
+      act(() => advanceFrame(20));
+      rerender({
+        performance: state.performance,
+        dispatch,
+        paused: false,
+        inStudio: true,
+        frameDelayMs: 16.67,
+      });
+    }
+
+    // Should NOT see PEN_TRAVEL_BATCH (distance < threshold → skip travel)
+    const travelBatchActions = dispatchedActions.filter((a) => a.type === 'PEN_TRAVEL_BATCH');
+    expect(travelBatchActions.length).toBe(0);
+  });
+});
+
+// ============================================================================
+// Inter-Stroke Pause Tests
+// ============================================================================
+
+describe('usePerformer - Inter-Stroke Pause', () => {
+  it('pauses between strokes (STROKE_COMPLETE before next stroke progress)', () => {
+    const strokes = [
+      makeStroke([{ x: 0, y: 0 }, { x: 10, y: 10 }]),
+      makeStroke([{ x: 10, y: 10 }, { x: 20, y: 20 }]),
+    ];
+
+    const dispatchedActions: CanvasAction[] = [];
+    let state = makeStateWithStrokesOnStage(strokes);
+
+    const dispatch = jest.fn((action: CanvasAction) => {
+      dispatchedActions.push(action);
+      state = canvasReducer(state, action);
+    });
+
+    const { rerender } = renderHook(
+      (props: UsePerformerOptions) => usePerformer(props),
+      {
+        initialProps: {
+          performance: state.performance,
+          dispatch,
+          paused: false,
+          inStudio: true,
+          frameDelayMs: 16.67,
+        },
+      }
+    );
+
+    // Animate through
+    for (let i = 0; i < 30; i++) {
+      act(() => advanceFrame(20));
+      rerender({
+        performance: state.performance,
+        dispatch,
+        paused: false,
+        inStudio: true,
+        frameDelayMs: 16.67,
+      });
+    }
+
+    // Find the first STROKE_COMPLETE and the next STROKE_PROGRESS_BATCH
+    const firstCompleteIdx = dispatchedActions.findIndex((a) => a.type === 'STROKE_COMPLETE');
+    expect(firstCompleteIdx).toBeGreaterThanOrEqual(0);
+
+    // After STROKE_COMPLETE, the next batch should eventually appear
+    const actionsAfterComplete = dispatchedActions.slice(firstCompleteIdx + 1);
+    const nextBatch = actionsAfterComplete.find((a) => a.type === 'STROKE_PROGRESS_BATCH');
+    expect(nextBatch).toBeDefined();
   });
 });

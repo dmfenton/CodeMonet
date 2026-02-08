@@ -14,6 +14,8 @@ import {
   getEffectiveStyle,
   pathToSvgD,
   pointsToSvgD,
+  useSettlingStrokes,
+  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -79,6 +81,8 @@ export function SvgRenderer({
   showIdleAnimation,
   primaryColor,
 }: RendererProps): React.ReactElement {
+  const settlingIndices = useSettlingStrokes(strokes.length);
+
   return (
     <>
       {/* Idle animation - floating particles when canvas is empty and agent is idle */}
@@ -86,12 +90,13 @@ export function SvgRenderer({
 
       {/* Completed strokes - using MemoizedStroke to prevent recalculation */}
       {strokes.map((stroke, index) => (
-        <MemoizedStroke
-          key={index}
-          stroke={stroke}
-          styleConfig={styleConfig}
-          index={index}
-        />
+        <g key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
+          <MemoizedStroke
+            stroke={stroke}
+            styleConfig={styleConfig}
+            index={index}
+          />
+        </g>
       ))}
 
       {/* Current stroke in progress (human drawing) */}
@@ -164,9 +169,9 @@ export function SvgRenderer({
               opacity={effectiveOpacity * 0.9}
             />
           ) : (
-            // Plotter mode: simple polyline
+            // Plotter mode: smooth bezier polyline for organic feel
             <path
-              d={pointsToSvgD(agentStroke)}
+              d={pointsToSvgD(agentStroke, true)}
               stroke={effectiveColor}
               strokeWidth={effectiveWidth}
               fill="none"

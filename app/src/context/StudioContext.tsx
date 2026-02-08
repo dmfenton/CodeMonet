@@ -19,9 +19,9 @@ import type {
 } from '@code-monet/shared';
 import {
   deriveAgentStatus,
+  fetchStrokesWithRetry,
   getStyleConfig,
   usePerformer,
-  usePendingStrokes,
 } from '@code-monet/shared';
 
 import { createApiClient, type ApiClient } from '../api';
@@ -118,7 +118,14 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   // Modal management
   const { activeModal, openModal, closeModal } = useModals();
 
-  // Wrap handleMessage to trace agent_strokes_ready arrivals
+  // Refs for inline fetch validation (avoids stale closures)
+  const viewingPieceRef = useRef(canvas.state.viewingPiece);
+  viewingPieceRef.current = canvas.state.viewingPiece;
+  const pieceNumberRef = useRef(canvas.state.pieceNumber);
+  pieceNumberRef.current = canvas.state.pieceNumber;
+  const fetchAbortRef = useRef<AbortController | null>(null);
+
+  // Wrap handleMessage to intercept agent_strokes_ready inline
   const tracedHandleMessage = useCallback(
     (message: ServerMessage) => {
       if (message.type === 'agent_strokes_ready') {
@@ -127,11 +134,55 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
           pieceNumber: message.piece_number,
           count: message.count,
         });
+
+        // Gallery guard: skip if viewing a gallery piece
+        if (viewingPieceRef.current !== null) return;
+
+        // Stale piece guard: skip if from an older piece
+        if (message.piece_number < pieceNumberRef.current) return;
+
+        // Piece sync: update if message is for a newer piece
+        if (message.piece_number > pieceNumberRef.current) {
+          dispatch({ type: 'SET_PIECE_NUMBER', number: message.piece_number });
+        }
+
+        // Abort any in-flight fetch, start a new one
+        fetchAbortRef.current?.abort();
+        const controller = new AbortController();
+        fetchAbortRef.current = controller;
+
+        void fetchStrokesWithRetry({
+          fetchFn: async () => {
+            tracer.recordEvent('strokes.fetch_start', { batchId: message.batch_id });
+            const response = await api.fetch('/strokes/pending');
+            if (!response.ok) throw new Error('Failed to fetch strokes');
+            const data = (await response.json()) as { strokes: PendingStroke[] };
+            return data.strokes;
+          },
+          onSuccess: (strokes) => {
+            tracer.recordEvent('strokes.fetch_complete', { strokeCount: strokes.length });
+            tracer.recordEvent('strokes.enqueued', { strokeCount: strokes.length });
+            dispatch({ type: 'ENQUEUE_STROKES', strokes });
+          },
+          onError: (error) => {
+            tracer.recordEvent('strokes.fetch_error', {
+              error: error instanceof Error ? error.message : String(error),
+            });
+            console.error('[StudioContext] Failed to fetch strokes:', error);
+          },
+          signal: controller.signal,
+        });
+
+        // Don't pass agent_strokes_ready to the reducer (no longer handled there)
+        return;
       }
       handleMessage(message);
     },
-    [handleMessage]
+    [handleMessage, api, dispatch]
   );
+
+  // Cleanup fetch on unmount
+  useEffect(() => () => fetchAbortRef.current?.abort(), []);
 
   // Handle auth errors from WebSocket
   const { handleAuthError } = useTokenRefresh({
@@ -141,7 +192,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   });
 
   // WebSocket connection
-  const { state: wsState, send, connectionCount } = useWebSocket({
+  const { state: wsState, send } = useWebSocket({
     url: getWebSocketUrl(),
     token: accessToken,
     onMessage: tracedHandleMessage,
@@ -211,42 +262,6 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
 
     return () => handler.remove();
   }, [screen, closeGallery, exitStudio, canvas, send]);
-
-  // Pending strokes fetching
-  const pendingStrokes = canvas.state.pendingStrokes;
-  const pendingBatchIdRef = useRef(0);
-  pendingBatchIdRef.current = pendingStrokes?.batchId ?? 0;
-
-  const fetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
-    const response = await api.fetch('/strokes/pending');
-    if (!response.ok) throw new Error('Failed to fetch strokes');
-    const data = (await response.json()) as { strokes: PendingStroke[] };
-    return data.strokes;
-  }, [api]);
-
-  const tracedFetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
-    tracer.recordEvent('strokes.fetch_start', { batchId: pendingBatchIdRef.current });
-    const strokes = await fetchPendingStrokes();
-    tracer.recordEvent('strokes.fetch_complete', { strokeCount: strokes.length });
-    return strokes;
-  }, [fetchPendingStrokes]);
-
-  usePendingStrokes({
-    pendingStrokes: accessToken ? pendingStrokes : null,
-    fetchPendingStrokes: tracedFetchPendingStrokes,
-    enqueueStrokes: (strokes) => {
-      tracer.recordEvent('strokes.enqueued', { strokeCount: strokes.length });
-      dispatch({ type: 'ENQUEUE_STROKES', strokes });
-    },
-    clearPending: () => dispatch({ type: 'CLEAR_PENDING_STROKES' }),
-    onError: (error) => {
-      tracer.recordEvent('strokes.fetch_error', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      console.error('[StudioContext] Failed to fetch strokes:', error);
-    },
-    connectionId: connectionCount,
-  });
 
   // Callback when stroke animation completes
   const handleStrokesComplete = useCallback(

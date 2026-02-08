@@ -8,7 +8,6 @@ import contextlib
 import math
 import re
 from collections.abc import Callable
-from functools import reduce
 
 from code_monet.types import Path, PathType, Point
 
@@ -354,26 +353,62 @@ def interpolate_line(points: list[Point], num_steps: int) -> list[Point]:
     return [lerp_point(points[0], points[1], i / num_steps) for i in range(num_steps + 1)]
 
 
-def interpolate_polyline(points: list[Point], steps_per_unit: float) -> list[Point]:
-    """Interpolate a polyline into discrete points using functional reduce."""
+def interpolate_polyline_adaptive(
+    points: list[Point], base_steps_per_unit: float = 0.2
+) -> list[Point]:
+    """Interpolate a polyline with curvature-adaptive point density.
+
+    Higher curvature segments get more points (slower animation),
+    straight segments get fewer points (faster animation).
+
+    Args:
+        points: Polyline vertices.
+        base_steps_per_unit: Base density. Adapted per-segment based on curvature.
+    """
     if len(points) < 2:
         return list(points)
 
-    def interpolate_segment(
-        acc: list[Point], segment: tuple[int, tuple[Point, Point]]
-    ) -> list[Point]:
-        seg_idx, (p1, p2) = segment
+    min_spu = 0.05
+    max_spu = 0.5
+
+    result: list[Point] = [points[0]]
+
+    for seg_idx in range(len(points) - 1):
+        p1 = points[seg_idx]
+        p2 = points[seg_idx + 1]
         seg_length = distance(p1, p2)
-        seg_steps = max(1, int(seg_length * steps_per_unit))
 
-        new_points = [
-            lerp_point(p1, p2, i / seg_steps)
-            for i in range(0 if seg_idx == 0 else 1, seg_steps + 1)
-        ]
-        return acc + new_points
+        # Calculate angle change from previous segment for curvature estimate
+        if seg_idx > 0:
+            p0 = points[seg_idx - 1]
+            # Vectors for previous and current segments
+            dx_prev = p1.x - p0.x
+            dy_prev = p1.y - p0.y
+            dx_curr = p2.x - p1.x
+            dy_curr = p2.y - p1.y
+            len_prev = math.sqrt(dx_prev * dx_prev + dy_prev * dy_prev)
+            len_curr = math.sqrt(dx_curr * dx_curr + dy_curr * dy_curr)
 
-    segments = list(enumerate(zip(points[:-1], points[1:], strict=True)))
-    return reduce(interpolate_segment, segments, [])
+            if len_prev > 0.01 and len_curr > 0.01:
+                # Dot product for angle
+                dot = (dx_prev * dx_curr + dy_prev * dy_curr) / (len_prev * len_curr)
+                dot = max(-1.0, min(1.0, dot))
+                angle = math.acos(dot)  # 0 = straight, pi = U-turn
+                # Scale: more curvature → higher density
+                curvature_factor = 1.0 + (angle / math.pi) * 2.0
+            else:
+                curvature_factor = 1.0
+        else:
+            curvature_factor = 1.0
+
+        local_spu = max(min_spu, min(max_spu, base_steps_per_unit * curvature_factor))
+        seg_steps = max(1, int(seg_length * local_spu))
+
+        for j in range(1, seg_steps + 1):
+            t = j / seg_steps
+            result.append(lerp_point(p1, p2, t))
+
+    return result
 
 
 def interpolate_quadratic(points: list[Point], num_steps: int) -> list[Point]:
@@ -428,7 +463,7 @@ def interpolate_path(
             result = interpolate_line(points, num_steps)
 
         case PathType.POLYLINE:
-            result = interpolate_polyline(points, steps_per_unit)
+            result = interpolate_polyline_adaptive(points, steps_per_unit)
 
         case PathType.QUADRATIC:
             result = interpolate_quadratic(points, num_steps)

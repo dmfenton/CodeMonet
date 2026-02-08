@@ -7,6 +7,7 @@ import {
   deriveAgentStatus,
   hasInProgressEvents,
   initialState,
+  initialPerformanceState,
   shouldShowIdleAnimation,
   type CanvasHookState,
 } from '@code-monet/shared';
@@ -181,41 +182,15 @@ describe('deriveAgentStatus', () => {
     expect(deriveAgentStatus(state)).toBe('executing');
   });
 
-  it('returns drawing when pendingStrokes set and no in-progress events', () => {
+  it('returns drawing when strokes in performance buffer', () => {
     const state: CanvasHookState = {
       ...baseState,
-      pendingStrokes: { count: 5, batchId: 1, pieceNumber: 0 },
-      messages: [
-        {
-          id: 'exec_1',
-          type: 'code_execution',
-          text: 'Done',
-          timestamp: Date.now(),
-          status: 'completed',
-          metadata: { tool_name: 'draw_paths', return_code: 0 },
-        },
-      ],
+      performance: {
+        ...baseState.performance,
+        buffer: [{ type: 'strokes', strokes: [], id: 'perf_1' }],
+      },
     };
     expect(deriveAgentStatus(state)).toBe('drawing');
-  });
-
-  it('returns executing (not drawing) when pendingStrokes set but code_execution in-progress', () => {
-    const state: CanvasHookState = {
-      ...baseState,
-      pendingStrokes: { count: 5, batchId: 1, pieceNumber: 0 },
-      messages: [
-        {
-          id: 'exec_1',
-          type: 'code_execution',
-          text: 'Running',
-          timestamp: Date.now(),
-          status: 'started',
-          metadata: { tool_name: 'draw_paths' },
-        },
-      ],
-    };
-    // This is the key test: drawing waits for in-progress events
-    expect(deriveAgentStatus(state)).toBe('executing');
   });
 
   it('returns idle when no active state', () => {
@@ -226,8 +201,11 @@ describe('deriveAgentStatus', () => {
     const state: CanvasHookState = {
       ...baseState,
       paused: true,
-      pendingStrokes: { count: 5, batchId: 1, pieceNumber: 0 },
       thinking: 'I am thinking...',
+      performance: {
+        ...baseState.performance,
+        buffer: [{ type: 'strokes', strokes: [], id: 'perf_1' }],
+      },
     };
     expect(deriveAgentStatus(state)).toBe('paused');
   });
@@ -280,73 +258,113 @@ describe('shouldShowIdleAnimation', () => {
   });
 });
 
-describe('canvasReducer - LOAD_CANVAS', () => {
-  it('clears pendingStrokes when loading a canvas', () => {
+describe('initialPerformanceState', () => {
+  it('includes travelTarget as null', () => {
+    expect(initialPerformanceState.travelTarget).toBeNull();
+  });
+});
+
+describe('PEN_TRAVEL_BATCH', () => {
+  it('updates penPosition and sets penDown to false', () => {
     const state: CanvasHookState = {
       ...initialState,
-      pendingStrokes: { count: 2, batchId: 4, pieceNumber: 1 },
+      performance: {
+        ...initialState.performance,
+        penPosition: { x: 0, y: 0 },
+        penDown: true,
+      },
     };
 
     const result = canvasReducer(state, {
-      type: 'LOAD_CANVAS',
-      strokes: [{ type: 'polyline', points: [{ x: 0, y: 0 }] }],
-      pieceNumber: 3,
+      type: 'PEN_TRAVEL_BATCH',
+      points: [{ x: 50, y: 50 }, { x: 100, y: 100 }],
     });
 
-    expect(result.pendingStrokes).toBeNull();
+    expect(result.performance.penPosition).toEqual({ x: 100, y: 100 });
+    expect(result.performance.penDown).toBe(false);
+  });
+
+  it('returns unchanged state for empty points', () => {
+    const state: CanvasHookState = {
+      ...initialState,
+      performance: {
+        ...initialState.performance,
+        penPosition: { x: 10, y: 10 },
+      },
+    };
+
+    const result = canvasReducer(state, { type: 'PEN_TRAVEL_BATCH', points: [] });
+    expect(result).toBe(state);
   });
 });
 
-describe('canvasReducer - STROKES_READY', () => {
-  it('accepts strokes when pieceNumber matches', () => {
-    const state: CanvasHookState = { ...initialState, pieceNumber: 5 };
-    const result = canvasReducer(state, {
-      type: 'STROKES_READY',
-      count: 3,
-      batchId: 1,
-      pieceNumber: 5,
-    });
-    expect(result.pendingStrokes).toEqual({ count: 3, batchId: 1, pieceNumber: 5 });
-    expect(result.pieceNumber).toBe(5);
-  });
+describe('PEN_TRAVEL_COMPLETE', () => {
+  it('clears travelTarget', () => {
+    const state: CanvasHookState = {
+      ...initialState,
+      performance: {
+        ...initialState.performance,
+        travelTarget: { x: 100, y: 100 },
+      },
+    };
 
-  it('rejects strokes for OLD pieces (stale message)', () => {
-    const state: CanvasHookState = { ...initialState, pieceNumber: 5 };
-
-    const result = canvasReducer(state, {
-      type: 'STROKES_READY',
-      count: 3,
-      batchId: 1,
-      pieceNumber: 3,
-    });
-    expect(result.pendingStrokes).toBeNull();
-    expect(result.pieceNumber).toBe(5); // unchanged
-  });
-
-  it('accepts strokes for newer pieces and syncs pieceNumber (race condition handling)', () => {
-    // This handles the race condition where agent_strokes_ready arrives before piece_state
-    const state: CanvasHookState = { ...initialState, pieceNumber: 5 };
-
-    const result = canvasReducer(state, {
-      type: 'STROKES_READY',
-      count: 3,
-      batchId: 1,
-      pieceNumber: 7,
-    });
-    // Should accept strokes and sync pieceNumber forward
-    expect(result.pendingStrokes).toEqual({ count: 3, batchId: 1, pieceNumber: 7 });
-    expect(result.pieceNumber).toBe(7);
-  });
-
-  it('rejects strokes when viewing gallery', () => {
-    const state: CanvasHookState = { ...initialState, pieceNumber: 5, viewingPiece: 3 };
-
-    const result = canvasReducer(state, {
-      type: 'STROKES_READY',
-      count: 3,
-      batchId: 1,
-      pieceNumber: 5,
-    });
-    expect(result.pendingStrokes).toBeNull();
+    const result = canvasReducer(state, { type: 'PEN_TRAVEL_COMPLETE' });
+    expect(result.performance.travelTarget).toBeNull();
   });
 });
+
+describe('STROKE_COMPLETE with travelTarget', () => {
+  it('sets travelTarget to next stroke first point', () => {
+    const state: CanvasHookState = {
+      ...initialState,
+      performance: {
+        ...initialState.performance,
+        onStage: {
+          type: 'strokes',
+          strokes: [
+            {
+              batch_id: 0,
+              path: { type: 'polyline', points: [{ x: 0, y: 0 }, { x: 10, y: 10 }] },
+              points: [{ x: 0, y: 0 }, { x: 10, y: 10 }],
+            },
+            {
+              batch_id: 0,
+              path: { type: 'polyline', points: [{ x: 50, y: 50 }, { x: 60, y: 60 }] },
+              points: [{ x: 50, y: 50 }, { x: 60, y: 60 }],
+            },
+          ],
+          id: 'test-1',
+        },
+        strokeIndex: 0,
+      },
+    };
+
+    const result = canvasReducer(state, { type: 'STROKE_COMPLETE' });
+    expect(result.performance.travelTarget).toEqual({ x: 50, y: 50 });
+  });
+
+  it('sets travelTarget to null when no next stroke', () => {
+    const state: CanvasHookState = {
+      ...initialState,
+      performance: {
+        ...initialState.performance,
+        onStage: {
+          type: 'strokes',
+          strokes: [
+            {
+              batch_id: 0,
+              path: { type: 'polyline', points: [{ x: 0, y: 0 }] },
+              points: [{ x: 0, y: 0 }],
+            },
+          ],
+          id: 'test-1',
+        },
+        strokeIndex: 0,
+      },
+    };
+
+    const result = canvasReducer(state, { type: 'STROKE_COMPLETE' });
+    expect(result.performance.travelTarget).toBeNull();
+  });
+});
+

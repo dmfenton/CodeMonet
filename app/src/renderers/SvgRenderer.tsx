@@ -7,7 +7,7 @@
  */
 
 import React, { memo, useMemo } from 'react';
-import Svg, { Circle, Path as SvgPath } from 'react-native-svg';
+import Svg, { Circle, G, Path as SvgPath } from 'react-native-svg';
 
 import type { Path, DrawingStyleConfig, RendererProps } from '@code-monet/shared';
 import {
@@ -18,6 +18,8 @@ import {
   getEffectiveStyle,
   pathToSvgD,
   pointsToSvgD,
+  useSettlingStrokes,
+  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -83,6 +85,8 @@ export function SvgRenderer({
   showIdleAnimation,
   primaryColor,
 }: RendererProps): React.JSX.Element {
+  const settlingIndices = useSettlingStrokes(strokes.length);
+
   return (
     <Svg
       width="100%"
@@ -95,12 +99,13 @@ export function SvgRenderer({
 
       {/* Completed strokes - using MemoizedStroke to prevent recalculation */}
       {strokes.map((stroke, index) => (
-        <MemoizedStroke
-          key={index}
-          stroke={stroke}
-          styleConfig={styleConfig}
-          index={index}
-        />
+        <G key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
+          <MemoizedStroke
+            stroke={stroke}
+            styleConfig={styleConfig}
+            index={index}
+          />
+        </G>
       ))}
 
       {/* Current stroke in progress (human drawing) */}
@@ -161,9 +166,9 @@ export function SvgRenderer({
               opacity={style.opacity * 0.9}
             />
           ) : (
-            // Plotter mode: simple polyline
+            // Plotter mode: smooth bezier polyline for organic feel
             <SvgPath
-              d={pointsToSvgD(agentStroke)}
+              d={pointsToSvgD(agentStroke, true)}
               stroke={style.color}
               strokeWidth={style.stroke_width}
               fill="none"

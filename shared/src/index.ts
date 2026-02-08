@@ -44,6 +44,13 @@ export {
 // SVG path utilities
 export { pathToSvgD, pointsToSvgD, pathToSvgDScaled } from './utils/svgPath';
 
+// Velocity pressure utilities
+export { applyVelocityPressure } from './utils/velocityPressure';
+
+// Stroke fetching utilities
+export { fetchStrokesWithRetry } from './utils/fetchStrokes';
+export type { FetchStrokesOptions } from './utils/fetchStrokes';
+
 // Log forwarding utilities
 export {
   initLogForwarder,

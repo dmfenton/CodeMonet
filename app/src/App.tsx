@@ -82,7 +82,7 @@ function MainApp(): React.JSX.Element {
             paused: canvasState.paused,
             status: agentStatus,
             strokes: canvasState.strokes.length,
-            pending: canvasState.pendingStrokes?.batchId ?? null,
+            pending: canvasState.performance.buffer.filter(i => i.type === 'strokes').length,
             thinking: canvasState.thinking.length,
             ws: wsConnected,
             gallery: canvasState.gallery.length,

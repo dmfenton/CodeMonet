@@ -24,6 +24,8 @@ import {
   brushPresetToFreehandOptions,
   pathToSvgD,
   samplePathPoints,
+  useSettlingStrokes,
+  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -222,6 +224,7 @@ function PenIndicator({
  * - Natural pressure-sensitive stroke outlines
  * - Bristle texture simulation
  * - SVG blur filter for soft edges
+ * - Stroke settling effect (new strokes fade in)
  */
 export function FreehandSvgRenderer({
   strokes,
@@ -240,6 +243,7 @@ export function FreehandSvgRenderer({
   void _width;
   void _height;
   const isPaintMode = styleConfig.type === 'paint';
+  const settlingIndices = useSettlingStrokes(strokes.length);
 
   return (
     <Svg
@@ -261,12 +265,13 @@ export function FreehandSvgRenderer({
 
       {/* Completed strokes - using MemoizedStroke to prevent re-computation */}
       {strokes.map((stroke, index) => (
-        <MemoizedStroke
-          key={index}
-          stroke={stroke}
-          styleConfig={styleConfig}
-          isPaintMode={isPaintMode}
-        />
+        <G key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
+          <MemoizedStroke
+            stroke={stroke}
+            styleConfig={styleConfig}
+            isPaintMode={isPaintMode}
+          />
+        </G>
       ))}
 
       {/* Current human stroke */}

@@ -27,10 +27,6 @@ function loggingReducer(state: CanvasHookState, action: CanvasAction): CanvasHoo
     debugThinking(`APPEND_THINKING: thinking len=${newState.thinking.length}`);
   } else if (action.type === 'ARCHIVE_THINKING') {
     debugThinking(`ARCHIVE_THINKING: total msgs=${newState.messages.length}`);
-  } else if (action.type === 'STROKES_READY') {
-    debugReducer(
-      `STROKES_READY: count=${action.count} batch=${action.batchId} piece=${action.pieceNumber}`
-    );
   } else if (action.type === 'ADD_STROKE') {
     debugReducer(`ADD_STROKE: total strokes=${newState.strokes.length}`);
   } else if (action.type === 'STROKE_PROGRESS') {

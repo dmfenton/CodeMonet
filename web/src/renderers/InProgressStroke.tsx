@@ -19,6 +19,7 @@ import {
   getBrushPreset,
   brushPresetToFreehandOptions,
   getBristleOutlines,
+  applyVelocityPressure,
   type FreehandStrokeOptions,
 } from '@code-monet/shared';
 
@@ -145,7 +146,10 @@ export const InProgressStroke = memo(function InProgressStroke({
       return { tailPath: '', tailBristles: [] };
     }
 
-    const tailOutline = getFreehandOutline(tailPoints, options);
+    // Derive pressure from velocity (inter-point spacing)
+    const velocityOptions = applyVelocityPressure(tailPoints, options, strokeWidth);
+
+    const tailOutline = getFreehandOutline(tailPoints, velocityOptions);
     const tailPath = outlineToSvgPath(tailOutline);
 
     let tailBristles: string[] = [];
@@ -156,7 +160,7 @@ export const InProgressStroke = memo(function InProgressStroke({
         tailPoints,
         tailBristleCount,
         brushPreset.bristleSpread * strokeWidth,
-        options
+        velocityOptions
       );
       tailBristles = bristleOutlines.map((o) => outlineToSvgPath(o)).filter((d) => d.length > 0);
     }
