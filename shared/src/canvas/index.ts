@@ -17,7 +17,6 @@ export {
 export type {
   CanvasAction,
   CanvasHookState,
-  PendingStrokesInfo,
   PerformanceAction,
   PerformanceItem,
   PerformanceState,

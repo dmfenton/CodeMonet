@@ -237,74 +237,16 @@ describe('human_stroke message flow', () => {
 // =============================================================================
 
 describe('agent_strokes_ready message flow', () => {
-  it('sets pendingStrokes when agent_strokes_ready received', () => {
+  it('agent_strokes_ready is not handled by routeMessage (handled inline in WS handler)', () => {
+    // agent_strokes_ready is now intercepted by the WS handler before reaching routeMessage
+    // Verify that routeMessage is a no-op for this message type
     const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
     const message = makeStrokesReady(5, 1, 0);
 
     const { finalState } = processMessageSequence([message], startState);
 
-    expect(finalState.pendingStrokes).toEqual({
-      count: 5,
-      batchId: 1,
-      pieceNumber: 0,
-    });
-  });
-
-  it('ignores agent_strokes_ready for old pieces (stale message)', () => {
-    const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 5 };
-    const message = makeStrokesReady(10, 1, 3); // piece 3 < current 5
-
-    const { finalState } = processMessageSequence([message], startState);
-
-    expect(finalState.pendingStrokes).toBeNull();
-    expect(finalState.pieceNumber).toBe(5); // unchanged
-  });
-
-  it('accepts agent_strokes_ready for current piece', () => {
-    const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 5 };
-    const message = makeStrokesReady(10, 1, 5);
-
-    const { finalState } = processMessageSequence([message], startState);
-
-    expect(finalState.pendingStrokes).not.toBeNull();
-    expect(finalState.pendingStrokes?.count).toBe(10);
-  });
-
-  it('accepts agent_strokes_ready for newer piece and syncs pieceNumber', () => {
-    // Race condition: agent_strokes_ready arrives before piece_state
-    const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 5 };
-    const message = makeStrokesReady(10, 1, 7); // piece 7 > current 5
-
-    const { finalState } = processMessageSequence([message], startState);
-
-    expect(finalState.pendingStrokes?.pieceNumber).toBe(7);
-    expect(finalState.pieceNumber).toBe(7); // synced forward
-  });
-
-  it('ignores agent_strokes_ready when viewing gallery', () => {
-    const startState: CanvasHookState = {
-      ...initialState,
-      paused: false,
-      pieceNumber: 5,
-      viewingPiece: 3, // viewing gallery
-    };
-    const message = makeStrokesReady(10, 1, 5);
-
-    const { finalState } = processMessageSequence([message], startState);
-
-    expect(finalState.pendingStrokes).toBeNull();
-  });
-
-  it('CLEAR_PENDING_STROKES clears pendingStrokes', () => {
-    let state: CanvasHookState = {
-      ...initialState,
-      paused: false,
-      pendingStrokes: { count: 5, batchId: 1, pieceNumber: 0 },
-    };
-
-    state = canvasReducer(state, { type: 'CLEAR_PENDING_STROKES' });
-
-    expect(state.pendingStrokes).toBeNull();
+    // State should be unchanged since routeMessage no longer handles agent_strokes_ready
+    expect(finalState).toEqual(startState);
   });
 });
 
@@ -325,50 +267,19 @@ describe('status transitions during drawing', () => {
     expect(deriveAgentStatus(finalState)).toBe('executing');
   });
 
-  it('transitions to drawing when agent_strokes_ready after code_execution completes', () => {
+  it('transitions to idle after code_execution completes (strokes now fetched inline)', () => {
     const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
     const messages: ServerMessage[] = [
       makeIteration(1, 5),
       makeCodeExecutionStarted('draw_paths', 1),
       makeCodeExecutionCompleted('draw_paths', 1),
-      makeStrokesReady(5, 1, 0),
     ];
 
-    const { finalState, statusHistory } = processMessageSequence(messages, startState);
+    const { statusHistory } = processMessageSequence(messages, startState);
 
-    // Should have transitioned through: idle -> executing -> idle -> drawing
+    // Should have transitioned through: idle -> executing -> idle
     expect(statusHistory).toContain('executing');
-    expect(deriveAgentStatus(finalState)).toBe('drawing');
-  });
-
-  it('stays in executing (not drawing) when pendingStrokes set but code_execution in-progress', () => {
-    const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
-    const messages: ServerMessage[] = [
-      makeCodeExecutionStarted('draw_paths', 1),
-      makeStrokesReady(5, 1, 0), // agent_strokes_ready arrives before completed
-    ];
-
-    const { finalState } = processMessageSequence(messages, startState);
-
-    // Should be executing, not drawing - in-progress events block drawing
-    expect(finalState.pendingStrokes).not.toBeNull();
-    expect(deriveAgentStatus(finalState)).toBe('executing');
-  });
-
-  it('transitions to drawing only after all code_execution events complete', () => {
-    const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
-    const messages: ServerMessage[] = [
-      makeCodeExecutionStarted('draw_paths', 1),
-      makeStrokesReady(5, 1, 0),
-      makeCodeExecutionCompleted('draw_paths', 1), // now all complete
-    ];
-
-    const { finalState, statusHistory } = processMessageSequence(messages, startState);
-
-    // Final status should be drawing
-    expect(deriveAgentStatus(finalState)).toBe('drawing');
-    // Middle status should have been executing
-    expect(statusHistory[1]).toBe('executing');
+    expect(statusHistory[statusHistory.length - 1]).toBe('idle');
   });
 
   it('shows thinking when thinking text exists', () => {
@@ -388,7 +299,6 @@ describe('status transitions during drawing', () => {
       makeThinkingDelta('Drawing some lines...', 1),
       makeCodeExecutionStarted('draw_paths', 1),
       makeCodeExecutionCompleted('draw_paths', 1),
-      makeStrokesReady(3, 1, 0),
     ];
 
     const { statusHistory, finalState } = processMessageSequence(messages, startState);
@@ -400,23 +310,18 @@ describe('status transitions during drawing', () => {
 
     // Thinking text should persist
     expect(finalState.thinking).toBe('Drawing some lines...');
-
-    // Pending strokes should be set
-    expect(finalState.pendingStrokes).not.toBeNull();
   });
 
   it('paused status overrides everything', () => {
     const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
     const messages: ServerMessage[] = [
       makeCodeExecutionStarted('draw_paths', 1),
-      makeStrokesReady(5, 1, 0),
       makePaused(true),
     ];
 
     const { finalState } = processMessageSequence(messages, startState);
 
-    // Even with pendingStrokes and in-progress events, paused wins
-    expect(finalState.pendingStrokes).not.toBeNull();
+    // Even with in-progress events, paused wins
     expect(deriveAgentStatus(finalState)).toBe('paused');
   });
 });
@@ -482,7 +387,7 @@ describe('realistic agent turn sequence', () => {
   it('processes a complete draw_paths turn correctly', () => {
     const startState: CanvasHookState = { ...initialState, paused: false, pieceNumber: 0 };
 
-    // Simulate a realistic agent turn
+    // Simulate a realistic agent turn (agent_strokes_ready no longer routed through reducer)
     const messages: ServerMessage[] = [
       // Agent starts thinking
       makeIteration(1, 5),
@@ -491,9 +396,6 @@ describe('realistic agent turn sequence', () => {
 
       // Tool execution starts
       makeCodeExecutionStarted('draw_paths', 1),
-
-      // Strokes ready signal
-      makeStrokesReady(2, 1, 0),
 
       // Tool completes
       makeCodeExecutionCompleted('draw_paths', 1),
@@ -510,13 +412,6 @@ describe('realistic agent turn sequence', () => {
     // This allows progressive text animation to complete
     expect(statusHistory[statusHistory.length - 1]).toBe('thinking');
 
-    // Should have pending strokes
-    expect(finalState.pendingStrokes).toEqual({
-      count: 2,
-      batchId: 1,
-      pieceNumber: 0,
-    });
-
     // Should have accumulated thinking text (still present for progressive reveal)
     expect(finalState.thinking).toContain("I'll draw a simple line.");
   });
@@ -529,14 +424,12 @@ describe('realistic agent turn sequence', () => {
       makeIteration(1, 3),
       makeThinkingDelta('First stroke', 1),
       makeCodeExecutionStarted('draw_paths', 1),
-      makeStrokesReady(1, 1, 0),
       makeCodeExecutionCompleted('draw_paths', 1),
 
       // Iteration 2 - archives iteration 1's thinking
       makeIteration(2, 3),
       makeThinkingDelta('Second stroke', 2),
       makeCodeExecutionStarted('draw_paths', 2),
-      makeStrokesReady(1, 2, 0),
       makeCodeExecutionCompleted('draw_paths', 2),
     ];
 
@@ -546,9 +439,6 @@ describe('realistic agent turn sequence', () => {
     // (it would be archived on iteration 3 or turn end)
     expect(deriveAgentStatus(finalState)).toBe('thinking');
     expect(finalState.thinking).toBe('Second stroke');
-
-    // Should have latest pending strokes
-    expect(finalState.pendingStrokes?.batchId).toBe(2);
 
     // Should track current iteration
     expect(finalState.currentIteration).toBe(2);
@@ -586,23 +476,24 @@ describe('realistic agent turn sequence', () => {
     expect(finalState.messages).toEqual([]);
   });
 
-  it('transitions to idle when strokes fetched (pendingStrokes cleared)', () => {
+  it('transitions from drawing to idle when strokes animation completes', () => {
+    // Strokes in buffer → drawing status
     let state: CanvasHookState = {
       ...initialState,
       paused: false,
       pieceNumber: 0,
-      pendingStrokes: { count: 5, batchId: 1, pieceNumber: 0 },
+      performance: {
+        ...initialState.performance,
+        buffer: [{ type: 'strokes', strokes: [], id: 'perf_1' }],
+      },
     };
 
-    // Status is drawing while pendingStrokes exists
     expect(deriveAgentStatus(state)).toBe('drawing');
 
-    // After strokes are fetched and rendered, we clear pending
-    state = canvasReducer(state, { type: 'CLEAR_PENDING_STROKES' });
+    // After animation completes, buffer is emptied
+    state = canvasReducer(state, { type: 'CLEAR_PERFORMANCE' });
 
-    // Status should now be idle
     expect(deriveAgentStatus(state)).toBe('idle');
-    expect(state.pendingStrokes).toBeNull();
   });
 });
 

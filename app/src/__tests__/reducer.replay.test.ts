@@ -135,7 +135,7 @@ describe('Reducer Replay - Plotter Style Turn', () => {
 
       // Final status depends on fixture content:
       // - 'thinking' if ends with live message (thinking_delta without finalization)
-      // - 'drawing' if pendingStrokes set but no CLEAR_PENDING_STROKES
+      // - 'drawing' if strokes in performance buffer
       // - 'idle' if all events completed
       // - 'executing' if code_execution started but not completed
       const finalStatus = deriveAgentStatus(finalState);
@@ -265,20 +265,19 @@ describe('Reducer Replay - Plotter Style Turn', () => {
   });
 
   describe('agent strokes ready handling', () => {
-    it('sets pendingStrokes when agent_strokes_ready received', () => {
-      const strokesReadyIndex = typedFixture.messages.findIndex(
+    it('agent_strokes_ready dispatches no actions (handled inline in WS handler)', () => {
+      const strokesReadyMsg = typedFixture.messages.find(
         (m) => m.type === 'agent_strokes_ready'
       );
 
-      if (strokesReadyIndex === -1) {
+      if (!strokesReadyMsg) {
         return;
       }
 
-      const messagesToReplay = typedFixture.messages.slice(0, strokesReadyIndex + 1);
-      const { finalState } = replayMessages(messagesToReplay);
-
-      expect(finalState.pendingStrokes).not.toBeNull();
-      expect(finalState.pendingStrokes?.count).toBeGreaterThan(0);
+      // Verify routeMessage dispatches no actions for agent_strokes_ready
+      const actions: string[] = [];
+      routeMessage(strokesReadyMsg.data, (action) => actions.push(action.type));
+      expect(actions).toEqual([]);
     });
   });
 });

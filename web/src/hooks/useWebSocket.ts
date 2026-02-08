@@ -19,7 +19,6 @@ interface UseWebSocketReturn {
   send: (message: ClientMessage) => void;
   connect: () => void;
   disconnect: () => void;
-  connectionCount: number;
 }
 
 export function useWebSocket({
@@ -28,7 +27,6 @@ export function useWebSocket({
   autoConnect = true,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
-  const [connectionCount, setConnectionCount] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
@@ -53,7 +51,6 @@ export function useWebSocket({
       ws.onopen = (): void => {
         console.log('[WebSocket] Connected');
         setStatus('connected');
-        setConnectionCount((c) => c + 1);
       };
 
       ws.onmessage = (event: MessageEvent): void => {
@@ -138,5 +135,5 @@ export function useWebSocket({
     };
   }, [autoConnect, connect]);
 
-  return { status, send, connect, disconnect, connectionCount };
+  return { status, send, connect, disconnect };
 }

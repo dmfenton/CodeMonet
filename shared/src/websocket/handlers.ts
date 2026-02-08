@@ -7,7 +7,6 @@
 
 import type {
   AgentMessage,
-  AgentStrokesReadyMessage,
   ClearMessage,
   CodeExecutionMessage,
   ErrorMessage,
@@ -218,21 +217,6 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
   });
 };
 
-export const handleAgentStrokesReady: MessageHandler<AgentStrokesReadyMessage> = (
-  message,
-  dispatch
-) => {
-  // Signal that agent strokes are ready to be fetched from the REST API
-  // The hook will watch for this state change and trigger the fetch
-  // piece_number is used to ignore strokes from a previous canvas
-  dispatch({
-    type: 'STROKES_READY',
-    count: message.count,
-    batchId: message.batch_id,
-    pieceNumber: message.piece_number,
-  });
-};
-
 // Handler registry
 const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessage>>> = {
   human_stroke: handleHumanStroke as MessageHandler<ServerMessage>,
@@ -247,7 +231,6 @@ const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessa
   gallery_update: handleGalleryUpdate as MessageHandler<ServerMessage>,
   load_canvas: handleLoadCanvas as MessageHandler<ServerMessage>,
   init: handleInit as MessageHandler<ServerMessage>,
-  agent_strokes_ready: handleAgentStrokesReady as MessageHandler<ServerMessage>,
 };
 
 /**

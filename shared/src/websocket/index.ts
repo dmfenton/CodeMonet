@@ -3,7 +3,6 @@
  */
 
 export {
-  handleAgentStrokesReady,
   handleClear,
   handleCodeExecution,
   handleError,

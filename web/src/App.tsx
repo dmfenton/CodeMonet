@@ -6,11 +6,11 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import type { DrawingStyleType, PendingStroke, ServerMessage } from '@code-monet/shared';
 import {
   deriveAgentStatus,
+  fetchStrokesWithRetry,
   getStyleConfig,
   shouldShowIdleAnimation,
   STATUS_LABELS,
   useCanvas,
-  usePendingStrokes,
   usePerformer,
 } from '@code-monet/shared';
 import { getApiUrl } from './config';
@@ -34,38 +34,68 @@ function App(): React.ReactElement {
   // Derive status from messages
   const agentStatus = deriveAgentStatus(state);
 
+  // Refs for inline fetch validation
+  const viewingPieceRef = useRef(state.viewingPiece);
+  viewingPieceRef.current = state.viewingPiece;
+  const pieceNumberRef = useRef(state.pieceNumber);
+  pieceNumberRef.current = state.pieceNumber;
+  const fetchAbortRef = useRef<AbortController | null>(null);
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
+
   const onMessage = useCallback(
     (message: ServerMessage) => {
+      if (message.type === 'agent_strokes_ready') {
+        // Gallery guard
+        if (viewingPieceRef.current !== null) return;
+
+        // Stale piece guard
+        if (message.piece_number < pieceNumberRef.current) return;
+
+        // Piece sync
+        if (message.piece_number > pieceNumberRef.current) {
+          dispatch({ type: 'SET_PIECE_NUMBER', number: message.piece_number });
+        }
+
+        // Abort any in-flight fetch, start a new one
+        fetchAbortRef.current?.abort();
+        const controller = new AbortController();
+        fetchAbortRef.current = controller;
+
+        void fetchStrokesWithRetry({
+          fetchFn: async () => {
+            const token = accessTokenRef.current;
+            if (!token) throw new Error('Missing access token');
+            const response = await fetch(`${getApiUrl()}/strokes/pending`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) throw new Error('Failed to fetch strokes');
+            const data = (await response.json()) as { strokes: PendingStroke[] };
+            return data.strokes;
+          },
+          onSuccess: (strokes) => {
+            dispatch({ type: 'ENQUEUE_STROKES', strokes });
+          },
+          onError: (error) => {
+            console.error('[App] Failed to fetch strokes:', error);
+          },
+          signal: controller.signal,
+        });
+
+        // Don't pass to reducer (no longer handled there)
+        logMessage(message);
+        return;
+      }
       handleMessage(message);
       logMessage(message);
     },
-    [handleMessage, logMessage]
+    [handleMessage, logMessage, dispatch]
   );
 
-  const { status: wsStatus, send, connectionCount } = useWebSocket({ onMessage, token: accessToken });
+  // Cleanup fetch on unmount
+  useEffect(() => () => fetchAbortRef.current?.abort(), []);
 
-  const fetchPendingStrokes = useCallback(async (): Promise<PendingStroke[]> => {
-    if (!accessToken) {
-      throw new Error('Missing access token');
-    }
-    const response = await fetch(`${getApiUrl()}/strokes/pending`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (!response.ok) throw new Error('Failed to fetch strokes');
-    const data = (await response.json()) as { strokes: PendingStroke[] };
-    return data.strokes;
-  }, [accessToken]);
-
-  usePendingStrokes({
-    pendingStrokes: accessToken ? state.pendingStrokes : null,
-    fetchPendingStrokes,
-    enqueueStrokes: (strokes) => dispatch({ type: 'ENQUEUE_STROKES', strokes }),
-    clearPending: () => dispatch({ type: 'CLEAR_PENDING_STROKES' }),
-    onError: (error) => {
-      console.error('[App] Failed to fetch strokes:', error);
-    },
-    connectionId: connectionCount,
-  });
+  const { status: wsStatus, send } = useWebSocket({ onMessage, token: accessToken });
 
   // Callback when stroke animation completes
   const sendRef = useRef<((msg: { type: 'animation_done'; batch_id: number }) => void) | null>(
