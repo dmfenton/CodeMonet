@@ -8,7 +8,6 @@ import { AppState, BackHandler, Platform } from 'react-native';
 
 import type {
   AgentStatus,
-  AgentStrokesReadyMessage,
   CanvasAction,
   CanvasHookState,
   ClientMessage,
@@ -123,11 +122,10 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   const tracedHandleMessage = useCallback(
     (message: ServerMessage) => {
       if (message.type === 'agent_strokes_ready') {
-        const ready = message as AgentStrokesReadyMessage;
         tracer.recordEvent('strokes.ready', {
-          batchId: ready.batch_id,
-          pieceNumber: ready.piece_number,
-          count: ready.count,
+          batchId: message.batch_id,
+          pieceNumber: message.piece_number,
+          count: message.count,
         });
       }
       handleMessage(message);
