@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.0] - 2026-02-09
+
 ### Changed
 
 - iOS app rendering engine switched from react-native-svg to @shopify/react-native-skia for GPU-accelerated drawing
