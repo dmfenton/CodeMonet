@@ -9,7 +9,6 @@ import { Stack, useNavigationContainerRef } from 'expo-router';
 import { useEffect } from 'react';
 
 import { AuthProvider } from '../src/context/AuthContext';
-import { RendererProvider } from '../src/context/RendererContext';
 import { ThemeProvider } from '../src/theme';
 
 // Check if running in Expo Go (native features limited)
@@ -41,15 +40,13 @@ function RootLayout() {
 
   return (
     <ThemeProvider>
-      <RendererProvider>
-        <AuthProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="auth/verify" />
-            <Stack.Screen name="auth/callback" />
-          </Stack>
-        </AuthProvider>
-      </RendererProvider>
+      <AuthProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="auth/verify" />
+          <Stack.Screen name="auth/callback" />
+        </Stack>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
