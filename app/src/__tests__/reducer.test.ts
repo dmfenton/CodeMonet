@@ -157,12 +157,13 @@ describe('deriveAgentStatus', () => {
     expect(deriveAgentStatus(state)).toBe('error');
   });
 
-  it('returns thinking when thinking text exists', () => {
+  it('returns idle when only thinking text exists (no words on stage/buffer)', () => {
     const state: CanvasHookState = {
       ...baseState,
       thinking: 'I am currently thinking about this...',
     };
-    expect(deriveAgentStatus(state)).toBe('thinking');
+    // state.thinking is for archiving only — status is driven by performance model
+    expect(deriveAgentStatus(state)).toBe('idle');
   });
 
   it('returns executing when code_execution is in-progress', () => {

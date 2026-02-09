@@ -65,6 +65,9 @@ const TOOL_LABELS: Record<string, { started: string; completed: string }> = {
   generate_svg: { started: 'Generating SVG...', completed: 'SVG generated' },
   view_canvas: { started: 'Viewing canvas...', completed: 'Canvas viewed' },
   mark_piece_done: { started: 'Marking piece done...', completed: 'Piece marked done' },
+  imagine: { started: 'Imagining...', completed: 'Imagined' },
+  sign_canvas: { started: 'Signing canvas...', completed: 'Canvas signed' },
+  name_piece: { started: 'Naming piece...', completed: 'Piece named' },
 };
 
 // Get path count from tool input for draw_paths

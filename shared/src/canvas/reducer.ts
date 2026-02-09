@@ -213,7 +213,7 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   const hasEventOnStage = perf.onStage?.type === 'event';
 
   // Thinking = words being revealed or waiting
-  if (hasWordsOnStage || hasWordsInBuffer || state.thinking) return 'thinking';
+  if (hasWordsOnStage || hasWordsInBuffer) return 'thinking';
 
   // Executing = event on stage
   if (hasEventOnStage) return 'executing';

@@ -163,9 +163,18 @@ export function LiveStatus({
     return null;
   }
 
-  const statusLabel = getStatusLabel(status, currentTool);
-  const statusIcon = getStatusIcon(status);
   const isActive = status === 'thinking' || status === 'drawing' || status === 'executing';
+
+  // When an event is on stage, override the header with tool-specific info
+  const displayIcon = eventDisplay
+    ? eventDisplay.icon
+    : getStatusIcon(status);
+  const displayLabel = eventDisplay
+    ? (TOOL_DISPLAY_NAMES[eventDisplay.toolName as ToolName] ?? getStatusLabel(status, currentTool))
+    : getStatusLabel(status, currentTool);
+  const displayColor = eventDisplay
+    ? eventDisplay.borderColor
+    : (isActive ? colors.primary : colors.textMuted);
 
   return (
     <View
@@ -176,13 +185,13 @@ export function LiveStatus({
       <View style={styles.statusRow}>
         <Animated.View style={{ opacity: pulseAnim }}>
           <Ionicons
-            name={statusIcon}
+            name={displayIcon}
             size={16}
-            color={isActive ? colors.primary : colors.textMuted}
+            color={displayColor}
           />
         </Animated.View>
-        <Text style={[styles.statusText, { color: isActive ? colors.primary : colors.textMuted }]}>
-          {statusLabel}
+        <Text style={[styles.statusText, { color: displayColor }]}>
+          {displayLabel}
           {isActive && '...'}
         </Text>
       </View>
