@@ -10,8 +10,8 @@
  * - Plotter mode: simple stroked paths (not filled outlines)
  */
 
-import React, { useMemo, memo } from 'react';
-import { StyleSheet } from 'react-native';
+import React, { useCallback, useMemo, memo, useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import {
   Canvas,
   Path as SkiaPath,
@@ -211,8 +211,8 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
         color={strokeColor}
         style="stroke"
         strokeWidth={style.stroke_width}
-        strokeCap={style.stroke_linecap as 'round' | 'butt' | 'square'}
-        strokeJoin={style.stroke_linejoin as 'round' | 'miter' | 'bevel'}
+        strokeCap={style.stroke_linecap}
+        strokeJoin={style.stroke_linejoin}
         opacity={strokeOpacity}
       />
     );
@@ -278,56 +278,71 @@ export function SkiaRenderer({
   penDown,
   styleConfig,
   showIdleAnimation,
-  width,
-  height,
+  width: _width,
+  height: _height,
   primaryColor,
 }: RendererProps): React.ReactElement {
+  void _width;
+  void _height;
   const isPaintMode = styleConfig.type === 'paint';
 
-  // Scale logical canvas coordinates (CANVAS_WIDTH x CANVAS_HEIGHT) to device pixels.
-  // SVG uses viewBox for this automatically; Skia needs an explicit transform.
+  // Track actual layout size so we can map logical canvas coords to device points.
+  // Skia Canvas renders in layout point space (unlike SVG which has viewBox).
+  const [layoutSize, setLayoutSize] = useState({ width: 0, height: 0 });
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setLayoutSize((prev) =>
+      prev.width === width && prev.height === height ? prev : { width, height }
+    );
+  }, []);
+
   const src = useMemo(() => rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT), []);
-  const dst = useMemo(() => rect(0, 0, width, height), [width, height]);
+  const dst = useMemo(
+    () => rect(0, 0, layoutSize.width || CANVAS_WIDTH, layoutSize.height || CANVAS_HEIGHT),
+    [layoutSize.width, layoutSize.height]
+  );
   const transform = useMemo(() => fitbox('contain', src, dst), [src, dst]);
 
   return (
-    <Canvas style={styles.canvas}>
-      <Group transform={transform}>
-        {/* Idle animation particles */}
-        <SkiaIdleParticles visible={showIdleAnimation} />
+    <View style={styles.canvas} onLayout={handleLayout}>
+      <Canvas style={styles.canvas}>
+        <Group transform={transform}>
+          {/* Idle animation particles */}
+          <SkiaIdleParticles visible={showIdleAnimation} />
 
-        {/* Completed strokes - memoized layer skips re-render during animation */}
-        <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
+          {/* Completed strokes - memoized layer skips re-render during animation */}
+          <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
 
-        {/* Current human stroke */}
-        {currentStroke.length > 0 &&
-          (currentStroke.length === 1 ? (
-            <StrokeDot point={currentStroke[0]!} style={styleConfig.human_stroke} />
-          ) : (
-            <PainterlyStroke
-              points={currentStroke}
-              style={styleConfig.human_stroke}
-              blur={isPaintMode ? 1 : 0}
-            />
-          ))}
-
-        {/* Agent in-progress stroke - using optimized incremental renderer */}
-        {agentStroke.length > 0 &&
-          (() => {
-            const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
-            return agentStroke.length === 1 ? (
-              <StrokeDot point={agentStroke[0]!} style={style} />
+          {/* Current human stroke */}
+          {currentStroke.length > 0 &&
+            (currentStroke.length === 1 ? (
+              <StrokeDot point={currentStroke[0]!} style={styleConfig.human_stroke} />
             ) : (
-              <SkiaInProgressStroke points={agentStroke} style={style} blur={isPaintMode} />
-            );
-          })()}
+              <PainterlyStroke
+                points={currentStroke}
+                style={styleConfig.human_stroke}
+                blur={isPaintMode ? 1 : 0}
+              />
+            ))}
 
-        {/* Pen position indicator */}
-        {penPosition && (
-          <PenIndicator position={penPosition} penDown={penDown} color={primaryColor} />
-        )}
-      </Group>
-    </Canvas>
+          {/* Agent in-progress stroke - using optimized incremental renderer */}
+          {agentStroke.length > 0 &&
+            (() => {
+              const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
+              return agentStroke.length === 1 ? (
+                <StrokeDot point={agentStroke[0]!} style={style} />
+              ) : (
+                <SkiaInProgressStroke points={agentStroke} style={style} blur={isPaintMode} />
+              );
+            })()}
+
+          {/* Pen position indicator */}
+          {penPosition && (
+            <PenIndicator position={penPosition} penDown={penDown} color={primaryColor} />
+          )}
+        </Group>
+      </Canvas>
+    </View>
   );
 }
 

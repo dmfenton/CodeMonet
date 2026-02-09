@@ -32,7 +32,7 @@ interface Particle {
 
 /**
  * Generate particles for idle animation.
- * This mirrors the implementation in IdleParticles.tsx.
+ * This mirrors the implementation in SkiaIdleParticles.tsx.
  */
 function generateParticles(): Particle[] {
   const particles: Particle[] = [];

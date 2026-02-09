@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- iOS app rendering engine switched from react-native-svg to @shopify/react-native-skia for GPU-accelerated drawing
+- Renderer picker removed from home panel — Skia is now the sole iOS renderer (SVG/Freehand remain available in web)
+
 ### Fixed
 
 - iOS ANR (Application Not Responding) during stroke animation by memoizing completed strokes layer — prevents re-serializing 700+ SVG elements to GPU on every 60fps frame
@@ -14,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - Stroke settling effect (85% opacity fade-in on newly committed strokes) — removed to fix iOS performance
+- SvgRenderer, FreehandSvgRenderer, and associated SVG components from iOS app (replaced by SkiaRenderer)
 
 ## [1.36.0] - 2026-02-08
 
