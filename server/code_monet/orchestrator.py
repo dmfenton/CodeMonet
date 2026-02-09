@@ -112,19 +112,19 @@ class AgentOrchestrator:
 
         # Client handles bristle rendering via getBristleOutlines() in SkiaRenderer.
         # Server-side expansion is only used in rendering.py for thumbnails/OG images.
-        expanded_paths = list(paths)
+        paths_to_queue = list(paths)
 
-        logger.info(f">>> Queueing {len(expanded_paths)} paths for client rendering")
+        logger.info(f">>> Queueing {len(paths_to_queue)} paths for client rendering")
         if self.file_logger:
-            await self.file_logger.log_drawing(len(expanded_paths))
+            await self.file_logger.log_drawing(len(paths_to_queue))
 
         # Interpolate paths and queue for client fetch
-        batch_id, total_points = await state.queue_strokes(expanded_paths)
+        batch_id, total_points = await state.queue_strokes(paths_to_queue)
 
         # Notify clients that strokes are ready (include piece_number to prevent cross-canvas rendering)
         await self.broadcaster.broadcast(
             AgentStrokesReadyMessage(
-                count=len(expanded_paths),
+                count=len(paths_to_queue),
                 batch_id=batch_id,
                 piece_number=state.piece_number,
             )
