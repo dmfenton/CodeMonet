@@ -213,38 +213,35 @@ class TestDrawPathsAnimationWait:
         assert elapsed < 0.1
 
     @pytest.mark.asyncio
-    async def test_draw_paths_uses_expanded_count(
+    async def test_draw_paths_passes_through_without_expansion(
         self, orchestrator: AgentOrchestrator, mock_agent, mock_broadcaster
     ) -> None:
-        """_draw_paths should report expanded stroke count in paint mode."""
-        from code_monet.types import DrawingStyleType, Path, Point
+        """_draw_paths should pass brush paths through without server-side expansion.
+
+        Client handles bristle rendering via getBristleOutlines().
+        """
+        from code_monet.types import Path, Point
 
         mock_state = MagicMock()
         mock_state.queue_strokes = AsyncMock(return_value=(1, 1))
-        mock_state.canvas = MagicMock(drawing_style=DrawingStyleType.PAINT)
         mock_state.piece_number = 0
         mock_agent.get_state.return_value = mock_state
 
-        path = Path(
-            type="line",
-            points=[Point(x=0, y=0), Point(x=1, y=1)],
-            author="agent",
-            brush="oil_round",
-        )
-        expanded = [
-            Path(type="line", points=[Point(x=0, y=0)], author="agent"),
-            Path(type="line", points=[Point(x=1, y=1)], author="agent"),
+        paths = [
+            Path(
+                type="line",
+                points=[Point(x=0, y=0), Point(x=1, y=1)],
+                author="agent",
+                brush="oil_round",
+            ),
         ]
 
-        with (
-            patch("code_monet.orchestrator.expand_brush_stroke", return_value=expanded),
-            patch("code_monet.orchestrator.settings") as mock_settings,
-        ):
+        with patch("code_monet.orchestrator.settings") as mock_settings:
             mock_settings.client_animation_fps = 60
             mock_settings.animation_wait_buffer_ms = 0
             mock_settings.max_animation_wait_s = 0.0
 
-            await orchestrator._draw_paths([path])
+            await orchestrator._draw_paths(paths)
 
         ready_messages = [
             call.args[0]
@@ -252,7 +249,7 @@ class TestDrawPathsAnimationWait:
             if getattr(call.args[0], "type", None) == "agent_strokes_ready"
         ]
         assert ready_messages, "Expected agent_strokes_ready broadcast"
-        assert ready_messages[0].count == len(expanded)
+        assert ready_messages[0].count == 1  # No expansion, original count preserved
 
 
 class TestAnimationDoneBatchMatching:
