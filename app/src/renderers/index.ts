@@ -10,6 +10,4 @@
 export { SvgRenderer } from './SvgRenderer';
 export { FreehandSvgRenderer } from './FreehandSvgRenderer';
 
-// SkiaRenderer requires @shopify/react-native-skia to be installed.
-// Uncomment when the dependency is available:
-// export { SkiaRenderer } from './SkiaRenderer';
+export { SkiaRenderer } from './SkiaRenderer';

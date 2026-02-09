@@ -25,10 +25,13 @@ const RendererContext = createContext<RendererContextValue | null>(null);
  */
 function getInitialRenderer(): RendererType {
   const envRenderer = Constants.expoConfig?.extra?.renderer as string | undefined;
-  if (envRenderer === 'skia') {
-    return 'skia';
+  if (envRenderer === 'svg') {
+    return 'svg';
   }
-  return 'svg';
+  if (envRenderer === 'freehand') {
+    return 'freehand';
+  }
+  return 'skia';
 }
 
 /**
@@ -91,8 +94,10 @@ export function useRendererConfig(): RendererContextValue {
  * Returns true if react-native-skia is installed and loaded.
  */
 export function useSkiaAvailable(): boolean {
-  // For now, return false. Will be updated when Skia is installed.
-  // In the future, this will try to import @shopify/react-native-skia
-  // and return true if successful.
-  return false;
+  try {
+    require('@shopify/react-native-skia');
+    return true;
+  } catch {
+    return false;
+  }
 }

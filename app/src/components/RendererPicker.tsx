@@ -57,6 +57,14 @@ export function RendererPicker({
           <Ionicons name="brush-outline" size={18} color={getTextColor('freehand')} />
           <Text style={[styles.optionText, { color: getTextColor('freehand') }]}>Freehand</Text>
         </Pressable>
+        <Pressable
+          testID="renderer-skia-button"
+          style={getOptionStyle('skia')}
+          onPress={() => onChange('skia')}
+        >
+          <Ionicons name="speedometer-outline" size={18} color={getTextColor('skia')} />
+          <Text style={[styles.optionText, { color: getTextColor('skia') }]}>Skia</Text>
+        </Pressable>
       </View>
     </View>
   );

@@ -11,7 +11,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { screenToCanvas } from '../hooks/useCanvas';
 import { useRendererConfig } from '../context/RendererContext';
-import { SvgRenderer, FreehandSvgRenderer } from '../renderers';
+import { SvgRenderer, FreehandSvgRenderer, SkiaRenderer } from '../renderers';
 import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
 import { CANVAS_ASPECT_RATIO, CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 import { borderRadius, spacing, typography, useTheme } from '../theme';
@@ -123,8 +123,8 @@ export function Canvas({
     switch (config.renderer) {
       case 'freehand':
         return FreehandSvgRenderer;
-      // case 'skia':
-      //   return SkiaRenderer; // Uncomment when Skia is installed
+      case 'skia':
+        return SkiaRenderer;
       case 'svg':
       default:
         return SvgRenderer;
