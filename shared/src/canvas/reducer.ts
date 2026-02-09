@@ -190,7 +190,7 @@ export function hasInProgressEvents(messages: AgentMessage[]): boolean {
  * Status priority (highest to lowest):
  * 1. paused - explicitly paused
  * 2. error - last message is error
- * 3. thinking - words in buffer/onStage OR thinking text
+ * 3. thinking - words in buffer/onStage
  * 4. executing - code_execution started but not completed
  * 5. drawing - strokes in buffer/onStage
  * 6. idle - default
@@ -213,7 +213,7 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   const hasEventOnStage = perf.onStage?.type === 'event';
 
   // Thinking = words being revealed or waiting
-  if (hasWordsOnStage || hasWordsInBuffer || state.thinking) return 'thinking';
+  if (hasWordsOnStage || hasWordsInBuffer) return 'thinking';
 
   // Executing = event on stage
   if (hasEventOnStage) return 'executing';
