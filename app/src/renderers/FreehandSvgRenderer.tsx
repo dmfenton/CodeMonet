@@ -24,8 +24,6 @@ import {
   brushPresetToFreehandOptions,
   pathToSvgD,
   samplePathPoints,
-  useSettlingStrokes,
-  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -224,8 +222,38 @@ function PenIndicator({
  * - Natural pressure-sensitive stroke outlines
  * - Bristle texture simulation
  * - SVG blur filter for soft edges
- * - Stroke settling effect (new strokes fade in)
  */
+
+/**
+ * Memoized layer for all completed strokes.
+ * Only re-renders when the strokes array reference changes (on STROKE_COMPLETE),
+ * not on every STROKE_PROGRESS_BATCH dispatch during animation.
+ */
+interface CompletedStrokesLayerProps {
+  strokes: readonly Path[];
+  styleConfig: DrawingStyleConfig;
+  isPaintMode: boolean;
+}
+
+const CompletedStrokesLayer = memo(function CompletedStrokesLayer({
+  strokes,
+  styleConfig,
+  isPaintMode,
+}: CompletedStrokesLayerProps): React.ReactElement {
+  return (
+    <>
+      {strokes.map((stroke, index) => (
+        <MemoizedStroke
+          key={index}
+          stroke={stroke}
+          styleConfig={styleConfig}
+          isPaintMode={isPaintMode}
+        />
+      ))}
+    </>
+  );
+});
+
 export function FreehandSvgRenderer({
   strokes,
   currentStroke,
@@ -243,7 +271,6 @@ export function FreehandSvgRenderer({
   void _width;
   void _height;
   const isPaintMode = styleConfig.type === 'paint';
-  const settlingIndices = useSettlingStrokes(strokes.length);
 
   return (
     <Svg
@@ -263,16 +290,8 @@ export function FreehandSvgRenderer({
       {/* Idle animation particles */}
       <IdleParticles visible={showIdleAnimation} />
 
-      {/* Completed strokes - using MemoizedStroke to prevent re-computation */}
-      {strokes.map((stroke, index) => (
-        <G key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
-          <MemoizedStroke
-            stroke={stroke}
-            styleConfig={styleConfig}
-            isPaintMode={isPaintMode}
-          />
-        </G>
-      ))}
+      {/* Completed strokes - memoized layer skips re-render during animation */}
+      <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
 
       {/* Current human stroke */}
       {currentStroke.length > 0 &&

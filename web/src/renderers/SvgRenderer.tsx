@@ -14,8 +14,6 @@ import {
   getEffectiveStyle,
   pathToSvgD,
   pointsToSvgD,
-  useSettlingStrokes,
-  SETTLE_OPACITY,
 } from '@code-monet/shared';
 
 import { IdleParticles } from '../components/IdleParticles';
@@ -70,6 +68,34 @@ const MemoizedStroke = memo(function MemoizedStroke({
   );
 });
 
+/**
+ * Memoized layer for all completed strokes.
+ * Only re-renders when the strokes array reference changes (on STROKE_COMPLETE),
+ * not on every STROKE_PROGRESS_BATCH dispatch during animation.
+ */
+interface CompletedStrokesLayerProps {
+  strokes: readonly Path[];
+  styleConfig: DrawingStyleConfig;
+}
+
+const CompletedStrokesLayer = memo(function CompletedStrokesLayer({
+  strokes,
+  styleConfig,
+}: CompletedStrokesLayerProps): React.ReactElement {
+  return (
+    <>
+      {strokes.map((stroke, index) => (
+        <MemoizedStroke
+          key={index}
+          stroke={stroke}
+          styleConfig={styleConfig}
+          index={index}
+        />
+      ))}
+    </>
+  );
+});
+
 export function SvgRenderer({
   strokes,
   currentStroke,
@@ -81,23 +107,13 @@ export function SvgRenderer({
   showIdleAnimation,
   primaryColor,
 }: RendererProps): React.ReactElement {
-  const settlingIndices = useSettlingStrokes(strokes.length);
-
   return (
     <>
       {/* Idle animation - floating particles when canvas is empty and agent is idle */}
       <IdleParticles visible={showIdleAnimation} />
 
-      {/* Completed strokes - using MemoizedStroke to prevent recalculation */}
-      {strokes.map((stroke, index) => (
-        <g key={index} opacity={settlingIndices.has(index) ? SETTLE_OPACITY : 1}>
-          <MemoizedStroke
-            stroke={stroke}
-            styleConfig={styleConfig}
-            index={index}
-          />
-        </g>
-      ))}
+      {/* Completed strokes - memoized layer skips re-render during animation */}
+      <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} />
 
       {/* Current stroke in progress (human drawing) */}
       {currentStroke.length > 0 &&
