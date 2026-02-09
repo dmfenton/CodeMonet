@@ -7,7 +7,7 @@
  */
 
 import React, { memo, useMemo } from 'react';
-import Svg, { Circle, G, Path as SvgPath } from 'react-native-svg';
+import Svg, { Circle, Path as SvgPath } from 'react-native-svg';
 
 import type { Path, DrawingStyleConfig, RendererProps } from '@code-monet/shared';
 import {

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- iOS ANR (Application Not Responding) during stroke animation by memoizing completed strokes layer — prevents re-serializing 700+ SVG elements to GPU on every 60fps frame
+
+### Removed
+
+- Stroke settling effect (85% opacity fade-in on newly committed strokes) — removed to fix iOS performance
+
 ## [1.36.0] - 2026-02-08
 
 ### Added
