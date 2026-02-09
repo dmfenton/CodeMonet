@@ -190,7 +190,7 @@ export function hasInProgressEvents(messages: AgentMessage[]): boolean {
  * Status priority (highest to lowest):
  * 1. paused - explicitly paused
  * 2. error - last message is error
- * 3. thinking - words in buffer/onStage OR thinking text
+ * 3. thinking - words in buffer/onStage
  * 4. executing - code_execution started but not completed
  * 5. drawing - strokes in buffer/onStage
  * 6. idle - default

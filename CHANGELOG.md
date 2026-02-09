@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- LiveStatus stuck on "Thinking" during executing/drawing — status now driven by performance model only
+- Missing tool labels for imagine, sign_canvas, and name_piece (showed generic "Executing...")
+
+### Changed
+
+- LiveStatus header shows tool-specific icon, label, and color when a tool event is active
+
 ## [1.37.1] - 2026-02-09
 
 ### Fixed
