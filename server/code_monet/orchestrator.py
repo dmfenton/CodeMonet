@@ -7,13 +7,11 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
-from code_monet.brushes import expand_brush_stroke
 from code_monet.config import settings
 from code_monet.types import (
     AgentStrokesReadyMessage,
     AgentTurnComplete,
     CodeExecutionMessage,
-    DrawingStyleType,
     ErrorMessage,
     IterationMessage,
     Path,
@@ -105,9 +103,6 @@ class AgentOrchestrator:
 
         After notifying clients, waits for the estimated animation duration
         so the agent doesn't start thinking while drawing is in progress.
-
-        In paint mode, paths with brush presets are expanded into multiple
-        sub-paths (bristle strokes) for realistic paint effects.
         """
         if not paths:
             logger.debug("_draw_paths called with empty paths list")
@@ -115,27 +110,11 @@ class AgentOrchestrator:
 
         state = self.agent.get_state()
 
-        # Expand brush strokes in paint mode
-        expanded_paths: list[Path] = []
-        is_paint_mode = getattr(state.canvas, "drawing_style", None) == DrawingStyleType.PAINT
+        # Client handles bristle rendering via getBristleOutlines() in SkiaRenderer.
+        # Server-side expansion is only used in rendering.py for thumbnails/OG images.
+        expanded_paths = list(paths)
 
-        for path in paths:
-            if is_paint_mode and path.brush:
-                # Expand this path into multiple bristle strokes
-                brush_paths = expand_brush_stroke(
-                    path,
-                    canvas_width=state.canvas.width,
-                    canvas_height=state.canvas.height,
-                )
-                expanded_paths.extend(brush_paths)
-                logger.debug(f"Expanded brush '{path.brush}' into {len(brush_paths)} paths")
-            else:
-                expanded_paths.append(path)
-
-        logger.info(
-            f">>> Queueing {len(expanded_paths)} paths for client rendering "
-            f"(from {len(paths)} original, paint_mode={is_paint_mode})"
-        )
+        logger.info(f">>> Queueing {len(expanded_paths)} paths for client rendering")
         if self.file_logger:
             await self.file_logger.log_drawing(len(expanded_paths))
 
