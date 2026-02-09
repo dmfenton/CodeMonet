@@ -2,7 +2,7 @@
  * Canvas component with stroke rendering and touch handling.
  *
  * This component handles gesture detection and delegates rendering
- * to the appropriate renderer (SVG or Skia) based on configuration.
+ * to the Skia renderer for GPU-accelerated drawing.
  */
 
 import React, { useCallback, useMemo, useRef } from 'react';
@@ -10,8 +10,7 @@ import { LayoutChangeEvent, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { screenToCanvas } from '../hooks/useCanvas';
-import { useRendererConfig } from '../context/RendererContext';
-import { SvgRenderer, FreehandSvgRenderer, SkiaRenderer } from '../renderers';
+import { SkiaRenderer } from '../renderers';
 import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
 import { CANVAS_ASPECT_RATIO, CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 import { borderRadius, spacing, typography, useTheme } from '../theme';
@@ -46,7 +45,6 @@ export function Canvas({
   onStrokeEnd,
 }: CanvasProps): React.JSX.Element {
   const { colors, shadows } = useTheme();
-  const { config } = useRendererConfig();
   const containerRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
@@ -115,22 +113,6 @@ export function Canvas({
     primaryColor: colors.primary,
   };
 
-  // Select renderer based on config
-  // - 'svg': Basic SVG rendering (default)
-  // - 'freehand': SVG with perfect-freehand natural strokes
-  // - 'skia': GPU-accelerated (requires @shopify/react-native-skia)
-  const Renderer = (() => {
-    switch (config.renderer) {
-      case 'freehand':
-        return FreehandSvgRenderer;
-      case 'skia':
-        return SkiaRenderer;
-      case 'svg':
-      default:
-        return SvgRenderer;
-    }
-  })();
-
   return (
     <View
       style={[styles.container, { backgroundColor: colors.canvasBackground }, shadows.md]}
@@ -139,7 +121,7 @@ export function Canvas({
     >
       <GestureDetector gesture={panGesture}>
         <View style={styles.canvasWrapper}>
-          <Renderer {...rendererProps} />
+          <SkiaRenderer {...rendererProps} />
 
           {/* Drawing mode indicator */}
           {drawingEnabled && (

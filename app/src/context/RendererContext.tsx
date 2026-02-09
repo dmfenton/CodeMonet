@@ -1,5 +1,5 @@
 /**
- * Renderer Context - Feature flag for switching between SVG and Skia renderers.
+ * Renderer Context - Provides Skia renderer configuration.
  *
  * Usage:
  *   // In App.tsx, wrap your app with RendererProvider
@@ -7,40 +7,16 @@
  *     <App />
  *   </RendererProvider>
  *
- *   // In components, use the hook to get config or switch renderers
- *   const { config, setRenderer } = useRendererConfig();
- *   setRenderer('skia'); // Switch to Skia renderer
+ *   // In components, use the hook to get config
+ *   const { config } = useRendererConfig();
  */
 
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import Constants from 'expo-constants';
 
 import type { RendererConfig, RendererContextValue, RendererType } from '@code-monet/shared';
 import { getDefaultConfigForRenderer } from '@code-monet/shared';
 
 const RendererContext = createContext<RendererContextValue | null>(null);
-
-/**
- * Get initial renderer from environment variable.
- */
-function getInitialRenderer(): RendererType {
-  const envRenderer = Constants.expoConfig?.extra?.renderer as string | undefined;
-  if (envRenderer === 'svg') {
-    return 'svg';
-  }
-  if (envRenderer === 'freehand') {
-    return 'freehand';
-  }
-  return 'skia';
-}
-
-/**
- * Get initial config based on environment.
- */
-function getInitialConfig(): RendererConfig {
-  const renderer = getInitialRenderer();
-  return getDefaultConfigForRenderer(renderer);
-}
 
 interface RendererProviderProps {
   children: React.ReactNode;
@@ -53,7 +29,7 @@ export function RendererProvider({ children, initialRenderer }: RendererProvider
     if (initialRenderer) {
       return getDefaultConfigForRenderer(initialRenderer);
     }
-    return getInitialConfig();
+    return getDefaultConfigForRenderer('skia');
   });
 
   const setRenderer = useCallback((type: RendererType) => {
@@ -87,17 +63,4 @@ export function useRendererConfig(): RendererContextValue {
     throw new Error('useRendererConfig must be used within a RendererProvider');
   }
   return context;
-}
-
-/**
- * Hook to check if Skia renderer is available.
- * Returns true if react-native-skia is installed and loaded.
- */
-export function useSkiaAvailable(): boolean {
-  try {
-    require('@shopify/react-native-skia');
-    return true;
-  } catch {
-    return false;
-  }
 }

@@ -19,6 +19,8 @@ import {
   Circle,
   Skia,
   BlurMask,
+  fitbox,
+  rect,
 } from '@shopify/react-native-skia';
 
 import type { Path, Point, RendererProps, StrokeStyle, BrushName, DrawingStyleConfig } from '@code-monet/shared';
@@ -198,8 +200,8 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
           color={strokeColor}
           style="stroke"
           strokeWidth={style.stroke_width}
-          strokeCap={style.stroke_linecap as 'round' | 'butt' | 'square'}
-          strokeJoin={style.stroke_linejoin as 'round' | 'miter' | 'bevel'}
+          strokeCap={style.stroke_linecap}
+          strokeJoin={style.stroke_linejoin}
           opacity={strokeOpacity}
         />
       </Group>
@@ -276,49 +278,55 @@ export function SkiaRenderer({
   penDown,
   styleConfig,
   showIdleAnimation,
-  width: _width,
-  height: _height,
+  width,
+  height,
   primaryColor,
 }: RendererProps): React.ReactElement {
-  void _width;
-  void _height;
   const isPaintMode = styleConfig.type === 'paint';
+
+  // Scale logical canvas coordinates (CANVAS_WIDTH x CANVAS_HEIGHT) to device pixels.
+  // SVG uses viewBox for this automatically; Skia needs an explicit transform.
+  const src = useMemo(() => rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT), []);
+  const dst = useMemo(() => rect(0, 0, width, height), [width, height]);
+  const transform = useMemo(() => fitbox('contain', src, dst), [src, dst]);
 
   return (
     <Canvas style={styles.canvas}>
-      {/* Idle animation particles */}
-      <SkiaIdleParticles visible={showIdleAnimation} />
+      <Group transform={transform}>
+        {/* Idle animation particles */}
+        <SkiaIdleParticles visible={showIdleAnimation} />
 
-      {/* Completed strokes - memoized layer skips re-render during animation */}
-      <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
+        {/* Completed strokes - memoized layer skips re-render during animation */}
+        <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
 
-      {/* Current human stroke */}
-      {currentStroke.length > 0 &&
-        (currentStroke.length === 1 ? (
-          <StrokeDot point={currentStroke[0]!} style={styleConfig.human_stroke} />
-        ) : (
-          <PainterlyStroke
-            points={currentStroke}
-            style={styleConfig.human_stroke}
-            blur={isPaintMode ? 1 : 0}
-          />
-        ))}
-
-      {/* Agent in-progress stroke - using optimized incremental renderer */}
-      {agentStroke.length > 0 &&
-        (() => {
-          const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
-          return agentStroke.length === 1 ? (
-            <StrokeDot point={agentStroke[0]!} style={style} />
+        {/* Current human stroke */}
+        {currentStroke.length > 0 &&
+          (currentStroke.length === 1 ? (
+            <StrokeDot point={currentStroke[0]!} style={styleConfig.human_stroke} />
           ) : (
-            <SkiaInProgressStroke points={agentStroke} style={style} blur={isPaintMode} />
-          );
-        })()}
+            <PainterlyStroke
+              points={currentStroke}
+              style={styleConfig.human_stroke}
+              blur={isPaintMode ? 1 : 0}
+            />
+          ))}
 
-      {/* Pen position indicator */}
-      {penPosition && (
-        <PenIndicator position={penPosition} penDown={penDown} color={primaryColor} />
-      )}
+        {/* Agent in-progress stroke - using optimized incremental renderer */}
+        {agentStroke.length > 0 &&
+          (() => {
+            const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
+            return agentStroke.length === 1 ? (
+              <StrokeDot point={agentStroke[0]!} style={style} />
+            ) : (
+              <SkiaInProgressStroke points={agentStroke} style={style} blur={isPaintMode} />
+            );
+          })()}
+
+        {/* Pen position indicator */}
+        {penPosition && (
+          <PenIndicator position={penPosition} penDown={penDown} color={primaryColor} />
+        )}
+      </Group>
     </Canvas>
   );
 }
