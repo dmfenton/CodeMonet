@@ -788,17 +788,22 @@
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
-/* Vary the sizes for museum feel */
-.gallery-item:nth-child(2) {
+/* Vary the sizes for museum feel.
+   Items may be direct children (.gallery-item) or wrapped in links (.gallery-wall-link > .gallery-item) */
+.gallery-wall > .gallery-item:nth-child(2),
+.gallery-wall > :nth-child(2) > .gallery-item {
   transform: translateY(30px);
 }
 
-.gallery-item:nth-child(5) {
+.gallery-wall > .gallery-item:nth-child(5),
+.gallery-wall > :nth-child(5) > .gallery-item {
   transform: translateY(40px);
 }
 
-.homepage.mounted .gallery-item:nth-child(2),
-.homepage.mounted .gallery-item:nth-child(5) {
+.homepage.mounted .gallery-wall > .gallery-item:nth-child(2),
+.homepage.mounted .gallery-wall > :nth-child(2) > .gallery-item,
+.homepage.mounted .gallery-wall > .gallery-item:nth-child(5),
+.homepage.mounted .gallery-wall > :nth-child(5) > .gallery-item {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 

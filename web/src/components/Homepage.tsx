@@ -316,24 +316,16 @@ export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): Reac
           <div className="gallery-wall">
             {displayPieces.map((piece, i) => {
               const galleryPiece = piece as GalleryPiece | undefined;
-              const item = (
-                <GalleryItem
-                  key={galleryPiece?.id ?? i}
-                  piece={galleryPiece}
-                  index={i}
-                  delay={i * 0.15}
-                />
-              );
               return galleryPiece ? (
                 <Link
                   key={galleryPiece.id}
                   to={`/gallery/${galleryPiece.user_id}/${galleryPiece.id}`}
                   className="gallery-wall-link"
                 >
-                  {item}
+                  <GalleryItem piece={galleryPiece} index={i} delay={i * 0.15} />
                 </Link>
               ) : (
-                item
+                <GalleryItem key={i} index={i} delay={i * 0.15} />
               );
             })}
           </div>
