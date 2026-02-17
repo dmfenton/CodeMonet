@@ -1,33 +1,28 @@
 /**
- * LiveCanvas - Real-time drawing preview with WebSocket or painting slideshow fallback
- * Shows actual user paintings when no WebSocket is connected
+ * LiveCanvas - Real-time drawing preview with WebSocket or simulation fallback
+ * Uses Monet-inspired color palette for a warm, artistic aesthetic
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { pathToSvgDScaled, type Path } from '@code-monet/shared';
-import { getApiUrl, getWebSocketUrl } from '../../config';
-import type { GalleryPiece } from './types';
+import { getWebSocketUrl } from '../../config';
+import { SimulatedStroke, STROKE_COLORS } from './types';
+import { generateArtisticPath, pointsToPath } from './utils';
 
-interface LiveCanvasProps {
-  galleryPieces?: GalleryPiece[];
-}
-
-export function LiveCanvas({ galleryPieces }: LiveCanvasProps): React.ReactElement {
+export function LiveCanvas(): React.ReactElement {
   const [realStrokes, setRealStrokes] = useState<Path[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
-  const [currentSlide, setCurrentSlide] = useState(0);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [transitioning, setTransitioning] = useState(false);
+  const [simStrokes, setSimStrokes] = useState<SimulatedStroke[]>([]);
+  const [currentStroke, setCurrentStroke] = useState<SimulatedStroke | null>(null);
+  const strokeIdRef = useRef(0);
+  const animationRef = useRef<number>();
   const wsRef = useRef<WebSocket | null>(null);
 
   // Try to connect to WebSocket for live strokes
   useEffect(() => {
-    const wsUrl = getWebSocketUrl();
-    if (!wsUrl) return;
-
     const connectWs = (): void => {
       try {
-        const ws = new WebSocket(wsUrl);
+        const ws = new WebSocket(getWebSocketUrl());
 
         ws.onopen = (): void => {
           setWsConnected(true);
@@ -72,39 +67,71 @@ export function LiveCanvas({ galleryPieces }: LiveCanvasProps): React.ReactEleme
     };
   }, []);
 
-  // Rotate through paintings every 6 seconds
-  const pieces = galleryPieces ?? [];
+  // Fallback simulation when no WebSocket
+  const createNewStroke = useCallback((): void => {
+    const newStroke: SimulatedStroke = {
+      id: strokeIdRef.current++,
+      points: generateArtisticPath(),
+      color: STROKE_COLORS[Math.floor(Math.random() * STROKE_COLORS.length)],
+      width: Math.random() * 4 + 2,
+      progress: 0,
+    };
+    setCurrentStroke(newStroke);
+  }, []);
+
   useEffect(() => {
-    if (wsConnected && realStrokes.length > 0) return;
-    if (pieces.length <= 1) return;
+    if (wsConnected && realStrokes.length > 0) {
+      return;
+    }
 
-    const interval = setInterval(() => {
-      setTransitioning(true);
-      // After fade-out, switch slide
-      setTimeout(() => {
-        setCurrentSlide((prev) => (prev + 1) % pieces.length);
-        setImageLoaded(false);
-        setTransitioning(false);
-      }, 600);
-    }, 6000);
+    createNewStroke();
 
-    return (): void => clearInterval(interval);
-  }, [wsConnected, realStrokes.length, pieces.length]);
+    const animate = (): void => {
+      setCurrentStroke((prev) => {
+        if (!prev) return prev;
+
+        const newProgress = prev.progress + 0.015; // Slightly slower for elegance
+
+        if (newProgress >= 1) {
+          setSimStrokes((s) => [...s.slice(-12), { ...prev, progress: 1 }]);
+          setTimeout(createNewStroke, 800 + Math.random() * 1200);
+          return null;
+        }
+
+        return { ...prev, progress: newProgress };
+      });
+
+      animationRef.current = requestAnimationFrame(animate);
+    };
+
+    animationRef.current = requestAnimationFrame(animate);
+
+    return (): void => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [createNewStroke, wsConnected, realStrokes.length]);
 
   const showReal = wsConnected && realStrokes.length > 0;
-  const currentPiece = pieces[currentSlide];
-  const nextPieceIndex = pieces.length > 1 ? (currentSlide + 1) % pieces.length : -1;
-  const nextPiece = nextPieceIndex >= 0 ? pieces[nextPieceIndex] : null;
-
-  const getThumbnailUrl = (piece: GalleryPiece): string =>
-    `${getApiUrl()}/public/gallery/${piece.user_id}/${piece.id}/thumbnail.png`;
 
   return (
-    <div className="live-canvas-container">
+    <svg viewBox="0 0 400 300" className="live-canvas-svg">
+      <defs>
+        {/* Subtle paper texture filter */}
+        <filter id="paperTexture">
+          <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" result="noise" />
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="0.8" />
+        </filter>
+      </defs>
+
+      {/* Warm off-white canvas background */}
+      <rect width="400" height="300" fill="#fdfcf8" />
+
       {showReal ? (
-        <svg viewBox="0 0 400 300" className="live-canvas-svg">
-          <rect width="400" height="300" fill="#fdfcf8" />
-          {realStrokes.slice(-30).map((stroke, i) => (
+        realStrokes
+          .slice(-30)
+          .map((stroke, i) => (
             <path
               key={i}
               d={pathToSvgDScaled(stroke, 0.5)}
@@ -115,47 +142,61 @@ export function LiveCanvas({ galleryPieces }: LiveCanvasProps): React.ReactEleme
               strokeLinejoin="round"
               opacity={stroke.opacity ?? 0.85}
             />
+          ))
+      ) : (
+        <>
+          {simStrokes.map((stroke) => (
+            <path
+              key={stroke.id}
+              d={pointsToPath(stroke.points, stroke.progress)}
+              fill="none"
+              stroke={stroke.color}
+              strokeWidth={stroke.width}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              opacity={0.8}
+              filter="url(#paperTexture)"
+            />
           ))}
-          {/* Live indicator */}
-          <g transform="translate(380, 16)">
-            <circle r="4" fill="#6b9b6b" opacity="0.8">
-              <animate
-                attributeName="opacity"
-                values="0.8;0.4;0.8"
-                dur="3s"
-                repeatCount="indefinite"
-              />
-            </circle>
-          </g>
-        </svg>
-      ) : currentPiece ? (
-        <div className="painting-slideshow">
-          <img
-            src={getThumbnailUrl(currentPiece)}
-            alt={currentPiece.title || `Painting #${currentPiece.piece_number}`}
-            className={`slideshow-image ${imageLoaded ? 'loaded' : ''} ${transitioning ? 'fading' : ''}`}
-            onLoad={() => setImageLoaded(true)}
-          />
-          {/* Preload next image */}
-          {nextPiece && (
-            <img
-              src={getThumbnailUrl(nextPiece)}
-              alt=""
-              className="slideshow-preload"
+
+          {currentStroke && (
+            <path
+              d={pointsToPath(currentStroke.points, currentStroke.progress)}
+              fill="none"
+              stroke={currentStroke.color}
+              strokeWidth={currentStroke.width}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              filter="url(#paperTexture)"
             />
           )}
-          {currentPiece.title && (
-            <div className={`slideshow-caption ${imageLoaded ? 'visible' : ''} ${transitioning ? 'fading' : ''}`}>
-              {currentPiece.title}
-            </div>
+
+          {/* Brush tip indicator */}
+          {currentStroke && currentStroke.progress > 0 && (
+            <g
+              transform={`translate(${currentStroke.points[Math.floor(currentStroke.points.length * currentStroke.progress)]?.x || 0}, ${currentStroke.points[Math.floor(currentStroke.points.length * currentStroke.progress)]?.y || 0})`}
+            >
+              <circle r="3" fill={currentStroke.color} opacity="0.6">
+                <animate attributeName="r" values="3;4;3" dur="0.8s" repeatCount="indefinite" />
+              </circle>
+            </g>
           )}
-        </div>
-      ) : (
-        /* Ultimate fallback: empty canvas */
-        <svg viewBox="0 0 400 300" className="live-canvas-svg">
-          <rect width="400" height="300" fill="#fdfcf8" />
-        </svg>
+        </>
       )}
-    </div>
+
+      {/* Live indicator - subtle sage green */}
+      {showReal && (
+        <g transform="translate(380, 16)">
+          <circle r="4" fill="#6b9b6b" opacity="0.8">
+            <animate
+              attributeName="opacity"
+              values="0.8;0.4;0.8"
+              dur="3s"
+              repeatCount="indefinite"
+            />
+          </circle>
+        </g>
+      )}
+    </svg>
   );
 }

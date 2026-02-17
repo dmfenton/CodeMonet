@@ -81,7 +81,7 @@ export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): Reac
             <div className="canvas-easel">
               <div className="canvas-frame">
                 <div className="canvas-body">
-                  <LiveCanvas galleryPieces={galleryPieces} />
+                  <LiveCanvas />
                 </div>
               </div>
             </div>
