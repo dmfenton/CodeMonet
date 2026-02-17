@@ -773,6 +773,12 @@
   margin-bottom: 60px;
 }
 
+.gallery-wall-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
 .gallery-item {
   opacity: 0;
   transform: translateY(20px);
@@ -782,17 +788,22 @@
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
-/* Vary the sizes for museum feel */
-.gallery-item:nth-child(2) {
+/* Vary the sizes for museum feel.
+   Items may be direct children (.gallery-item) or wrapped in links (.gallery-wall-link > .gallery-item) */
+.gallery-wall > .gallery-item:nth-child(2),
+.gallery-wall > :nth-child(2) > .gallery-item {
   transform: translateY(30px);
 }
 
-.gallery-item:nth-child(5) {
+.gallery-wall > .gallery-item:nth-child(5),
+.gallery-wall > :nth-child(5) > .gallery-item {
   transform: translateY(40px);
 }
 
-.homepage.mounted .gallery-item:nth-child(2),
-.homepage.mounted .gallery-item:nth-child(5) {
+.homepage.mounted .gallery-wall > .gallery-item:nth-child(2),
+.homepage.mounted .gallery-wall > :nth-child(2) > .gallery-item,
+.homepage.mounted .gallery-wall > .gallery-item:nth-child(5),
+.homepage.mounted .gallery-wall > :nth-child(5) > .gallery-item {
   animation: fadeInUp 0.6s ease-out forwards;
 }
 
@@ -886,6 +897,9 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
+  text-decoration: none;
+  text-align: center;
+  width: fit-content;
 }
 
 .gallery-cta:hover {

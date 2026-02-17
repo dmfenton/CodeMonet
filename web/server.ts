@@ -40,6 +40,7 @@ interface GalleryPiece {
   piece_number: number;
   stroke_count: number;
   created_at: string;
+  title?: string;
 }
 
 interface PieceStrokes {

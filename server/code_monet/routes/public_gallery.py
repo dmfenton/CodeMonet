@@ -108,15 +108,16 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
             try:
                 async with aiofiles.open(gallery_dir / entry_name) as f:
                     data = json.loads(await f.read())
-                pieces.append(
-                    {
-                        "id": f"piece_{data.get('piece_number', 0):06d}",
-                        "user_id": str(user.id),
-                        "piece_number": data.get("piece_number", 0),
-                        "stroke_count": len(data.get("strokes", [])),
-                        "created_at": data.get("created_at", ""),
-                    }
-                )
+                piece_entry: dict[str, Any] = {
+                    "id": f"piece_{data.get('piece_number', 0):06d}",
+                    "user_id": str(user.id),
+                    "piece_number": data.get("piece_number", 0),
+                    "stroke_count": len(data.get("strokes", [])),
+                    "created_at": data.get("created_at", ""),
+                }
+                if data.get("title"):
+                    piece_entry["title"] = data["title"]
+                pieces.append(piece_entry)
             except (json.JSONDecodeError, OSError):
                 pass
 
