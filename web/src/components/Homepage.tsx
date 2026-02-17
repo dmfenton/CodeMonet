@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { getApiUrl } from '../config';
 import { LiveCanvas, ThoughtStream, GalleryItem, GalleryPiece } from './homepage/index';
 
@@ -80,7 +81,7 @@ export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): Reac
             <div className="canvas-easel">
               <div className="canvas-frame">
                 <div className="canvas-body">
-                  <LiveCanvas />
+                  <LiveCanvas galleryPieces={galleryPieces} />
                 </div>
               </div>
             </div>
@@ -313,19 +314,33 @@ export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): Reac
           </p>
 
           <div className="gallery-wall">
-            {displayPieces.map((piece, i) => (
-              <GalleryItem
-                key={(piece as GalleryPiece)?.id ?? i}
-                piece={piece as GalleryPiece | undefined}
-                index={i}
-                delay={i * 0.15}
-              />
-            ))}
+            {displayPieces.map((piece, i) => {
+              const galleryPiece = piece as GalleryPiece | undefined;
+              const item = (
+                <GalleryItem
+                  key={galleryPiece?.id ?? i}
+                  piece={galleryPiece}
+                  index={i}
+                  delay={i * 0.15}
+                />
+              );
+              return galleryPiece ? (
+                <Link
+                  key={galleryPiece.id}
+                  to={`/gallery/${galleryPiece.user_id}/${galleryPiece.id}`}
+                  className="gallery-wall-link"
+                >
+                  {item}
+                </Link>
+              ) : (
+                item
+              );
+            })}
           </div>
 
-          <button className="gallery-cta" onClick={onEnter}>
-            View the live studio
-          </button>
+          <Link to="/gallery" className="gallery-cta">
+            View full gallery
+          </Link>
         </div>
       </section>
 
