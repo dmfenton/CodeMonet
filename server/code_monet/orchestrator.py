@@ -355,6 +355,7 @@ class AgentOrchestrator:
                         "invalid x-api-key",
                         "permission denied",
                         "billing",
+                        "quota",
                     ]
                 )
                 if is_unrecoverable:
