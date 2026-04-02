@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.37.3] - 2026-04-02
+
+### Fixed
+
+- Agent orchestrator auto-pauses on unrecoverable API errors (credit balance, auth, billing) to prevent CPU-burning retry loops
+- Transient errors now clear the wake event to prevent immediate retries
+
+### Changed
+
+- Homepage hero drawings replaced with real user paintings from public gallery
+
 ## [1.37.2] - 2026-02-09
 
 ### Fixed
@@ -1110,7 +1121,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.37.2...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.37.3...HEAD
+[1.37.3]: https://github.com/dmfenton/sketchpad/compare/v1.37.2...v1.37.3
 [1.37.2]: https://github.com/dmfenton/sketchpad/compare/v1.37.1...v1.37.2
 [1.37.1]: https://github.com/dmfenton/sketchpad/compare/v1.37.0...v1.37.1
 [1.37.0]: https://github.com/dmfenton/sketchpad/compare/v1.36.0...v1.37.0
