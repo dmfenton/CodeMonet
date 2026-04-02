@@ -9,12 +9,15 @@ from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
 from code_monet.types import (
+    AgentStatus,
     AgentStrokesReadyMessage,
     AgentTurnComplete,
     CodeExecutionMessage,
     ErrorMessage,
     IterationMessage,
     Path,
+    PausedMessage,
+    PauseReason,
     PieceStateMessage,
     ThinkingDeltaMessage,
 )
@@ -335,7 +338,35 @@ class AgentOrchestrator:
                 await self.run_turn()
 
             except Exception as e:
-                logger.error(f"Agent loop error: {e}")
+                error_msg = str(e)
+                logger.error(f"Agent loop error: {error_msg}")
                 if self.file_logger:
-                    await self.file_logger.log_error(f"Agent loop error: {e}")
-                await self.broadcaster.broadcast(ErrorMessage(message=str(e)))
+                    await self.file_logger.log_error(f"Agent loop error: {error_msg}")
+                await self.broadcaster.broadcast(ErrorMessage(message=error_msg))
+
+                # Auto-pause on unrecoverable errors to prevent CPU-burning retry loops
+                error_lower = error_msg.lower()
+                is_unrecoverable = any(
+                    phrase in error_lower
+                    for phrase in [
+                        "credit balance",
+                        "authentication",
+                        "invalid api key",
+                        "invalid x-api-key",
+                        "permission denied",
+                        "billing",
+                        "quota",
+                    ]
+                )
+                if is_unrecoverable:
+                    logger.error(f"[ORCH] Unrecoverable error, auto-pausing agent: {error_msg}")
+                    await self.agent.pause()
+                    state = self.agent.get_state()
+                    state.status = AgentStatus.PAUSED
+                    state.pause_reason = PauseReason.ERROR
+                    await state.save()
+                    await self.broadcaster.broadcast(PausedMessage(paused=True))
+                else:
+                    # For transient errors, clear the wake event so we don't
+                    # immediately retry — wait for the next explicit wake
+                    self._wake_event.clear()
