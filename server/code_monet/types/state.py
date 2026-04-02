@@ -26,11 +26,13 @@ class PauseReason(str, Enum):
     - NONE: Agent is not paused (or was never paused)
     - USER: User explicitly paused - don't auto-resume
     - DISCONNECT: System paused due to no clients - auto-resume on reconnect
+    - ERROR: System paused due to unrecoverable error - don't auto-resume
     """
 
     NONE = "none"
     USER = "user"
     DISCONNECT = "disconnect"
+    ERROR = "error"
 
 
 class CanvasState(BaseModel):
