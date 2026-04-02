@@ -122,6 +122,10 @@ resource "aws_instance" "main" {
   vpc_security_group_ids = [aws_security_group.main.id]
   iam_instance_profile   = aws_iam_instance_profile.main.name
 
+  credit_specification {
+    cpu_credits = "standard"
+  }
+
   # Allow containers on bridge network to access instance metadata (for SSM)
   metadata_options {
     http_endpoint               = "enabled"
