@@ -8,6 +8,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 export interface DebugOverlayProps {
   data: Record<string, string | number | boolean | null>;
+  visible?: boolean;
 }
 
 /**
@@ -16,8 +17,9 @@ export interface DebugOverlayProps {
  */
 export const DebugOverlay = React.memo(function DebugOverlay({
   data,
+  visible = false,
 }: DebugOverlayProps): React.JSX.Element | null {
-  if (!__DEV__) return null;
+  if (!__DEV__ || !visible) return null;
 
   return (
     <View pointerEvents="none" style={styles.container}>

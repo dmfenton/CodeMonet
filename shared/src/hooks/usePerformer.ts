@@ -16,18 +16,18 @@ import type { Point, StrokeStyle } from '../types';
 import { BIONIC_CHUNK_INTERVAL_MS, BIONIC_CHUNK_SIZE } from '../utils';
 
 // Hold completed text for this duration before advancing to next chunk
-const HOLD_AFTER_WORDS_MS = 800;
+const HOLD_AFTER_WORDS_MS = 267;
 
 // Stroke animation batching constants
-const MIN_POINTS_PER_FRAME = 1;
-const MAX_POINTS_PER_FRAME = 8;
-const TARGET_PIXELS_PER_SECOND = 300; // Visual speed constant for smooth animation
+const MIN_POINTS_PER_FRAME = 3;
+const MAX_POINTS_PER_FRAME = 24;
+const TARGET_PIXELS_PER_SECOND = 900; // Visual speed constant for smooth animation
 
 // Pen travel and easing constants
-const TRAVEL_SPEED_MULTIPLIER = 2.0; // Travel moves faster than drawing
+const TRAVEL_SPEED_MULTIPLIER = 6.0; // Travel moves faster than drawing
 const PEN_LIFT_THRESHOLD = 2.0; // Skip travel for very close strokes (pixels)
-const INTER_STROKE_PAUSE_MS = 200; // Pause between strokes
-const PEN_SETTLE_DELAY_MS = 50; // Pause after pen arrives at new position
+const INTER_STROKE_PAUSE_MS = 67; // Pause between strokes
+const PEN_SETTLE_DELAY_MS = 17; // Pause after pen arrives at new position
 const EASE_MIN_SPEED_RATIO = 0.3; // Minimum speed at stroke start/end (fraction of max)
 
 /** Calculate distance between two points */
@@ -58,7 +58,7 @@ function synthesizeTravelPath(start: Point, end: Point): Point[] {
 }
 
 // Hold events on stage for this duration so "executing" status is visible
-const HOLD_EVENT_MS = 500;
+const HOLD_EVENT_MS = 167;
 
 // Maximum time to hold an event without new content (prevents stale UI)
 const MAX_EVENT_HOLD_MS = 5000;
