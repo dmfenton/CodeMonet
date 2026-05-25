@@ -32,7 +32,7 @@ After deploying for the first time:
 **Production (on EC2):**
 
 ```bash
-# Add to deploy/.env or set in SSM Parameter Store
+# Set in SSM Parameter Store (read by deploy/start-services.sh in dmfenton/compute)
 UMAMI_DB_PASSWORD=<generate with: openssl rand -hex 16>
 UMAMI_APP_SECRET=<generate with: openssl rand -hex 32>
 ```

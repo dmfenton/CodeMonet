@@ -134,24 +134,13 @@ jobs:
 
           echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Sync deploy configs and web build to S3
-        env:
-          ADMIN_IP: ${{ secrets.ADMIN_IP }}
+      - name: Sync web build to S3
+        # nginx.conf, docker-compose.prod.yml, start-services.sh, otel-config.yaml
+        # are owned by dmfenton/compute and uploaded by its deploy-nginx workflow.
+        # This step only pushes CodeMonet's SSR client/server assets.
         run: |
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          BUCKET="drawing-agent-config-${ACCOUNT_ID}"
-
-          # Substitute ADMIN_IP in nginx.conf
-          if [ -n "$ADMIN_IP" ]; then
-            echo "Substituting ADMIN_IP in nginx.conf..."
-            sed -i "s/\${ADMIN_IP}/$ADMIN_IP/g" deploy/nginx.conf
-          else
-            echo "Warning: ADMIN_IP secret not set, nginx.conf will have placeholder"
-          fi
-
-          echo "Syncing deploy/ to s3://${BUCKET}/deploy/"
-          aws s3 sync deploy/ "s3://${BUCKET}/deploy/" --delete
-
+          BUCKET="compute-deploy-${ACCOUNT_ID}"
           echo "Syncing web build to s3://${BUCKET}/deploy/web/"
           aws s3 sync web/dist/ "s3://${BUCKET}/deploy/web/" --delete
 
@@ -305,7 +294,7 @@ jobs:
 
           # Get S3 bucket name for config sync
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          CONFIG_BUCKET="drawing-agent-config-${ACCOUNT_ID}"
+          CONFIG_BUCKET="compute-deploy-${ACCOUNT_ID}"
 
           # Deploy: sync config, update IMAGE_TAG, pull new images, restart containers
           COMMAND_ID=$(aws ssm send-command \

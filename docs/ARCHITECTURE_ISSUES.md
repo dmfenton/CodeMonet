@@ -52,13 +52,13 @@ Outstanding issues identified during architecture review (2026-01-12).
 
 ### No centralized logging
 
-- **Location:** `deploy/docker-compose.prod.yml`
+- **Location:** `deploy/docker-compose.prod.yml` (in dmfenton/compute)
 - **Impact:** Logs only available via `docker logs` on EC2
 - **Fix:** Add `--log-driver=awslogs` or fluentd sidecar
 
 ### No container resource limits
 
-- **Location:** `deploy/docker-compose.prod.yml`
+- **Location:** `deploy/docker-compose.prod.yml` (in dmfenton/compute)
 - **Impact:** Runaway process can consume entire instance
 - **Fix:** Add `deploy.resources.limits` for CPU and memory
 
