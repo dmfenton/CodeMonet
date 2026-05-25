@@ -1,5 +1,7 @@
 # Infrastructure (AWS)
 
+> **Infrastructure has moved.** EC2, VPC, ECR, Route 53, SES, monitoring, IAM, and the nginx vhost router all live in **[dmfenton/compute](https://github.com/dmfenton/compute)** now. This doc only covers what's still owned by CodeMonet: the release flow and the SSR architecture.
+
 ## Changelog
 
 **Location:** `CHANGELOG.md` at project root
@@ -81,97 +83,9 @@ docker run -p 3000:3000 -e API_URL=http://host.docker.internal:8000 web-ssr:dev
 
 ## Terraform
 
-All infrastructure is managed via Terraform in `infrastructure/`:
+All Terraform lives in [dmfenton/compute](https://github.com/dmfenton/compute/tree/main/infrastructure). The EC2 box, ECR repos (`drawing-agent`, `web-ssr`), VPC, Route 53, SES, monitoring, IAM, and S3 deploy-config bucket (`compute-deploy-573988763875`) are all defined there.
 
-```
-infrastructure/
-├── main.tf            # Provider config
-├── variables.tf       # Input variables
-├── outputs.tf         # Output values (URLs, IPs, commands)
-├── vpc.tf             # VPC, subnet, internet gateway
-├── ec2.tf             # EC2 instance, security group, IAM role, EBS data volume
-├── ecr.tf             # ECR repository + lifecycle policy
-├── route53.tf         # DNS records
-├── ses.tf             # SES email sending (domain verification, DKIM, SPF, DMARC)
-├── monitoring.tf      # CloudWatch alarms
-├── backup.tf          # DLM backup policies (snapshots EBS volumes tagged Backup=true)
-├── github_actions.tf  # IAM user for GitHub Actions ECR push
-└── user_data.sh       # EC2 bootstrap script (Docker, CloudWatch agent, EBS mount)
-```
-
-**Key resources:**
-
-- **EC2** (t3.small, 2GB RAM) running Docker Compose
-- **EBS** 10GB data volume at `/home/ec2-user/data` (persists across instance replacement)
-- **ECR** repositories with 5-image retention:
-  - `drawing-agent` - Backend API container
-  - `web-ssr` - SSR frontend container
-- **Elastic IP** for stable addressing
-- **Route 53** DNS (monet.dmfenton.net)
-- **SES** email sending with domain verification, DKIM, SPF, DMARC
-- **CloudWatch** alerts to email
-
-**Terraform commands:**
-
-```bash
-cd infrastructure
-
-# Initialize
-terraform init
-
-# Plan changes
-terraform plan -var="ssh_key_name=your-key" -var="alert_email=you@example.com"
-
-# Apply
-terraform apply -var="ssh_key_name=your-key" -var="alert_email=you@example.com"
-
-# Get outputs (IP, URLs, SSH command)
-terraform output
-```
-
-## SES Email Sending
-
-SES is configured for sending magic link emails from `noreply@dmfenton.net`.
-
-**What Terraform creates:**
-
-- Domain identity verification (TXT record)
-- DKIM signing (3 CNAME records)
-- SPF record for domain authentication
-- DMARC record for email policy
-- Custom MAIL FROM domain (`mail.dmfenton.net`)
-- IAM policy for EC2 to send emails
-
-**After applying Terraform:**
-
-1. Wait ~5 minutes for DNS propagation
-2. Check verification status in AWS Console
-3. If in SES sandbox, request production access
-
-**SES Sandbox Limitations:**
-
-- New SES accounts start in "sandbox" mode
-- Can only send to verified email addresses
-- Request production access via AWS Console -> SES -> Account Dashboard -> Request Production Access
-
-**Environment variables for the app:**
-
-```bash
-# Add to .env
-SES_SENDER_EMAIL=noreply@dmfenton.net
-AWS_REGION=us-east-1
-```
-
-**Testing email sending:**
-
-```bash
-# From EC2 instance (uses instance role)
-aws ses send-email \
-  --from noreply@dmfenton.net \
-  --to your@email.com \
-  --subject "Test" \
-  --text "Hello from SES"
-```
+To change shared infra, open a PR against compute and follow its [RUNBOOK](https://github.com/dmfenton/compute/blob/main/docs/RUNBOOK.md).
 
 ## Remote Server Management (SSM)
 
@@ -208,24 +122,19 @@ uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/code_monet.db
 
 ## SSH Access (if needed)
 
+The instance is tagged `Name=drawing-agent` (historical name; predates compute being a shared platform). Prefer SSM Session Manager for shell access:
+
 ```bash
-ssh -i ~/.ssh/drawing-agent.pem ec2-user@$(terraform -chdir=infrastructure output -raw public_ip)
+aws ssm start-session --target $(aws ec2 describe-instances \
+  --filters "Name=tag:Name,Values=drawing-agent" "Name=instance-state-name,Values=running" \
+  --query 'Reservations[0].Instances[0].InstanceId' --output text)
 ```
+
+The SSH key (`drawing-agent.pem`) is provisioned by compute terraform; see compute's RUNBOOK for the EIP and key handling.
 
 ## GitHub Actions IAM User
 
-Managed by Terraform in `infrastructure/github_actions.tf`:
-
-```bash
-cd infrastructure
-
-# Create/update IAM user
-terraform apply
-
-# Get credentials and set GitHub secrets
-gh secret set AWS_ACCESS_KEY_ID --body "$(terraform output -raw github_actions_access_key_id)"
-gh secret set AWS_SECRET_ACCESS_KEY --body "$(terraform output -raw github_actions_secret_access_key)"
-```
+Managed by Terraform in [compute/infrastructure/github_actions.tf](https://github.com/dmfenton/compute/blob/main/infrastructure/github_actions.tf). The IAM user has `s3:PutObject` on `compute-deploy-*` (where this repo's release workflow uploads the web build) and `ecr:*` on the `drawing-agent` and `web-ssr` repos.
 
 ## Required GitHub Secrets (Server)
 

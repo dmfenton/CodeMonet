@@ -64,19 +64,19 @@ Outstanding issues identified during architecture review (2026-01-12).
 
 ### Static GitHub Actions credentials
 
-- **Location:** `infrastructure/github_actions.tf`
+- **Location:** `infrastructure/github_actions.tf` (in dmfenton/compute)
 - **Impact:** Long-lived credentials, no rotation
 - **Fix:** Use GitHub OIDC identity provider with assume role
 
 ### Slow alarm detection (10 min)
 
-- **Location:** `infrastructure/monitoring.tf`
+- **Location:** `infrastructure/monitoring.tf` (in dmfenton/compute)
 - **Impact:** CPU/memory/disk alarms take 10 min to trigger
 - **Fix:** Reduce to 1 evaluation period
 
 ### Data volume not monitored
 
-- **Location:** `infrastructure/user_data.sh:34-54`
+- **Location:** `infrastructure/user_data.sh` (in dmfenton/compute)
 - **Impact:** CloudWatch agent only monitors `/`, not `/home/ec2-user/data`
 - **Fix:** Add data volume to CloudWatch agent config
 
@@ -86,7 +86,7 @@ Outstanding issues identified during architecture review (2026-01-12).
 
 ### No VPC Flow Logs
 
-- **Location:** `infrastructure/vpc.tf`
+- **Location:** `infrastructure/vpc.tf` (in dmfenton/compute)
 - **Impact:** Can't audit network traffic for security incidents
 - **Fix:** Enable VPC Flow Logs to CloudWatch
 
@@ -97,15 +97,9 @@ Outstanding issues identified during architecture review (2026-01-12).
 
 ### Short backup retention (7 days)
 
-- **Location:** `infrastructure/backup.tf:46-48`
+- **Location:** `infrastructure/backup.tf` (in dmfenton/compute)
 - **Impact:** May be insufficient for compliance
 - **Fix:** Add secondary retention rule for monthly archives
-
-### No Terraform state backend
-
-- **Location:** `infrastructure/main.tf:12-16`
-- **Impact:** State stored locally, no locking
-- **Fix:** Enable S3 backend with DynamoDB locking
 
 ### No dependency scanning
 

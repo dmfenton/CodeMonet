@@ -147,7 +147,7 @@ class StructuredFormatter(logging.Formatter):
 
 ### CloudWatch Log Groups (Terraform)
 
-Created in `infrastructure/cloudwatch_logs.tf`:
+Created in [compute/infrastructure/cloudwatch_logs.tf](https://github.com/dmfenton/compute/blob/main/infrastructure/cloudwatch_logs.tf):
 
 | Log Group               | Retention | Purpose              |
 | ----------------------- | --------- | -------------------- |
@@ -165,7 +165,7 @@ Created in `infrastructure/cloudwatch_logs.tf`:
 
 ### CloudWatch Agent Config
 
-In `infrastructure/user_data.sh`, the CloudWatch agent collects:
+In [compute/infrastructure/user_data.sh](https://github.com/dmfenton/compute/blob/main/infrastructure/user_data.sh), the CloudWatch agent collects:
 
 - `/home/ec2-user/data/logs/app.log` → `/drawing-agent/app`
 - `/home/ec2-user/data/logs/error.log` → `/drawing-agent/errors`
