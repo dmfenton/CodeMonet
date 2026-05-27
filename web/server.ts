@@ -134,6 +134,38 @@ async function createServer(): Promise<void> {
     });
   });
 
+  // SEO sitemap — robots.txt already advertises this URL. Includes the
+  // static public routes plus every gallery piece we can enumerate via
+  // the same /public/gallery endpoint the homepage uses for SSR.
+  app.get('/sitemap.xml', async (_req, res) => {
+    const base = 'https://monet.dmfenton.net';
+    const pieces = await fetchGalleryPieces(200);
+    const entries = [
+      { loc: `${base}/`, changefreq: 'daily', priority: '1.0' },
+      { loc: `${base}/gallery`, changefreq: 'hourly', priority: '0.9' },
+      ...pieces.map((p) => ({
+        loc: `${base}/gallery/${p.user_id}/${p.id}`,
+        lastmod: p.created_at,
+        changefreq: 'monthly',
+        priority: '0.6',
+      })),
+    ];
+    const body =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+      entries
+        .map((e) => {
+          const lastmod = 'lastmod' in e && e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : '';
+          return `<url><loc>${e.loc}</loc>${lastmod}<changefreq>${e.changefreq}</changefreq><priority>${e.priority}</priority></url>`;
+        })
+        .join('') +
+      '</urlset>';
+    res
+      .status(200)
+      .set({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' })
+      .end(body);
+  });
+
   // SSR handler for all routes (Express 5 catch-all syntax)
   app.use(async (req, res, next) => {
     const url = req.originalUrl;
