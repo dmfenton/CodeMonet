@@ -69,6 +69,41 @@ function HomepageRoute({ initialData }: { initialData?: SSRData }): React.ReactE
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://monet.dmfenton.net/og-image.png" />
         <link rel="canonical" href="https://monet.dmfenton.net/" />
+
+        <script type="application/ld+json">
+          {JSON.stringify({
+            '@context': 'https://schema.org',
+            '@graph': [
+              {
+                '@type': 'SoftwareApplication',
+                '@id': 'https://monet.dmfenton.net/#app',
+                name: 'Code Monet',
+                applicationCategory: 'Art',
+                operatingSystem: 'Web',
+                description:
+                  'An autonomous AI artist that paints original artwork in real-time, stroke by stroke.',
+                url: 'https://monet.dmfenton.net/',
+                image: 'https://monet.dmfenton.net/og-image.png',
+                offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+              },
+              {
+                '@type': 'WebSite',
+                '@id': 'https://monet.dmfenton.net/#site',
+                url: 'https://monet.dmfenton.net/',
+                name: 'Code Monet',
+                publisher: { '@id': 'https://monet.dmfenton.net/#person' },
+                inLanguage: 'en-US',
+              },
+              {
+                '@type': 'Person',
+                '@id': 'https://monet.dmfenton.net/#person',
+                name: 'Daniel Fenton',
+                url: 'https://dmfenton.net/',
+                sameAs: ['https://github.com/dmfenton'],
+              },
+            ],
+          })}
+        </script>
       </Helmet>
       <Homepage onEnter={handleEnter} initialGalleryPieces={initialData?.galleryPieces} />
     </>
@@ -98,6 +133,27 @@ function GalleryRoute({ initialData }: { initialData?: SSRData }): React.ReactEl
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:image" content="https://monet.dmfenton.net/og-image.png" />
         <link rel="canonical" href="https://monet.dmfenton.net/gallery" />
+
+        <script type="application/ld+json">
+          {JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'CollectionPage',
+            '@id': 'https://monet.dmfenton.net/gallery#page',
+            url: 'https://monet.dmfenton.net/gallery',
+            name: 'Gallery - Code Monet',
+            description: 'Browse the gallery of original AI-generated artwork by Code Monet.',
+            isPartOf: { '@id': 'https://monet.dmfenton.net/#site' },
+            mainEntity: {
+              '@type': 'ItemList',
+              numberOfItems: initialData?.galleryPieces?.length ?? 0,
+              itemListElement: (initialData?.galleryPieces ?? []).slice(0, 20).map((p, idx) => ({
+                '@type': 'ListItem',
+                position: idx + 1,
+                url: `https://monet.dmfenton.net/gallery/${p.user_id}/${p.id}`,
+              })),
+            },
+          })}
+        </script>
       </Helmet>
       <GalleryPage initialGalleryPieces={initialData?.galleryPieces} />
     </>
