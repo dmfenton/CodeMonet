@@ -25,10 +25,10 @@ import { IdleParticles } from '../components/IdleParticles';
 import { InProgressStroke } from './InProgressStroke';
 
 /**
- * Default fallback color for strokes (dark blue-black).
+ * Default fallback color for strokes (forest ink).
  * Used as safety fallback if style.color is somehow missing.
  */
-const DEFAULT_STROKE_COLOR = '#1a1a2e';
+const DEFAULT_STROKE_COLOR = '#1f4d34';
 
 /**
  * Render a stroke with perfect-freehand outline.

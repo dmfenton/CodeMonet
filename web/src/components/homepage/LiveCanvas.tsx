@@ -126,7 +126,7 @@ export function LiveCanvas(): React.ReactElement {
       </defs>
 
       {/* Warm off-white canvas background */}
-      <rect width="400" height="300" fill="#fdfcf8" />
+      <rect width="400" height="300" fill="#fffdf8" />
 
       {showReal ? (
         realStrokes
@@ -136,7 +136,7 @@ export function LiveCanvas(): React.ReactElement {
               key={i}
               d={pathToSvgDScaled(stroke, 0.5)}
               fill="none"
-              stroke={stroke.color ?? (stroke.author === 'human' ? '#6a9fb5' : '#2c3e50')}
+              stroke={stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34')}
               strokeWidth={(stroke.stroke_width ?? 8) * 0.5}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -187,7 +187,7 @@ export function LiveCanvas(): React.ReactElement {
       {/* Live indicator - subtle sage green */}
       {showReal && (
         <g transform="translate(380, 16)">
-          <circle r="4" fill="#6b9b6b" opacity="0.8">
+          <circle r="4" fill="#5a9a70" opacity="0.8">
             <animate
               attributeName="opacity"
               values="0.8;0.4;0.8"

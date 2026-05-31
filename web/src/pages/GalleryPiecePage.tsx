@@ -97,13 +97,13 @@ export function GalleryPiecePage({
             <div className="piece-canvas-container">
               <div className="piece-frame">
                 <svg viewBox="0 0 800 800" className="piece-artwork" aria-label={title}>
-                  <rect width="800" height="800" fill="#fdfcf8" />
+                  <rect width="800" height="800" fill="#fffdf8" />
                   {strokes.map((stroke, i) => (
                     <path
                       key={i}
                       d={pathToSvgDScaled(stroke, 1)}
                       fill="none"
-                      stroke={stroke.color ?? (stroke.author === 'human' ? '#6a9fb5' : '#2c3e50')}
+                      stroke={stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34')}
                       strokeWidth={stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3)}
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -159,8 +159,8 @@ export function GalleryPiecePage({
       <style>{`
         .piece-page {
           min-height: 100vh;
-          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
-          color: #eee;
+          background: var(--bg-page);
+          color: var(--text-primary);
           padding: 2rem;
         }
 
@@ -173,13 +173,13 @@ export function GalleryPiecePage({
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
-          color: rgba(255, 255, 255, 0.7);
+          color: var(--text-muted);
           text-decoration: none;
           transition: color 0.2s;
         }
 
         .piece-back:hover {
-          color: #c4a35a;
+          color: var(--atelier-indigo);
         }
 
         .piece-back svg {
@@ -205,12 +205,12 @@ export function GalleryPiecePage({
         }
 
         .piece-frame {
-          background: linear-gradient(135deg, #3d2f1e 0%, #2a2015 100%);
+          background: var(--atelier-prussian);
           padding: 1.5rem;
           border-radius: 4px;
           box-shadow:
-            0 20px 40px rgba(0, 0, 0, 0.4),
-            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            0 20px 40px rgba(16, 46, 30, 0.18),
+            inset 0 1px 0 rgba(253, 251, 245, 0.08);
         }
 
         .piece-artwork {
@@ -226,13 +226,12 @@ export function GalleryPiecePage({
 
         .piece-info h1 {
           font-size: 2.5rem;
-          font-weight: 200;
-          letter-spacing: 0.05em;
+          font-family: var(--font-display);
+          font-weight: 500;
+          letter-spacing: 0;
           margin-bottom: 2rem;
-          background: linear-gradient(135deg, #c4a35a 0%, #d4a84b 50%, #c4a35a 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: var(--atelier-indigo);
+          font-variation-settings: 'opsz' 72, 'SOFT' 50;
         }
 
         .piece-metadata {
@@ -241,25 +240,25 @@ export function GalleryPiecePage({
           gap: 1.5rem;
           margin-bottom: 2rem;
           padding-bottom: 2rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          border-bottom: 1px solid var(--border-default);
         }
 
         .meta-item dt {
           font-size: 0.75rem;
           text-transform: uppercase;
           letter-spacing: 0.1em;
-          color: rgba(255, 255, 255, 0.5);
+          color: var(--text-muted);
           margin-bottom: 0.25rem;
         }
 
         .meta-item dd {
           font-size: 1rem;
-          color: rgba(255, 255, 255, 0.9);
+          color: var(--text-primary);
           margin: 0;
         }
 
         .piece-description {
-          color: rgba(255, 255, 255, 0.7);
+          color: var(--text-secondary);
           line-height: 1.7;
           margin-bottom: 2rem;
         }
@@ -281,7 +280,7 @@ export function GalleryPiecePage({
         }
 
         .piece-not-found p {
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--text-muted);
           margin-bottom: 1.5rem;
         }
 

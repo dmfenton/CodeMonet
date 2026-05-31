@@ -206,7 +206,7 @@
 
 .message.thinking {
   border-left: 3px solid var(--atelier-indigo);
-  background: linear-gradient(135deg, rgba(44, 62, 80, 0.06), rgba(139, 126, 168, 0.04));
+  background: linear-gradient(135deg, rgba(31, 77, 52, 0.06), rgba(106, 138, 120, 0.04));
 }
 
 .message.iteration {
@@ -226,17 +226,17 @@
   font-family: var(--font-mono);
   font-size: 13px;
   border-left: 3px solid var(--atelier-ochre);
-  background: linear-gradient(135deg, rgba(196, 163, 90, 0.08), rgba(212, 168, 75, 0.04));
+  background: linear-gradient(135deg, rgba(232, 201, 138, 0.14), rgba(31, 77, 52, 0.04));
 }
 
 .message.error {
   border-left: 3px solid var(--atelier-rose);
-  background: linear-gradient(135deg, rgba(181, 96, 110, 0.08), rgba(181, 96, 110, 0.04));
+  background: linear-gradient(135deg, rgba(155, 79, 69, 0.08), rgba(155, 79, 69, 0.04));
 }
 
 .message.piece_complete {
   border-left: 3px solid var(--atelier-sage);
-  background: linear-gradient(135deg, rgba(125, 132, 113, 0.08), rgba(125, 132, 113, 0.04));
+  background: linear-gradient(135deg, rgba(58, 122, 85, 0.08), rgba(58, 122, 85, 0.04));
 }
 
 .message .streaming-indicator {
@@ -482,7 +482,7 @@
 .action-bar input:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.15);
+  box-shadow: 0 0 0 3px rgba(31, 77, 52, 0.14);
 }
 
 .action-bar input::placeholder {
@@ -556,7 +556,7 @@
 .modal input:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.15);
+  box-shadow: 0 0 0 3px rgba(31, 77, 52, 0.14);
 }
 
 .modal-actions {
@@ -623,7 +623,7 @@
 
 .connection-dot.connected {
   background: var(--atelier-sage);
-  box-shadow: 0 0 10px rgba(125, 132, 113, 0.5);
+  box-shadow: 0 0 10px rgba(58, 122, 85, 0.45);
 }
 
 .connection-dot.connecting {
@@ -633,7 +633,7 @@
 
 .connection-dot.disconnected {
   background: var(--atelier-rose);
-  box-shadow: 0 0 10px rgba(181, 96, 110, 0.5);
+  box-shadow: 0 0 10px rgba(155, 79, 69, 0.45);
 }
 
 /* ============================================

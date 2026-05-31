@@ -121,7 +121,7 @@
   left: -5%;
   width: 50%;
   height: 50%;
-  background: radial-gradient(ellipse at center, rgba(196, 163, 90, 0.15) 0%, transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(232, 201, 138, 0.18) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
 }
@@ -357,7 +357,7 @@
 
 /* The canvas frame - like a real painting */
 .canvas-frame {
-  background: #fdfcfa;
+  background: #fffdf8;
   border-radius: 2px;
   overflow: hidden;
   position: relative;
@@ -439,7 +439,7 @@
 }
 
 .status-dot.live {
-  background: #6b9b6b;
+  background: #5a9a70;
 }
 
 /* ============================================
@@ -808,7 +808,7 @@
 }
 
 .gallery-frame {
-  background: #fdfcfa;
+  background: #fffdf8;
   border-radius: 2px;
   overflow: hidden;
   position: relative;
@@ -858,7 +858,7 @@
 
 .gallery-artwork.gallery-thumbnail {
   object-fit: contain;
-  background: #fdfcf8;
+  background: #fffdf8;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -870,7 +870,7 @@
 .gallery-showcase-image {
   aspect-ratio: 4 / 3;
   object-fit: cover;
-  background: #fdfcf8;
+  background: #fffdf8;
 }
 
 .gallery-artwork.gallery-loading {

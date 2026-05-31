@@ -28,7 +28,7 @@ const TAIL_LENGTH = 15;
 // How many new points before we commit more to the cached body
 const COMMIT_THRESHOLD = 20;
 
-const DEFAULT_STROKE_COLOR = '#1a1a2e';
+const DEFAULT_STROKE_COLOR = '#1f4d34';
 
 interface CachedBody {
   path: string;
