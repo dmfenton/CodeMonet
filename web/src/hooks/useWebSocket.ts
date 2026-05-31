@@ -125,7 +125,7 @@ export function useWebSocket({
       connect();
     }
 
-    return () => {
+    return (): void => {
       if (reconnectTimeoutRef.current) {
         window.clearTimeout(reconnectTimeoutRef.current);
       }

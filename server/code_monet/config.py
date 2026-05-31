@@ -53,8 +53,11 @@ class Settings(BaseSettings):
         env_file=("../.env", ".env"), env_file_encoding="utf-8", extra="ignore"
     )
 
-    # Required (from SSM or env)
+    # Required for the default Anthropic backend (from SSM or env)
     anthropic_api_key: str = _ssm("anthropic_api_key")
+
+    # Optional OpenAI backend. Set AGENT_PROVIDER=openai and OPENAI_API_KEY to use it.
+    openai_api_key: str = _ssm("openai_api_key")
 
     # Image generation (Nano Banana / Google Gemini)
     google_api_key: str = _ssm("google_api_key")  # Optional - enables imagine tool
@@ -92,8 +95,11 @@ class Settings(BaseSettings):
     workspace_base_dir: str = "data/agent_workspace/users"  # Per-user workspace directories
     max_agent_iterations: int = 5  # max iterations per turn
     agent_max_tokens: int = 8192  # max tokens for Claude response
+    agent_provider: str = _ssm("agent_provider", "anthropic")  # anthropic or openai
     agent_model: str = "claude-haiku-4-5-20251001"  # Haiku for dev, override in prod
     agent_model_prod: str = "claude-opus-4-5-20251101"  # Production model
+    openai_agent_model: str = "gpt-5-mini"
+    openai_agent_model_prod: str = "gpt-5"
 
     # Agent file logging
     agent_logs_enabled: bool = True  # Enable per-turn agent log files
@@ -106,15 +112,15 @@ class Settings(BaseSettings):
     # Drawing (pen plotter motion)
     drawing_fps: int = 30  # frames per second for pen updates
     stroke_delay: float = 0.2  # pause between strokes in seconds
-    path_steps_per_unit: float = 0.2  # interpolation density (lower = faster animation)
+    path_steps_per_unit: float = 0.05  # interpolation density (lower = faster animation)
     travel_speed_multiplier: float = 2.0  # travel faster than drawing (pen up movement)
     pen_settle_delay: float = 0.05  # pause after pen down before moving (servo settling)
     pen_lift_threshold: float = 2.0  # skip pen lift if next path starts within this distance
 
     # Animation wait (agent pauses while client animates)
-    client_animation_fps: int = 60  # client animation frame rate
-    animation_wait_buffer_ms: int = 500  # extra buffer for network/fetch latency
-    max_animation_wait_s: float = 30.0  # cap to prevent very long waits
+    client_animation_fps: int = 240  # client animation frame rate
+    animation_wait_buffer_ms: int = 150  # extra buffer for network/fetch latency
+    max_animation_wait_s: float = 5.0  # cap to prevent very long waits
 
     # Limits
     max_stdout_chars: int = 2000  # truncate stdout in messages

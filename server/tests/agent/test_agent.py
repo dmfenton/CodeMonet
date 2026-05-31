@@ -1,6 +1,7 @@
 """Tests for the drawing agent module."""
 
 import base64
+from importlib.metadata import version
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -8,7 +9,7 @@ import pytest
 from PIL import Image
 
 from code_monet.agent import DrawingAgent
-from code_monet.types import AgentTurnComplete, DrawingStyleType, Path, Point
+from code_monet.types import AgentTurnComplete, DrawingStyleType, Path, PathType, Point
 
 
 class TestDrawingAgentPauseResume:
@@ -195,7 +196,7 @@ class TestPostToolUseHook:
     async def test_hook_calls_on_draw_for_draw_paths(self) -> None:
         """Hook calls _on_draw when draw_paths tool completes with collected paths."""
         agent = self._create_agent_with_paths(
-            [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+            [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
         )
         on_draw_mock = AsyncMock()
         agent.set_on_draw(on_draw_mock)
@@ -213,7 +214,7 @@ class TestPostToolUseHook:
         agent = self._create_agent_with_paths(
             [
                 Path(
-                    type="cubic",
+                    type=PathType.CUBIC,
                     points=[
                         Point(x=0, y=0),
                         Point(x=50, y=50),
@@ -247,7 +248,7 @@ class TestPostToolUseHook:
     async def test_hook_skips_on_draw_when_callback_not_set(self) -> None:
         """Hook handles missing _on_draw callback gracefully."""
         agent = self._create_agent_with_paths(
-            [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+            [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
         )
         # Don't set on_draw callback
 
@@ -276,7 +277,9 @@ class TestPostToolUseHook:
         just like draw_paths and generate_svg. Without this, signatures appear
         instantly instead of being animated.
         """
-        agent = self._create_agent_with_paths([Path(type="svg", points=[], d="M 0 0 L 100 100")])
+        agent = self._create_agent_with_paths(
+            [Path(type=PathType.SVG, points=[], d="M 0 0 L 100 100")]
+        )
         on_draw_mock = AsyncMock()
         agent.set_on_draw(on_draw_mock)
 
@@ -290,7 +293,7 @@ class TestPostToolUseHook:
     async def test_hook_ignores_other_tools(self) -> None:
         """Hook does not trigger drawing for unrelated tools."""
         agent = self._create_agent_with_paths(
-            [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+            [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
         )
         on_draw_mock = AsyncMock()
         agent.set_on_draw(on_draw_mock)
@@ -306,7 +309,7 @@ class TestPostToolUseHook:
     async def test_hook_handles_empty_tool_name(self) -> None:
         """Hook handles missing/empty tool_name gracefully."""
         agent = self._create_agent_with_paths(
-            [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+            [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
         )
         on_draw_mock = AsyncMock()
         agent.set_on_draw(on_draw_mock)
@@ -331,6 +334,11 @@ class TestClaudeAgentSDKCompatibility:
         # This will raise TypeError if SDK parameters changed
         options = agent._build_options(DrawingStyleType.PLOTTER)
         assert options is not None
+
+    def test_claude_agent_sdk_has_streaming_writer_fix(self) -> None:
+        """Pin the SDK above the subprocess streaming writer regression."""
+        sdk_version = tuple(int(part) for part in version("claude-agent-sdk").split("."))
+        assert sdk_version >= (0, 2, 87)
 
     def test_build_options_with_workspace_directory(self) -> None:
         """Verify ClaudeAgentOptions accepts cwd parameter.

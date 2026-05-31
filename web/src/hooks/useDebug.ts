@@ -106,7 +106,7 @@ export function useDebug({ token }: UseDebugOptions): UseDebugReturn {
   useEffect(() => {
     refresh();
     const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
+    return (): void => clearInterval(interval);
   }, [refresh]);
 
   return {

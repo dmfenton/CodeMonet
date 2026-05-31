@@ -24,6 +24,10 @@ class TestBuildSystemPrompt:
         assert "Paint" in prompt
         assert "oil_round" in prompt
         assert "watercolor" in prompt
+        assert "mass_field" in prompt
+        assert "tapered_band" in prompt
+        assert "broken_edge" in prompt
+        assert "Painterly Intelligence" in prompt
         assert "brush" in prompt.lower()
         # Should include color references
         assert "#" in prompt or "color" in prompt.lower()

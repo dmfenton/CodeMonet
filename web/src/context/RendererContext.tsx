@@ -47,8 +47,11 @@ interface RendererProviderProps {
   initialRenderer?: RendererType;
 }
 
-export function RendererProvider({ children, initialRenderer }: RendererProviderProps) {
-  const [config, setConfigState] = useState<RendererConfig>(() => {
+export function RendererProvider({
+  children,
+  initialRenderer,
+}: RendererProviderProps): React.ReactElement {
+  const [config, setConfigState] = useState<RendererConfig>((): RendererConfig => {
     if (initialRenderer) {
       return getDefaultConfigForRenderer(initialRenderer);
     }

@@ -251,6 +251,7 @@ class WorkspaceRegistry:
         """Create and initialize a new active workspace."""
         # Lazy imports to avoid circular dependencies
         from code_monet.agent import DrawingAgent
+        from code_monet.agent.openai_agent import OpenAIDrawingAgent
         from code_monet.agent_logger import AgentFileLogger
         from code_monet.config import settings
         from code_monet.orchestrator import AgentOrchestrator
@@ -271,7 +272,15 @@ class WorkspaceRegistry:
 
         # Create per-user components
         connections = UserConnectionManager(user_id)
-        agent = DrawingAgent(state)
+        provider = settings.agent_provider.lower()
+        agent: Any
+        if provider == "openai":
+            agent = OpenAIDrawingAgent(state)
+        elif provider == "anthropic":
+            agent = DrawingAgent(state)
+        else:
+            raise ValueError(f"Unsupported AGENT_PROVIDER: {settings.agent_provider}")
+        logger.info(f"User {user_id}: agent provider={provider}")
         orchestrator = AgentOrchestrator(
             agent=agent,
             broadcaster=connections,

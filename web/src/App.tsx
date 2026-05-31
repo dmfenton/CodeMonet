@@ -93,7 +93,12 @@ function App(): React.ReactElement {
   );
 
   // Cleanup fetch on unmount
-  useEffect(() => () => fetchAbortRef.current?.abort(), []);
+  useEffect(
+    () => (): void => {
+      fetchAbortRef.current?.abort();
+    },
+    []
+  );
 
   const { status: wsStatus, send } = useWebSocket({ onMessage, token: accessToken });
 

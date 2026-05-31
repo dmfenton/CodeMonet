@@ -26,6 +26,10 @@ def _create_mock_canvas(
     return canvas
 
 
+def _luminance(pixel: tuple[int, int, int]) -> float:
+    return 0.2126 * pixel[0] + 0.7152 * pixel[1] + 0.0722 * pixel[2]
+
+
 class TestRenderCanvasToImage:
     """Tests for render_strokes with options_for_agent_view."""
 
@@ -188,3 +192,30 @@ class TestPaintModeStrokeLayering:
         assert r_two < r_one, (
             f"Two overlapping strokes should be darker than one, got {r_two} vs {r_one}"
         )
+
+    def test_broad_flat_brush_has_no_dark_outer_rail(self) -> None:
+        """Broad painterly strokes should blend at the edge instead of drawing outlines."""
+        stroke = Path(
+            type=PathType.LINE,
+            points=[Point(x=10, y=50), Point(x=90, y=50)],
+            brush="oil_flat",
+            color="#d09060",
+            stroke_width=30,
+            opacity=0.8,
+            author="agent",
+        )
+        options = RenderOptions(
+            width=100,
+            height=100,
+            drawing_style=DrawingStyleType.PAINT,
+            output_format="image",
+        )
+
+        img = render_strokes([stroke], options)
+
+        assert isinstance(img, Image.Image)
+        center = _luminance(img.getpixel((50, 50)))
+        upper_edge = _luminance(img.getpixel((50, 35)))
+        lower_edge = _luminance(img.getpixel((50, 65)))
+        assert upper_edge >= center - 8
+        assert lower_edge >= center - 8

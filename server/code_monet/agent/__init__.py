@@ -485,6 +485,7 @@ class DrawingAgent:
 
         except Exception as e:
             logger.exception("Agent turn failed")
+            self._client = None
             state.status = AgentStatus.ERROR
             await self._save_state()
 

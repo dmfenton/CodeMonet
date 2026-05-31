@@ -305,9 +305,10 @@ class TestBrushPresetValues:
             assert preset.base_width > 0
 
     def test_oil_round_has_bristles(self):
-        """Oil round should have visible bristles."""
+        """Oil round should have subtle bristles."""
         preset = BRUSH_PRESETS["oil_round"]
-        assert preset.bristle_count == 5
+        assert preset.bristle_count == 3
+        assert preset.bristle_opacity < 0.2
 
     def test_pencil_has_no_bristles(self):
         """Pencil should have no bristles."""

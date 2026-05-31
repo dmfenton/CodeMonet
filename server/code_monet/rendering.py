@@ -12,7 +12,7 @@ import io
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from code_monet.brushes import expand_brush_stroke
 from code_monet.canvas import path_to_point_list
@@ -61,11 +61,12 @@ class RenderOptions:
         drawing_style: Style config for stroke appearance
         highlight_human: Render human strokes in highlight color
         plotter_stroke_override: Override stroke color (e.g., white on dark bg)
-        expand_brushes: Expand brush strokes for paint mode visibility
+        expand_brushes: Expand legacy brush strokes into bristles
         scale_from: Source dimensions (w, h) for scaling strokes
         scale_padding: Padding when scaling
         output_format: Return type - "image" (PIL), "bytes", or "base64"
-        optimize_png: Enable PNG optimization (slower but smaller)
+    optimize_png: Enable PNG optimization (slower but smaller)
+        paint_antialias_scale: Supersampling scale for smoother paint strokes
     """
 
     width: int = 800
@@ -79,6 +80,7 @@ class RenderOptions:
     scale_padding: int = 0
     output_format: Literal["image", "bytes", "base64"] = "bytes"
     optimize_png: bool = False
+    paint_antialias_scale: int = 1
 
     def _parse_background(self) -> tuple[int, int, int, int]:
         """Parse background_color to RGBA tuple."""
@@ -118,6 +120,191 @@ def _compute_transform(options: RenderOptions) -> _ScaleTransform:
     return _ScaleTransform(scale=scale, offset_x=offset_x, offset_y=offset_y)
 
 
+def _scale_points(points: list[tuple[float, float]], scale: int) -> list[tuple[float, float]]:
+    return [(x * scale, y * scale) for x, y in points]
+
+
+def _paint_stroke_blur(path: Path, stroke_width: int) -> float:
+    match path.brush:
+        case "airbrush":
+            base = 3.2
+        case "watercolor":
+            base = 2.4
+        case "charcoal":
+            base = 0.9
+        case "oil_round":
+            base = 0.72
+        case "oil_filbert":
+            base = 0.82
+        case "oil_flat":
+            base = 1.35
+        case "dry_brush":
+            base = 0.42
+        case "palette_knife":
+            base = 0.12
+        case _:
+            base = 0.32
+    if path.brush in {"airbrush", "watercolor", "oil_flat", "oil_filbert"} and stroke_width >= 16:
+        return max(base, min(6.0, stroke_width * 0.09))
+    return base
+
+
+def _is_blending_brush(brush: str | None) -> bool:
+    return brush in {"airbrush", "watercolor", "oil_flat", "oil_filbert"}
+
+
+def _draw_paint_texture(
+    layer: Image.Image,
+    points: list[tuple[float, float]],
+    rgba: tuple[int, int, int, int],
+    stroke_width: int,
+    brush: str | None,
+) -> None:
+    """Add painterly broken color and light-catching texture to a stroke layer."""
+    if len(points) < 2 or stroke_width < 3:
+        return
+
+    draw = ImageDraw.Draw(layer)
+    blending_brush = _is_blending_brush(brush)
+    broad_mark = stroke_width >= 16
+    alpha_scale = 0.045 if blending_brush and broad_mark else 0.08 if blending_brush else 0.13
+    texture_alpha = max(2, min(24, int(rgba[3] * alpha_scale)))
+    texture_width_scale = (
+        0.07 if blending_brush and broad_mark else 0.12 if blending_brush else 0.16
+    )
+    width = max(1, int(stroke_width * texture_width_scale))
+
+    # Stable pseudo-random texture from stroke geometry, so renders are repeatable.
+    seed = int(sum((x * 17.0 + y * 31.0) for x, y in points)) & 0xFFFFFFFF
+    import random
+
+    rng = random.Random(seed)
+    pass_count = {
+        "dry_brush": 3,
+        "splatter": 6,
+        "palette_knife": 2,
+        "watercolor": 1,
+        "airbrush": 1,
+        "oil_flat": 1,
+    }.get(brush or "", 2)
+    if blending_brush and broad_mark:
+        pass_count = 0
+
+    for _ in range(pass_count):
+        jitter = (
+            stroke_width * rng.uniform(0.02, 0.10)
+            if blending_brush and broad_mark
+            else stroke_width * rng.uniform(0.06, 0.20)
+            if blending_brush
+            else stroke_width * rng.uniform(0.08, 0.28)
+        )
+        jittered = [
+            (
+                x + rng.uniform(-jitter, jitter),
+                y + rng.uniform(-jitter, jitter),
+            )
+            for x, y in points
+        ]
+        jitter_low, jitter_high = (-6, 12) if blending_brush else (-18, 24)
+        color = (
+            max(0, min(255, int(rgba[0] + rng.uniform(jitter_low, jitter_high)))),
+            max(0, min(255, int(rgba[1] + rng.uniform(jitter_low, jitter_high)))),
+            max(0, min(255, int(rgba[2] + rng.uniform(jitter_low, jitter_high)))),
+            texture_alpha,
+        )
+        if not (blending_brush and broad_mark) and len(jittered) > 3 and rng.random() < 0.7:
+            start = rng.randrange(0, len(jittered) - 2)
+            end = rng.randrange(start + 2, len(jittered) + 1)
+            jittered = jittered[start:end]
+        _draw_brush_polyline(draw, jittered, color, width, brush)
+
+    if brush in {"oil_round", "oil_filbert", "palette_knife"} and rng.random() < 0.45:
+        light = (
+            max(0, min(255, int(rgba[0] + rng.uniform(8, 28)))),
+            max(0, min(255, int(rgba[1] + rng.uniform(8, 28)))),
+            max(0, min(255, int(rgba[2] + rng.uniform(8, 28)))),
+            max(2, min(10, int(rgba[3] * 0.035))),
+        )
+        _draw_brush_polyline(
+            draw,
+            points,
+            light,
+            max(1, int(stroke_width * 0.08)),
+            brush,
+        )
+
+
+def _draw_brush_polyline(
+    draw: ImageDraw.ImageDraw,
+    points: list[tuple[float, float]],
+    fill: tuple[int, int, int, int],
+    width: int,
+    brush: str | None,
+) -> None:
+    if brush in {"oil_round", "oil_filbert", "marker", "ink"}:
+        _draw_rounded_polyline(draw, points, fill, width)
+        return
+    draw.line(points, fill=fill, width=width, joint="curve")
+
+
+def _draw_rounded_polyline(
+    draw: ImageDraw.ImageDraw,
+    points: list[tuple[float, float]],
+    fill: tuple[int, int, int, int],
+    width: int,
+) -> None:
+    if len(points) < 2:
+        return
+    draw.line(points, fill=fill, width=width, joint="curve")
+    radius = width / 2
+    for x, y in (points[0], points[-1]):
+        draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=fill)
+
+
+def _render_paint_stroke(
+    img: Image.Image,
+    path: Path,
+    points: list[tuple[float, float]],
+    rgba: tuple[int, int, int, int],
+    stroke_width: int,
+    scale: int,
+) -> Image.Image:
+    scaled_size = (img.width * scale, img.height * scale)
+    scaled_points = _scale_points(points, scale)
+    scaled_width = max(1, stroke_width * scale)
+
+    layer = Image.new("RGBA", scaled_size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    scaled_rgba = rgba
+    _draw_brush_polyline(draw, scaled_points, scaled_rgba, scaled_width, path.brush)
+    _draw_paint_texture(layer, scaled_points, scaled_rgba, scaled_width, path.brush)
+
+    blur = _paint_stroke_blur(path, stroke_width) * scale
+    if blur > 0:
+        layer = layer.filter(ImageFilter.GaussianBlur(radius=blur))
+
+    layer = layer.resize(img.size, Image.Resampling.LANCZOS)
+    return Image.alpha_composite(img, layer)
+
+
+def _render_paint_stroke_reusing_layer(
+    img: Image.Image,
+    layer: Image.Image,
+    path: Path,
+    points: list[tuple[float, float]],
+    rgba: tuple[int, int, int, int],
+    stroke_width: int,
+) -> Image.Image:
+    layer.paste((0, 0, 0, 0), (0, 0, img.width, img.height))
+    draw = ImageDraw.Draw(layer)
+    _draw_brush_polyline(draw, points, rgba, stroke_width, path.brush)
+    _draw_paint_texture(layer, points, rgba, stroke_width, path.brush)
+
+    blur = _paint_stroke_blur(path, stroke_width)
+    composited_layer = layer.filter(ImageFilter.GaussianBlur(radius=blur)) if blur > 0 else layer
+    return Image.alpha_composite(img, composited_layer)
+
+
 def render_strokes(
     strokes: list[Path],
     options: RenderOptions | None = None,
@@ -141,10 +328,8 @@ def render_strokes(
     bg_rgba = options._parse_background()
     img = Image.new("RGBA", (options.width, options.height), bg_rgba)
 
-    # In paint mode, each stroke must be composited individually so that
-    # overlapping semi-transparent strokes accumulate opacity correctly
-    # (matching SVG per-element compositing). In plotter mode (opacity=1.0),
-    # a single shared layer is fine and much faster.
+    # In paint mode, each stroke is composited individually so translucent
+    # layers accumulate like paint. Plotter mode uses one shared layer.
     per_stroke_compositing = options.drawing_style == DrawingStyleType.PAINT
 
     shared_layer = Image.new("RGBA", (options.width, options.height), (0, 0, 0, 0))
@@ -188,11 +373,25 @@ def render_strokes(
         stroke_width = max(1, int(effective_style.stroke_width * transform.scale))
 
         if per_stroke_compositing:
-            # Clear the reusable layer and draw this stroke
-            shared_layer.paste((0, 0, 0, 0), (0, 0, options.width, options.height))
-            draw = ImageDraw.Draw(shared_layer)
-            draw.line(scaled_points, fill=rgba, width=stroke_width)
-            img = Image.alpha_composite(img, shared_layer)
+            antialias_scale = max(1, options.paint_antialias_scale)
+            if path.brush is None:
+                shared_layer.paste((0, 0, 0, 0), (0, 0, options.width, options.height))
+                draw = ImageDraw.Draw(shared_layer)
+                draw.line(scaled_points, fill=rgba, width=stroke_width)
+                img = Image.alpha_composite(img, shared_layer)
+            elif antialias_scale == 1:
+                img = _render_paint_stroke_reusing_layer(
+                    img, shared_layer, path, scaled_points, rgba, stroke_width
+                )
+            else:
+                img = _render_paint_stroke(
+                    img,
+                    path,
+                    scaled_points,
+                    rgba,
+                    stroke_width,
+                    antialias_scale,
+                )
         else:
             draw.line(scaled_points, fill=rgba, width=stroke_width)
 
@@ -284,7 +483,7 @@ def options_for_agent_view(canvas: CanvasState) -> RenderOptions:
     """Options for rendering canvas for agent viewing.
 
     - Highlights human strokes
-    - Expands brush strokes so AI sees what users see
+    - Uses direct painterly stroke rendering so AI sees mass, not bristle rails
     - Returns PIL Image for direct use
     """
     return RenderOptions(
@@ -292,7 +491,7 @@ def options_for_agent_view(canvas: CanvasState) -> RenderOptions:
         height=canvas.height,
         drawing_style=canvas.drawing_style,
         highlight_human=True,
-        expand_brushes=True,
+        expand_brushes=False,
         output_format="image",
     )
 
@@ -332,6 +531,7 @@ def options_for_thumbnail(
         height=600,
         background_color="#FFFFFF",
         drawing_style=drawing_style,
+        expand_brushes=False,
     )
 
 
@@ -349,5 +549,6 @@ def options_for_share_preview(
         height=600,
         background_color="#FFFFFF",
         drawing_style=drawing_style,
+        expand_brushes=False,
         optimize_png=True,
     )

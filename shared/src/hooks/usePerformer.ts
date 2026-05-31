@@ -19,16 +19,16 @@ import { BIONIC_CHUNK_INTERVAL_MS, BIONIC_CHUNK_SIZE } from '../utils';
 const HOLD_AFTER_WORDS_MS = 267;
 
 // Stroke animation batching constants
-const MIN_POINTS_PER_FRAME = 3;
-const MAX_POINTS_PER_FRAME = 24;
-const TARGET_PIXELS_PER_SECOND = 900; // Visual speed constant for smooth animation
+const MIN_POINTS_PER_FRAME = 24;
+const MAX_POINTS_PER_FRAME = 240;
+const TARGET_PIXELS_PER_SECOND = 9000; // Fast reveal while judging completed paintings
 
 // Pen travel and easing constants
 const TRAVEL_SPEED_MULTIPLIER = 6.0; // Travel moves faster than drawing
 const PEN_LIFT_THRESHOLD = 2.0; // Skip travel for very close strokes (pixels)
-const INTER_STROKE_PAUSE_MS = 67; // Pause between strokes
-const PEN_SETTLE_DELAY_MS = 17; // Pause after pen arrives at new position
-const EASE_MIN_SPEED_RATIO = 0.3; // Minimum speed at stroke start/end (fraction of max)
+const INTER_STROKE_PAUSE_MS = 0; // Pause between strokes
+const PEN_SETTLE_DELAY_MS = 0; // Pause after pen arrives at new position
+const EASE_MIN_SPEED_RATIO = 0.75; // Minimum speed at stroke start/end (fraction of max)
 
 /** Calculate distance between two points */
 function pointDistance(a: Point, b: Point): number {
@@ -121,7 +121,7 @@ export function usePerformer({
 
   // Cleanup on unmount
   useEffect(() => {
-    return () => {
+    return (): void => {
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = null;
@@ -374,7 +374,7 @@ export function usePerformer({
 
     frameRef.current = requestAnimationFrame(animate);
 
-    return () => {
+    return (): void => {
       if (frameRef.current !== null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = null;

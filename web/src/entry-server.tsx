@@ -51,7 +51,7 @@ export interface RenderResult {
 }
 
 // Default helmet state for when context is not populated (uses toString only in SSR)
-const emptyDatum = { toString: () => '' };
+const emptyDatum = { toString: (): string => '' };
 const defaultHelmet = {
   title: emptyDatum,
   meta: emptyDatum,

@@ -16,21 +16,11 @@ from .callbacks import (
     inject_canvas_image,
 )
 
-# Signature SVG path data for "Code Monet" in elegant script
-# This is a hand-crafted cursive signature that scales to fit any corner
-_SIGNATURE_SVG = """M 0 25 C 5 10 15 5 25 15 C 35 25 20 35 30 30
-Q 35 28 40 20 L 45 25 C 50 20 55 15 60 20
-Q 65 25 60 30 C 55 35 50 30 55 25
-M 75 15 Q 80 10 85 15 C 90 20 85 30 80 30 Q 75 30 75 25 Q 75 20 80 18
-M 95 30 L 95 15 Q 100 10 105 15 Q 110 20 105 25 Q 100 30 95 30
-M 115 20 Q 120 15 125 20 Q 130 25 125 30 Q 120 35 115 30 Q 110 25 115 20
-M 145 25 L 160 25 M 152 15 L 152 35
-M 175 15 Q 185 15 185 22 Q 185 28 180 30 Q 190 35 195 32 L 200 28
-M 210 20 Q 215 15 220 20 Q 225 25 220 30 Q 215 35 210 30 Q 205 25 210 20
-M 235 30 L 235 15 C 240 10 250 15 250 22 Q 250 28 245 30 Q 250 35 250 30
-M 260 20 Q 265 15 270 20 Q 275 25 270 30 Q 265 35 260 30 Q 255 25 260 20
-M 280 15 L 280 30 Q 285 35 290 30 L 290 15
-M 300 15 L 300 30 M 300 20 L 310 30 M 305 25 L 310 15"""
+# Tiny "CM" monogram. The previous long cursive signature competed with the painting.
+_SIGNATURE_SVG = """M 34 13 C 25 3 8 8 6 25 C 4 42 24 48 36 36
+M 50 43 L 50 9 L 66 34 L 82 9 L 82 43"""
+_SIGNATURE_WIDTH = 88.0
+_SIGNATURE_HEIGHT = 50.0
 
 
 def _transform_svg_path(d: str, scale: float, offset_x: float, offset_y: float) -> str:
@@ -94,13 +84,12 @@ def _generate_signature_paths(
     Returns:
         List of Path objects for the signature
     """
-    # Size scales
-    scales = {"small": 0.4, "medium": 0.6, "large": 0.8}
-    scale = scales.get(size, 0.6)
+    # Size scales. Even "large" stays modest; signatures should not become the subject.
+    scales = {"small": 0.55, "medium": 0.75, "large": 1.0}
+    scale = scales.get(size, 0.55)
 
-    # The signature SVG is about 310 units wide x 40 units tall
-    sig_width = 310 * scale
-    sig_height = 40 * scale
+    sig_width = _SIGNATURE_WIDTH * scale
+    sig_height = _SIGNATURE_HEIGHT * scale
 
     # Position calculations using canvas dimensions from globals
     margin = 20.0
@@ -139,9 +128,9 @@ def _generate_signature_paths(
             type=PathType.SVG,
             points=[],
             d=transformed,
-            color=color,
-            stroke_width=1.5 * scale,
-            opacity=0.85,
+            color=color or "#3f3448",
+            stroke_width=1.8 * scale,
+            opacity=0.38,
         )
         paths.append(path)
 
@@ -151,7 +140,7 @@ def _generate_signature_paths(
 async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     """Handle sign_canvas tool call.
 
-    Adds a theatrical "Code Monet" signature to the canvas.
+    Adds a small "CM" monogram to the canvas.
 
     Args:
         args: Dictionary with optional 'position', 'size', and 'color'
@@ -160,7 +149,7 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
         Tool result with confirmation and canvas image
     """
     position = args.get("position", "bottom_right")
-    size = args.get("size", "medium")
+    size = args.get("size", "small")
     color = args.get("color")
 
     # Validate position
@@ -171,7 +160,7 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     # Validate size
     valid_sizes = ["small", "medium", "large"]
     if size not in valid_sizes:
-        size = "medium"
+        size = "small"
 
     # Generate signature paths
     signature_paths = _generate_signature_paths(position, size, color)
@@ -196,8 +185,7 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     content: list[dict[str, Any]] = [
         {
             "type": "text",
-            "text": f"✒️ Signed the canvas with 'Code Monet' at {position.replace('_', ' ')} ({size} size). "
-            "The signature adds a theatrical flourish to mark this as your work.",
+            "text": f"Signed the canvas with a small CM monogram at {position.replace('_', ' ')} ({size} size).",
         }
     ]
 
@@ -209,13 +197,11 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "sign_canvas",
-    """Add your artistic signature "Code Monet" to the canvas.
+    """Add a small, subtle CM monogram to the canvas.
 
 Call this tool when you're satisfied with the piece, just before marking it done.
-The signature is a theatrical flourish that identifies the work as yours.
-
-The signature is rendered in an elegant cursive script style, positioned to
-complement the composition without overwhelming it.
+The signature must stay small and quiet. It identifies the work without
+competing with the composition.
 
 Position options:
 - bottom_right (default): Traditional artist signature placement
@@ -223,8 +209,8 @@ Position options:
 - bottom_center: Centered signature for symmetrical pieces
 
 Size options:
-- small: Subtle, unobtrusive (good for detailed work)
-- medium (default): Balanced presence
+- small (default): Subtle, unobtrusive (best for painterly work)
+- medium: Balanced presence
 - large: Bold statement (good for minimal compositions)""",
     {
         "type": "object",
@@ -239,7 +225,7 @@ Size options:
                 "type": "string",
                 "enum": ["small", "medium", "large"],
                 "description": "Size of the signature",
-                "default": "medium",
+                "default": "small",
             },
             "color": {
                 "type": "string",

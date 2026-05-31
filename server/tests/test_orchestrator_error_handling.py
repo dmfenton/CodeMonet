@@ -11,7 +11,7 @@ from code_monet.types import AgentStatus, PauseReason
 
 
 @pytest.fixture
-def mock_agent():
+def mock_agent() -> MagicMock:
     """Create a mock agent."""
     agent = MagicMock()
     agent.paused = False
@@ -24,7 +24,7 @@ def mock_agent():
 
 
 @pytest.fixture
-def mock_broadcaster():
+def mock_broadcaster() -> MagicMock:
     """Create a mock broadcaster with an active connection."""
     broadcaster = MagicMock()
     broadcaster.active_connections = [MagicMock()]
@@ -33,7 +33,7 @@ def mock_broadcaster():
 
 
 @pytest.fixture
-def orchestrator(mock_agent, mock_broadcaster):
+def orchestrator(mock_agent: MagicMock, mock_broadcaster: MagicMock) -> AgentOrchestrator:
     """Create an orchestrator with mocks."""
     return AgentOrchestrator(
         agent=mock_agent,
@@ -56,7 +56,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_credit_balance_error_pauses_agent(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Credit balance errors should auto-pause the agent."""
         with patch.object(
@@ -75,7 +75,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_authentication_error_pauses_agent(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Authentication errors should auto-pause the agent."""
         with patch.object(
@@ -90,7 +90,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_invalid_api_key_pauses_agent(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Invalid API key errors should auto-pause the agent."""
         with patch.object(
@@ -105,7 +105,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_quota_error_pauses_agent(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Quota errors should auto-pause the agent."""
         with patch.object(
@@ -120,7 +120,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_unrecoverable_error_broadcasts_paused(
-        self, orchestrator: AgentOrchestrator, mock_broadcaster
+        self, orchestrator: AgentOrchestrator, mock_broadcaster: MagicMock
     ) -> None:
         """Unrecoverable errors should broadcast paused=True to clients."""
         with patch.object(
@@ -139,7 +139,7 @@ class TestUnrecoverableErrorPause:
 
     @pytest.mark.asyncio
     async def test_case_insensitive_matching(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Error matching should be case-insensitive."""
         with patch.object(
@@ -158,7 +158,7 @@ class TestTransientErrorHandling:
 
     @pytest.mark.asyncio
     async def test_transient_error_clears_wake_event(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Transient errors should clear the wake event to prevent immediate retry."""
         with patch.object(
@@ -174,7 +174,7 @@ class TestTransientErrorHandling:
 
     @pytest.mark.asyncio
     async def test_transient_error_does_not_change_state(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """Transient errors should not modify agent state or pause reason."""
         state = mock_agent.get_state()

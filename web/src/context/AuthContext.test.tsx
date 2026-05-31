@@ -33,7 +33,7 @@ describe('AuthContext', () => {
   });
 
   describe('AuthProvider', () => {
-    const wrapper = ({ children }: { children: React.ReactNode }) => (
+    const wrapper = ({ children }: { children: React.ReactNode }): React.ReactElement => (
       <AuthProvider>{children}</AuthProvider>
     );
 
@@ -61,7 +61,7 @@ describe('AuthContext', () => {
 
       expect(result.current.isAuthenticated).toBe(true);
       expect(result.current.user?.email).toBe('test@example.com');
-      expect(result.current.user?.id).toBe(1);
+      expect(result.current.user?.id).toBe('1');
     });
 
     it('treats expired token as invalid', async () => {

@@ -165,7 +165,7 @@ class TestStructuredFormatter:
         self, formatter: StructuredFormatter, log_record: logging.LogRecord
     ) -> None:
         """Test that user_id is included when present."""
-        log_record.user_id = 42  # type: ignore[attr-defined]
+        log_record.user_id = 42
         output = formatter.format(log_record)
         data = json.loads(output)
         assert data["user_id"] == 42
@@ -174,7 +174,7 @@ class TestStructuredFormatter:
         self, formatter: StructuredFormatter, log_record: logging.LogRecord
     ) -> None:
         """Test that user_id is not included when None."""
-        log_record.user_id = None  # type: ignore[attr-defined]
+        log_record.user_id = None
         output = formatter.format(log_record)
         data = json.loads(output)
         assert "user_id" not in data
@@ -191,8 +191,8 @@ class TestStructuredFormatter:
         self, formatter: StructuredFormatter, log_record: logging.LogRecord
     ) -> None:
         """Test that serializable extra fields are included."""
-        log_record.email = "user@example.com"  # type: ignore[attr-defined]
-        log_record.method = "magic_link"  # type: ignore[attr-defined]
+        log_record.email = "user@example.com"
+        log_record.method = "magic_link"
         output = formatter.format(log_record)
         data = json.loads(output)
         assert "extra" in data
@@ -203,7 +203,7 @@ class TestStructuredFormatter:
         self, formatter: StructuredFormatter, log_record: logging.LogRecord
     ) -> None:
         """Test that non-serializable extra fields are converted to string."""
-        log_record.custom_obj = object()  # type: ignore[attr-defined]
+        log_record.custom_obj = object()
         output = formatter.format(log_record)
         data = json.loads(output)
         assert "extra" in data
@@ -280,7 +280,7 @@ class TestStructuredFormatter:
         self, formatter: StructuredFormatter, log_record: logging.LogRecord
     ) -> None:
         """Test that trace_id from record takes precedence."""
-        log_record.trace_id = "custom-trace-id"  # type: ignore[attr-defined]
+        log_record.trace_id = "custom-trace-id"
         output = formatter.format(log_record)
         data = json.loads(output)
         assert data["trace_id"] == "custom-trace-id"

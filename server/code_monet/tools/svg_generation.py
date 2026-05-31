@@ -67,6 +67,8 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
     if paths and _add_strokes_callback is not None:
         await _add_strokes_callback(paths)
         response_parts.append(f"Successfully generated and drew {len(paths)} paths.")
+    elif paths:
+        response_parts.append(f"Code executed and generated {len(paths)} paths.")
     elif not paths:
         response_parts.append(
             "Code executed but no paths were generated. "
@@ -109,6 +111,18 @@ The code has access to:
 - BRUSHES: list of available brush names for Paint mode
 - Helper functions (all accept optional brush, color, stroke_width, opacity kwargs for Paint mode):
   - line(x1, y1, x2, y2, brush=None, color=None, stroke_width=None, opacity=None) -> path dict
+  - dab(x, y, length, angle, brush="oil_filbert", color=None, stroke_width=None, opacity=None) -> centered short brush mark
+  - stroke_field(count, x_range=None, y_range=None, angle=0, angle_jitter=0.2, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, exclude_polygons=None) -> list of atmospheric or textural marks; use exclude_polygons to reserve silhouettes
+  - ramp_field(count, x_range=None, y_range=None, axis="y", stops=None, angle=0, angle_jitter=0.16, length_range=None, width_range=None, brushes=None, opacity_range=None, exclude_polygons=None, wash_rows=None, texture_ratio=1.0) -> list of directional color-ramp marks
+  - curve_marks(points, count=48, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, jitter=5) -> list of marks along a skeleton
+  - mass_field(vertices, count=180, colors=None, stops=None, axis="y", angle=0, angle_jitter=0.28, length_range=None, width_range=None, brushes=None, opacity_range=None, wash_rows=None, edge=False, texture_ratio=1.0) -> list of marks filling a closed value mass
+  - curve_band(top_points, bottom_points=None, bottom_y=None, count=180, colors=None, stops=None, axis="depth", brushes=None, length_range=None, width_range=None, opacity_range=None, angle_jitter=0.28, edge=True, wash_rows=None, texture_ratio=1.0) -> list of marks filling a curved band
+  - tapered_band(center_points, widths, count=150, colors=None, stops=None, axis="y", flow="horizontal", brushes=None, length_range=None, width_range=None, opacity_range=None, angle_jitter=0.18, wash_rows=None, edge=False, texture_ratio=1.0) -> list of marks filling a tapered ribbon around a centerline
+  - broken_edge(points, count=64, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None, spread=6, side=0, angle_jitter=0.32) -> list of feathered edge marks
+  - fill_polygon(vertices, count=120, angle=0, angle_jitter=0.35, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, edge=True) -> list of marks filling a polygon
+  - glow_field(cx, cy, radius, count=140, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None, elliptical_y=0.72, exclude_polygons=None, core_marks=None) -> list of soft radial light or atmosphere marks
+  - reflection_field(cx, y, width, height, count=72, angle=0, colors=None, brushes=None, opacity_range=None) -> list of tapering reflected marks
+  - radial_cluster(cx, cy, count=160, rx=80, ry=60, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None) -> list of organic clustered marks
   - polyline(*points, brush=None, color=None, stroke_width=None, opacity=None) -> path dict (points are (x,y) tuples)
   - quadratic(x1, y1, cx, cy, x2, y2, brush=None, color=None, stroke_width=None, opacity=None) -> path dict
   - cubic(x1, y1, cx1, cy1, cx2, cy2, x2, y2, brush=None, color=None, stroke_width=None, opacity=None) -> path dict

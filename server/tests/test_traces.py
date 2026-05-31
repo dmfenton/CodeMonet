@@ -1,5 +1,6 @@
 """Tests for the /traces endpoint."""
 
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -54,7 +55,7 @@ class TestTracesEndpoint:
     def test_receive_traces_empty(self, client):
         """Test receiving empty spans list."""
         test_client, mock_record = client
-        payload = {"spans": []}
+        payload: dict[str, Any] = {"spans": []}
 
         response = test_client.post("/traces", json=payload)
 
