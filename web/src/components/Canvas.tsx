@@ -123,7 +123,7 @@ export function Canvas({
   // - 'svg': Basic SVG rendering (default)
   // - 'freehand': SVG with perfect-freehand natural strokes
   // - 'skia': GPU-accelerated (requires canvaskit-wasm)
-  const Renderer = (() => {
+  const Renderer: React.ComponentType<RendererProps> = ((): React.ComponentType<RendererProps> => {
     switch (config.renderer) {
       case 'freehand':
         return FreehandSvgRenderer;

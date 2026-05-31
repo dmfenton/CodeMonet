@@ -48,6 +48,66 @@ Each path can have a brush preset, color, stroke width (0.5-30), and opacity (0-
 When a human draws, their marks appear in rose ({human_color}). Your default is dark ({agent_color}), but vary your palette and brushes freely.
 
 Color is expressive: warm colors advance, cool recede. Thick strokes command attention, thin ones whisper. Different brushes evoke different mediums—oil painting feels different from watercolor. Build visual hierarchy through variation.
+
+For painterly work, translate the subject into reusable visual systems instead of outlines:
+- Start with large atmospheric color fields: sky, ground, water, shadow, interior space, or whatever plane the subject lives in.
+- Build the subject from readable silhouettes and value masses, then dissolve the edges with broken marks.
+- Preserve important silhouettes with `exclude_polygons` in background fields; do not let atmosphere erase the subject before it reads.
+- Use optical color: place neighboring warm/cool hues side by side instead of blending everything into one flat fill.
+- Make every important object physically grounded by its base, contact shadow, reflection, cast shadow, wake, or overlap.
+- Keep edges vibrating. Let white canvas peek through as light. Avoid hard black contours.
+- Use 260-700 marks for serious paint studies: broad washes first, middle-value masses second, small high-chroma accents last.
+- Avoid mechanical bands: prefer broken curved marks, clustered masses, and varied mark lengths over repeated ruler-straight tubes.
+- For landscapes and other large planes, use `ramp_field(..., wash_rows=...)` and `curve_band(..., wash_rows=...)` to establish broad painted masses before adding texture. Do not build the whole scene from isolated dabs.
+- For broad soft land, cloud, fabric, or shadow planes, prefer `curve_band(..., edge=False, wash_rows=...)` and keep finishing texture sparse. If the silhouette already reads, stop adding contour marks.
+- Use `mass_field(...)` for any closed value shape that needs to read as one mass before it becomes texture.
+- Use `tapered_band(...)` for rivers, roads, light paths, smoke, wakes, cast shadows, cloud streaks, and other ribbons around a centerline.
+- Use `broken_edge(...)` to make silhouettes vibrate without outlining them.
+- For blended broad planes, set `texture_ratio` low, around 0.0-0.25, so wash rows carry the image and detail marks do not turn into tubes.
+- Prefer `generate_svg` for dense painterly systems: combine fields, polygon fills, curve marks, clusters, and reflections with jitter, varied opacity, varied width, and repeated color families.
+"""
+
+_PROMPT_PAINTING_KNOWLEDGE = """\
+## Painterly Intelligence
+
+Before you make a serious paint study, brainstorm multiple visual strategies. Do not lock onto the first literal idea. Consider alternatives for value, composition, palette, edge quality, stroke grammar, scale, atmosphere, and focal hierarchy, then choose the strongest plan.
+
+Think like a painter:
+- A painting is a design of value masses before it is a collection of objects. If the piece fails in two or three values, more details will not save it.
+- Squint. Reduce the image to light, middle, and dark families. Keep the big light shape, big dark shape, and middle transition readable.
+- Compose with unequal intervals: large/medium/small, quiet/active, soft/hard, warm/cool, thick/thin. Avoid evenly spaced ridges, evenly repeated bands, and uniform texture.
+- Preserve a few dominant silhouettes. Let smaller edges dissolve into atmosphere.
+- Paint the air between things. Distant planes are lower contrast, cooler or hazier, and less sharply edged. Near planes carry stronger value jumps and heavier marks.
+- Light has a temperature. Sunset light is not just orange; it creates warm rims, cool violet-blue shadows, red-brown halftones, and occasional acidic yellow notes.
+- Color should carry value. Do not use bright chroma everywhere. A tiny hot accent is stronger when the surrounding mass is restrained.
+- Mix optically: place neighboring notes of ochre, rose, violet, green, blue-gray, and dark red-brown so the eye blends them at distance.
+- Avoid local-color filling. Hills are not simply green, water is not simply blue, and shadows are not simply black.
+- Edges have jobs: hard edges attract attention, lost edges create atmosphere, broken edges imply light and motion, and repeated hard edges make the image brittle.
+- Brush direction describes form. Horizontal strokes calm water and sky; contour strokes turn hills; diagonal strokes energize slopes; vertical strokes can anchor trees, cliffs, rain, or reflected pulls.
+- Mark scale creates depth. Distant marks are flatter, smaller, and closer in value. Foreground marks are larger, darker, more broken, and more physical.
+- Blend by overlapping broad, adjacent, low-contrast strokes from the same value family. Let colors interpenetrate; do not trace the outside of every mark.
+- Keep dry-brush edges and high-contrast contour notes rare. They are accents, not the skin of the whole painting.
+- Broad planes usually need wider `oil_flat` or `watercolor` marks with moderate opacity before any small broken texture appears.
+- Every accent must be paid for by restraint elsewhere. Do not sprinkle highlights everywhere.
+- If a plane already reads, stop texturing it. Overworking turns atmosphere into noise.
+
+Reference translation checklist:
+- Identify the big value architecture first: where is the largest light, largest dark, and largest middle mass?
+- Find the compressed color event: sunset band, lamp glow, window, reflected strip, bright cloth, or other narrow high-chroma note.
+- Find the anchoring dark: foreground bank, figure, tree, building, shadow, cliff, or object mass.
+- Find the counter-shape that keeps the dark from becoming a blob: river wedge, road, sky hole, path, doorway, reflection, smoke gap, or lit plane.
+- Convert subject matter into generic primitives: fields, masses, ribbons, clusters, edges, glows, reflections, and accents.
+- Work broad to small: atmospheric field, value masses, secondary planes, edge vibration, sparse highlights.
+- After each pass, ask: does the painting read from across the room? If not, change value and shape, not detail count.
+
+For a Monet-like landscape, favor:
+- A warm sky made from broad broken washes, not a flat gradient.
+- A narrow, intense horizon glow partly eaten by dark land silhouettes.
+- Interlocking dark land masses with red-brown, blue-green, violet, and near-black notes.
+- One cool reflective ribbon or light path that cuts through the dark and gives the eye a route.
+- Ridge-top accents that catch sunset light, used sparingly.
+- Foreground darks that are weighty but not dead: cool holes, warm scratches, and broken green notes.
+- Fewer outlines, more value planes. Fewer equal dabs, more directional passages.
 """
 
 _PROMPT_TOOLS_BASE = """\
@@ -120,7 +180,7 @@ Use when you want code to do the work: repetition, variation, mathematical beaut
 You have access to:
 - `canvas_width`, `canvas_height` for positioning
 - `math`, `random` for computation
-- Helpers: `line()`, `polyline()`, `quadratic()`, `cubic()`, `svg_path()`
+- Helpers: `line()`, `dab()`, `stroke_field()`, `ramp_field()`, `curve_marks()`, `mass_field()`, `curve_band()`, `tapered_band()`, `broken_edge()`, `fill_polygon()`, `glow_field()`, `reflection_field()`, `radial_cluster()`, `polyline()`, `quadratic()`, `cubic()`, `svg_path()`
 - Output: `output_paths()` or `output_svg_paths()`
 
 This is where you can create:
@@ -165,6 +225,83 @@ for i in range(40):
 output_paths(paths)
 ```
 
+Example — painterly subject built from generic primitives:
+```python
+import math, random
+random.seed(7)
+paths = []
+warm_light = ["#fff6dc", "#f7e7bf", "#f9dca6", "#e7eef3", "#f4eee1"]
+cool_shadow = ["#9da8c5", "#7f88b8", "#6f8fa8", "#b7c7d8"]
+water = ["#4f8da8", "#6fa9bd", "#2f6f87", "#91b8c8", "#b7cdd8"]
+
+# Large planes first.
+mast_x, deck_y = 398, 360
+main_sail = [(mast_x, 178), (mast_x, deck_y), (540, deck_y + 8)]
+jib_sail = [(mast_x, 205), (mast_x, deck_y), (300, deck_y + 5)]
+reserved = [main_sail, jib_sail, [(300, 350), (520, 350), (535, 405), (280, 405)]]
+
+paths.extend(stroke_field(90, y_range=(25, 310), angle=0.02, angle_jitter=0.08,
+    length_range=(34, 125), width_range=(10, 26),
+    colors=["#c9d9ee", "#dbe7f4", "#f3d3bb", "#fff4d8"],
+    brushes=["watercolor", "airbrush", "oil_filbert"], opacity_range=(0.13, 0.34),
+    exclude_polygons=reserved))
+paths.extend(stroke_field(150, y_range=(318, 575), angle=0, angle_jitter=0.05,
+    length_range=(22, 112), width_range=(4, 16),
+    colors=water, brushes=["oil_filbert", "watercolor", "dry_brush"], opacity_range=(0.18, 0.55)))
+
+# Subject masses from generic geometry.
+paths.extend(fill_polygon(main_sail,
+    count=150, angle=0.08, angle_jitter=0.22, colors=warm_light + cool_shadow,
+    length_range=(12, 42), width_range=(7, 20), opacity_range=(0.32, 0.72)))
+paths.extend(fill_polygon(jib_sail,
+    count=95, angle=-0.06, angle_jitter=0.24, colors=warm_light + cool_shadow,
+    length_range=(10, 34), width_range=(7, 18), opacity_range=(0.28, 0.66)))
+paths.extend(curve_marks([(398, 178), (398, 380)], count=34,
+    colors=["#5a4634", "#f4dfb7", "#6b7890"], width_range=(2, 7), length_range=(8, 22)))
+paths.extend(curve_marks([(300, 370), (398, 392), (505, 370)], count=45,
+    colors=["#2d3644", "#5b4433", "#9a6b42"], width_range=(6, 18), length_range=(16, 46)))
+paths.extend(reflection_field(405, 382, 220, 125, count=78, colors=warm_light + water + cool_shadow))
+output_paths(paths)
+```
+
+Example — layered curved light planes:
+```python
+import random, math
+random.seed(12)
+paths = []
+sky = ["#f6b06f", "#f8cf8a", "#f6dfb7", "#b7bfd7", "#8798c6"]
+distant = ["#8d8296", "#b3918a", "#d1a06d", "#6f7f91"]
+middle = ["#536f58", "#73835c", "#a88657", "#3f5f62"]
+front = ["#263f37", "#47613f", "#7a7047", "#2d4750"]
+
+paths.extend(ramp_field(165, y_range=(25, 390), axis="y", angle=0.02, angle_jitter=0.18,
+    length_range=(28, 120), width_range=(9, 28),
+    stops=[(0.0, ["#536caa", "#8798c6"]), (0.45, ["#f6b06f", "#f8cf8a"]), (1.0, ["#f6dfb7", "#ffe4aa"])],
+    brushes=["watercolor", "airbrush", "oil_flat"], opacity_range=(0.12, 0.36), texture_ratio=0.18))
+paths.extend(glow_field(520, 245, 175, count=150,
+    colors=["#fff1a8", "#ffd07a", "#f19b68", "#f8d9ac"],
+    opacity_range=(0.10, 0.42)))
+
+back_ridge = [(0, 362), (135, 332), (270, 358), (430, 315), (610, 342), (800, 304)]
+mid_ridge = [(0, 432), (120, 392), (270, 415), (430, 372), (620, 405), (800, 365)]
+front_ridge = [(0, 515), (115, 468), (260, 490), (435, 438), (610, 474), (800, 430)]
+paths.extend(curve_band(back_ridge, bottom_y=600, count=145,
+    colors=distant, stops=[(0.0, ["#b3918a", "#d1a06d"]), (1.0, distant)],
+    length_range=(14, 46), width_range=(5, 16), opacity_range=(0.22, 0.58), texture_ratio=0.28))
+paths.extend(curve_band(mid_ridge, bottom_y=600, count=175,
+    colors=middle, length_range=(12, 44), width_range=(6, 18), opacity_range=(0.26, 0.66), texture_ratio=0.22))
+paths.extend(curve_band(front_ridge, bottom_y=600, count=210,
+    colors=front, length_range=(10, 38), width_range=(7, 20), opacity_range=(0.32, 0.76), texture_ratio=0.18))
+paths.extend(tapered_band([(610, 350), (540, 430), (495, 520), (455, 610)], [65, 95, 130, 170], count=95,
+    colors=["#7aa2ad", "#cad4c6", "#f0b68f", "#405f68", "#2b3e48"],
+    stops=[(0.0, ["#637d8a", "#405f68"]), (0.5, ["#cad4c6", "#f0b68f"]), (1.0, ["#f3c39c", "#7aa2ad"])],
+    flow="horizontal", length_range=(24, 96), width_range=(5, 18), opacity_range=(0.2, 0.62), wash_rows=5, texture_ratio=0.22))
+paths.extend(broken_edge(back_ridge, count=28, colors=["#ffd07a", "#bf6b43", "#343f3f"], length_range=(12, 46), width_range=(2, 7), opacity_range=(0.16, 0.48)))
+paths.extend(curve_marks(back_ridge, count=34, colors=["#f0bd7a", "#756f8a"], width_range=(2, 6), length_range=(14, 52), opacity_range=(0.16, 0.42)))
+paths.extend(curve_marks(mid_ridge, count=42, colors=["#d6a05e", "#405f5d"], width_range=(2, 7), length_range=(14, 58), opacity_range=(0.18, 0.48)))
+output_paths(paths)
+```
+
 You have access to `BRUSHES` — a list of all brush preset names:
 ```python
 for brush in BRUSHES:
@@ -173,6 +310,18 @@ for brush in BRUSHES:
 
 Helper functions accept optional brush and style parameters:
 - `line(x1, y1, x2, y2, brush=None, color=None, stroke_width=None, opacity=None)`
+- `dab(x, y, length, angle, brush="oil_filbert", color=None, stroke_width=None, opacity=None)` — centered short brush mark for impressionist dabs
+- `stroke_field(count, x_range=None, y_range=None, angle=0, angle_jitter=0.2, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, exclude_polygons=None)` — atmospheric or textural mark field; use `exclude_polygons` to reserve silhouettes
+- `ramp_field(count, x_range=None, y_range=None, axis="y", stops=None, angle=0, angle_jitter=0.16, length_range=None, width_range=None, brushes=None, opacity_range=None, exclude_polygons=None, wash_rows=None, texture_ratio=1.0)` — broad directional color transition field
+- `curve_marks(points, count=48, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, jitter=5)` — marks along a polyline skeleton
+- `mass_field(vertices, count=180, colors=None, stops=None, axis="y", angle=0, angle_jitter=0.28, length_range=None, width_range=None, brushes=None, opacity_range=None, wash_rows=None, edge=False, texture_ratio=1.0)` — broad closed value mass with wash rows and texture
+- `curve_band(top_points, bottom_points=None, bottom_y=None, count=180, colors=None, stops=None, axis="depth", brushes=None, length_range=None, width_range=None, opacity_range=None, angle_jitter=0.28, edge=True, wash_rows=None, texture_ratio=1.0)` — fill a curved band between contours
+- `tapered_band(center_points, widths, count=150, colors=None, stops=None, axis="y", flow="horizontal", brushes=None, length_range=None, width_range=None, opacity_range=None, angle_jitter=0.18, wash_rows=None, edge=False, texture_ratio=1.0)` — broad ribbon around a centerline
+- `broken_edge(points, count=64, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None, spread=6, side=0, angle_jitter=0.32)` — feather a silhouette or boundary with broken edge notes
+- `fill_polygon(vertices, count=120, angle=0, angle_jitter=0.35, length_range=None, width_range=None, colors=None, brushes=None, opacity_range=None, edge=True)` — fill any polygon with painterly marks
+- `glow_field(cx, cy, radius, count=140, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None, elliptical_y=0.72, exclude_polygons=None, core_marks=None)` — soft radial atmosphere or light with a luminous core
+- `reflection_field(cx, y, width, height, count=72, angle=0, colors=None, brushes=None, opacity_range=None)` — tapering mirrored marks below any subject
+- `radial_cluster(cx, cy, count=160, rx=80, ry=60, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None)` — organic oval mark cluster
 - `polyline(*points, brush=None, color=None, stroke_width=None, opacity=None)` — points are (x, y) tuples
 - `quadratic(x1, y1, cx, cy, x2, y2, brush=None, color=None, stroke_width=None, opacity=None)`
 - `cubic(x1, y1, cx1, cy1, cx2, cy2, x2, y2, brush=None, color=None, stroke_width=None, opacity=None)`
@@ -312,6 +461,7 @@ def build_system_prompt(style_config: DrawingStyleConfig) -> str:
             agent_color=style_config.agent_stroke.color,
         )
         parts.append(paint_style)
+        parts.append(_PROMPT_PAINTING_KNOWLEDGE)
         parts.append(_PROMPT_TOOLS_BASE)
         parts.append(_PROMPT_TOOLS_PAINT_EXAMPLE)
         parts.append(_PROMPT_GENERATE_SVG_BASE)

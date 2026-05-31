@@ -74,7 +74,7 @@ beforeEach(() => {
   rafId = 0;
   currentTime = 0;
 
-  global.requestAnimationFrame = jest.fn(mockRequestAnimationFrame) as unknown as typeof requestAnimationFrame;
+  global.requestAnimationFrame = jest.fn(mockRequestAnimationFrame);
   global.cancelAnimationFrame = jest.fn(mockCancelAnimationFrame);
 });
 

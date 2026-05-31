@@ -6,10 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from code_monet.orchestrator import AgentOrchestrator
+from code_monet.types import Path, PathType, Point
 
 
 @pytest.fixture
-def mock_agent():
+def mock_agent() -> MagicMock:
     """Create a mock agent."""
     agent = MagicMock()
     agent.paused = True
@@ -22,7 +23,7 @@ def mock_agent():
 
 
 @pytest.fixture
-def mock_broadcaster():
+def mock_broadcaster() -> MagicMock:
     """Create a mock broadcaster."""
     broadcaster = MagicMock()
     broadcaster.active_connections = []
@@ -31,7 +32,7 @@ def mock_broadcaster():
 
 
 @pytest.fixture
-def orchestrator(mock_agent, mock_broadcaster):
+def orchestrator(mock_agent: MagicMock, mock_broadcaster: MagicMock) -> AgentOrchestrator:
     """Create an orchestrator with mocks."""
     return AgentOrchestrator(
         agent=mock_agent,
@@ -60,13 +61,13 @@ class TestOrchestratorWake:
 
     @pytest.mark.asyncio
     async def test_run_loop_waits_for_wake(
-        self, orchestrator: AgentOrchestrator, mock_broadcaster
+        self, orchestrator: AgentOrchestrator, mock_broadcaster: MagicMock
     ) -> None:
         """run_loop should wait for wake event."""
         mock_broadcaster.active_connections = []  # No connections
         woke_up = asyncio.Event()
 
-        async def run_loop_briefly():
+        async def run_loop_briefly() -> None:
             # Run one iteration of the loop
             try:
                 await asyncio.wait_for(
@@ -100,7 +101,7 @@ class TestOrchestratorWake:
 
     @pytest.mark.asyncio
     async def test_run_loop_skips_when_no_connections(
-        self, orchestrator: AgentOrchestrator, mock_agent, mock_broadcaster
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock, mock_broadcaster: MagicMock
     ) -> None:
         """Should not run turn when no connections."""
         mock_broadcaster.active_connections = []
@@ -123,7 +124,7 @@ class TestOrchestratorWake:
 
     @pytest.mark.asyncio
     async def test_run_loop_skips_when_paused(
-        self, orchestrator: AgentOrchestrator, mock_agent, mock_broadcaster
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock, mock_broadcaster: MagicMock
     ) -> None:
         """Should not run turn when agent is paused."""
         mock_broadcaster.active_connections = [MagicMock()]  # Has connections
@@ -145,38 +146,34 @@ class TestDrawPathsAnimationWait:
 
     @pytest.mark.asyncio
     async def test_draw_paths_waits_for_animation(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """_draw_paths should wait for estimated animation time."""
         import time
 
-        from code_monet.types import Path, Point
-
         # Mock state.queue_strokes to return known values
         mock_state = MagicMock()
-        # 30 points at 60fps = 0.5s + 0.5s buffer = 1.0s
+        # 30 points at 240fps = 0.125s + 0.15s buffer = 0.275s
         mock_state.queue_strokes = AsyncMock(return_value=(1, 30))
         mock_agent.get_state.return_value = mock_state
 
-        paths = [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+        paths = [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
 
         start = time.monotonic()
         await orchestrator._draw_paths(paths)
         elapsed = time.monotonic() - start
 
-        # Should wait approximately 1.0s (30 points / 60fps + 0.5s buffer)
+        # Should wait approximately 0.275s (30 points / 240fps + 0.15s buffer)
         # Allow some tolerance for test execution overhead
-        assert elapsed >= 0.9, f"Expected >= 0.9s wait, got {elapsed:.2f}s"
-        assert elapsed < 1.5, f"Expected < 1.5s wait, got {elapsed:.2f}s"
+        assert elapsed >= 0.2, f"Expected >= 0.2s wait, got {elapsed:.2f}s"
+        assert elapsed < 0.6, f"Expected < 0.6s wait, got {elapsed:.2f}s"
 
     @pytest.mark.asyncio
     async def test_draw_paths_caps_wait_time(
-        self, orchestrator: AgentOrchestrator, mock_agent
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock
     ) -> None:
         """_draw_paths should cap wait time to max_animation_wait_s."""
         import time
-
-        from code_monet.types import Path, Point
 
         # Mock state.queue_strokes with many points that would exceed max wait
         mock_state = MagicMock()
@@ -184,7 +181,7 @@ class TestDrawPathsAnimationWait:
         mock_state.queue_strokes = AsyncMock(return_value=(1, 10000))
         mock_agent.get_state.return_value = mock_state
 
-        paths = [Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])]
+        paths = [Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])]
 
         # Patch max_animation_wait_s to a short value for testing
         with patch("code_monet.orchestrator.settings") as mock_settings:
@@ -214,14 +211,12 @@ class TestDrawPathsAnimationWait:
 
     @pytest.mark.asyncio
     async def test_draw_paths_passes_through_without_expansion(
-        self, orchestrator: AgentOrchestrator, mock_agent, mock_broadcaster
+        self, orchestrator: AgentOrchestrator, mock_agent: MagicMock, mock_broadcaster: MagicMock
     ) -> None:
         """_draw_paths should pass brush paths through without server-side expansion.
 
         Client handles bristle rendering via getBristleOutlines().
         """
-        from code_monet.types import Path, Point
-
         mock_state = MagicMock()
         mock_state.queue_strokes = AsyncMock(return_value=(1, 1))
         mock_state.piece_number = 0
@@ -229,7 +224,7 @@ class TestDrawPathsAnimationWait:
 
         paths = [
             Path(
-                type="line",
+                type=PathType.LINE,
                 points=[Point(x=0, y=0), Point(x=1, y=1)],
                 author="agent",
                 brush="oil_round",

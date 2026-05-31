@@ -9,17 +9,12 @@ from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict
 
 from claude_agent_sdk import (
     AssistantMessage,
-    PostToolUseHookInput,
-    PreCompactHookInput,
-    PreToolUseHookInput,
+    HookInput,
     ResultMessage,
-    StopHookInput,
-    SubagentStopHookInput,
     SystemMessage,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
-    UserPromptSubmitHookInput,
 )
 from claude_agent_sdk.types import StreamEvent
 
@@ -28,17 +23,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
-
-
-# Type alias for SDK hook input - the SDK expects handlers to accept any hook input type
-HookInput: TypeAlias = (
-    PreToolUseHookInput
-    | PostToolUseHookInput
-    | UserPromptSubmitHookInput
-    | StopHookInput
-    | SubagentStopHookInput
-    | PreCompactHookInput
-)
 
 
 class PostToolUseHookDict(TypedDict, total=False):

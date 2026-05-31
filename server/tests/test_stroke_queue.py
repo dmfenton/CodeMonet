@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from code_monet.types import Path as DrawPath
-from code_monet.types import Point
+from code_monet.types import PathType, Point
 from code_monet.workspace import WorkspaceState
 
 
@@ -17,7 +17,7 @@ class TestWorkspaceStateStrokeQueue:
         """Create a test workspace state with temp directory."""
         user_dir = tmp_path / "test_user"
         user_dir.mkdir(parents=True)
-        state = WorkspaceState(user_id=1, user_dir=user_dir)
+        state = WorkspaceState(user_id="1", user_dir=user_dir)
         await state._load_from_file()  # Initialize state
         return state
 
@@ -32,7 +32,7 @@ class TestWorkspaceStateStrokeQueue:
     async def test_queue_strokes_single_path(self, workspace_state: WorkspaceState) -> None:
         """Test queueing a single path."""
         path = DrawPath(
-            type="line",
+            type=PathType.LINE,
             points=[Point(x=0, y=0), Point(x=100, y=100)],
         )
 
@@ -48,8 +48,8 @@ class TestWorkspaceStateStrokeQueue:
     async def test_queue_strokes_multiple_paths(self, workspace_state: WorkspaceState) -> None:
         """Test queueing multiple paths in one batch."""
         paths = [
-            DrawPath(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)]),
-            DrawPath(type="line", points=[Point(x=100, y=100), Point(x=200, y=0)]),
+            DrawPath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)]),
+            DrawPath(type=PathType.LINE, points=[Point(x=100, y=100), Point(x=200, y=0)]),
         ]
 
         batch_id, total_points = await workspace_state.queue_strokes(paths)
@@ -61,7 +61,7 @@ class TestWorkspaceStateStrokeQueue:
     @pytest.mark.asyncio
     async def test_queue_strokes_increments_batch_id(self, workspace_state: WorkspaceState) -> None:
         """Test that batch ID increments with each queue call."""
-        path = DrawPath(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])
+        path = DrawPath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])
 
         batch1, _ = await workspace_state.queue_strokes([path])
         batch2, _ = await workspace_state.queue_strokes([path])
@@ -73,7 +73,7 @@ class TestWorkspaceStateStrokeQueue:
     @pytest.mark.asyncio
     async def test_pop_strokes_clears_queue(self, workspace_state: WorkspaceState) -> None:
         """Test that pop_strokes returns and clears pending strokes."""
-        path = DrawPath(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])
+        path = DrawPath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])
         await workspace_state.queue_strokes([path])
 
         strokes = await workspace_state.pop_strokes()
@@ -87,7 +87,7 @@ class TestWorkspaceStateStrokeQueue:
         self, workspace_state: WorkspaceState
     ) -> None:
         """Test that popped strokes contain pre-interpolated points."""
-        path = DrawPath(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])
+        path = DrawPath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])
         await workspace_state.queue_strokes([path])
 
         strokes = await workspace_state.pop_strokes()
@@ -113,13 +113,13 @@ class TestWorkspaceStateStrokeQueue:
         user_dir.mkdir(parents=True)
 
         # Create state and queue strokes
-        state1 = WorkspaceState(user_id=1, user_dir=user_dir)
+        state1 = WorkspaceState(user_id="1", user_dir=user_dir)
         await state1._load_from_file()
-        path = DrawPath(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)])
+        path = DrawPath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])
         await state1.queue_strokes([path])
 
         # Create new state instance and load from disk
-        state2 = WorkspaceState(user_id=1, user_dir=user_dir)
+        state2 = WorkspaceState(user_id="1", user_dir=user_dir)
         await state2._load_from_file()
 
         assert state2.has_pending_strokes is True

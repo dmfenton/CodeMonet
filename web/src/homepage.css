@@ -867,6 +867,12 @@
   opacity: 1;
 }
 
+.gallery-showcase-image {
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #fdfcf8;
+}
+
 .gallery-artwork.gallery-loading {
   position: absolute;
   top: 0;
@@ -881,6 +887,16 @@
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.1em;
+  text-align: center;
+}
+
+.showcase-description {
+  max-width: 28ch;
+  margin: 10px auto 0;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  line-height: 1.5;
   text-align: center;
 }
 

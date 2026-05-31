@@ -134,7 +134,7 @@ async def send_and_watch(message: dict, watch_duration: int = 0):
                         raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
                         msg = json.loads(raw)
                         print(format_event(msg))
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         continue
             except KeyboardInterrupt:
                 print(f"\n{DIM}Stopped{RESET}")
@@ -144,13 +144,13 @@ async def send_and_watch(message: dict, watch_duration: int = 0):
                 raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
                 msg = json.loads(raw)
                 print(format_event(msg))
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
 
 
 async def fetch_and_animate_strokes(token: str) -> int:
     """Fetch pending strokes and simulate animation. Returns stroke count."""
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{BASE_URL}/strokes/pending",
             headers={"Authorization": f"Bearer {token}"},
@@ -163,14 +163,12 @@ async def fetch_and_animate_strokes(token: str) -> int:
         if strokes:
             # Simulate animation time (100ms per stroke, max 2s)
             anim_time = min(len(strokes) * 0.1, 2.0)
-            print(
-                f"{MAGENTA}[{ts()}] animating{RESET} {len(strokes)} strokes ({anim_time:.1f}s)"
-            )
+            print(f"{MAGENTA}[{ts()}] animating{RESET} {len(strokes)} strokes ({anim_time:.1f}s)")
             await asyncio.sleep(anim_time)
         return len(strokes)
 
 
-async def start(prompt: str | None = None, duration: int = 60):
+async def start(prompt: str | None = None, duration: int = 60, drawing_style: str | None = None):
     """Start drawing and watch."""
     token = await get_token()
 
@@ -179,6 +177,8 @@ async def start(prompt: str | None = None, duration: int = 60):
         new_canvas_msg = {"type": "new_canvas"}
         if prompt:
             new_canvas_msg["direction"] = prompt
+        if drawing_style:
+            new_canvas_msg["drawing_style"] = drawing_style
         await ws.send(json.dumps(new_canvas_msg))
         print(f"{GREEN}Sent:{RESET} {json.dumps(new_canvas_msg)}")
 
@@ -200,10 +200,17 @@ async def start(prompt: str | None = None, duration: int = 60):
                     if msg.get("type") == "agent_strokes_ready":
                         stroke_count = await fetch_and_animate_strokes(token)
                         if stroke_count > 0:
-                            await ws.send(json.dumps({"type": "animation_done"}))
+                            await ws.send(
+                                json.dumps(
+                                    {
+                                        "type": "animation_done",
+                                        "batch_id": msg.get("batch_id"),
+                                    }
+                                )
+                            )
                             print(f"{GREEN}[{ts()}] Sent animation_done{RESET}")
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
         except KeyboardInterrupt:
             print(f"\n{DIM}Stopped{RESET}")
@@ -223,7 +230,7 @@ async def nudge(message: str | None = None):
     """Send a nudge."""
     msg = {"type": "nudge"}
     if message:
-        msg["message"] = message
+        msg["text"] = message
     await send_and_watch(msg, watch_duration=30)
 
 
@@ -255,7 +262,7 @@ async def status():
 async def view(output_path: str = "canvas.png"):
     """Fetch and save the canvas image."""
     token = await get_token()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{BASE_URL}/canvas.png",
             headers={"Authorization": f"Bearer {token}"},
@@ -330,7 +337,14 @@ async def test(prompt: str, expected_strokes: int, timeout: int = 120):
                     seen_active = True
                     stroke_count = await fetch_and_animate_strokes(token)
                     if stroke_count > 0:
-                        await ws.send(json.dumps({"type": "animation_done"}))
+                        await ws.send(
+                            json.dumps(
+                                {
+                                    "type": "animation_done",
+                                    "batch_id": msg.get("batch_id"),
+                                }
+                            )
+                        )
                         print(f"{GREEN}[{ts()}] animation_done sent{RESET}")
 
                 # Show tool use - indicates activity
@@ -345,7 +359,7 @@ async def test(prompt: str, expected_strokes: int, timeout: int = 120):
                 elif msg.get("type") == "thinking":
                     seen_active = True
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Check status periodically (only if we've seen activity)
                 if seen_active:
                     data = await get_status_data(token)
@@ -375,9 +389,7 @@ async def test(prompt: str, expected_strokes: int, timeout: int = 120):
         print(f"\n{GREEN}✓ PASS{RESET}")
         return True
     else:
-        print(
-            f"\n{RED}✗ FAIL{RESET} (expected {expected_strokes}, got {actual_strokes})"
-        )
+        print(f"\n{RED}✗ FAIL{RESET} (expected {expected_strokes}, got {actual_strokes})")
         return False
 
 
@@ -405,11 +417,12 @@ def main():
         default=60,
         help="Watch duration for start command",
     )
+    parser.add_argument("--strokes", "-s", type=int, help="Expected stroke count for test command")
+    parser.add_argument("--timeout", "-t", type=int, default=120, help="Timeout for test command")
     parser.add_argument(
-        "--strokes", "-s", type=int, help="Expected stroke count for test command"
-    )
-    parser.add_argument(
-        "--timeout", "-t", type=int, default=120, help="Timeout for test command"
+        "--style",
+        choices=["plotter", "paint"],
+        help="Drawing style for start command",
     )
 
     args = parser.parse_args()
@@ -419,7 +432,7 @@ def main():
             asyncio.run(watch())
         elif args.command == "start":
             prompt = " ".join(args.args) if args.args else None
-            asyncio.run(start(prompt, args.duration))
+            asyncio.run(start(prompt, args.duration, args.style))
         elif args.command == "pause":
             asyncio.run(pause())
         elif args.command == "resume":

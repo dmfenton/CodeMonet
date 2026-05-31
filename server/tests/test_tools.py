@@ -7,6 +7,7 @@ from code_monet.tools import (
     _inject_canvas_image,
     _transform_svg_path,
     handle_draw_paths,
+    handle_generate_svg,
     handle_mark_piece_done,
     handle_name_piece,
     handle_sign_canvas,
@@ -324,6 +325,49 @@ class TestAddStrokesCallback:
 
         # Should not call add_strokes when no valid paths
         assert strokes_called is False
+
+
+class TestGenerateSvgHelpers:
+    """Tests for Python sandbox drawing helpers exposed to the agent."""
+
+    @pytest.mark.asyncio
+    async def test_generic_painterly_helpers_output_paths(self) -> None:
+        result = await handle_generate_svg(
+            {
+                "code": """
+paths = []
+paths.append(dab(100, 100, 20, 0.5, color="#ff0000"))
+paths.extend(stroke_field(
+    4,
+    x_range=(120, 180),
+    y_range=(130, 180),
+    colors=["#00ff00"],
+    exclude_polygons=[[(130, 130), (160, 130), (160, 160), (130, 160)]],
+))
+paths.extend(ramp_field(
+    4,
+    x_range=(120, 180),
+    y_range=(190, 230),
+    stops=[(0.0, ["#0000ff"]), (1.0, ["#ffcc00"])],
+    texture_ratio=0.25,
+))
+paths.extend(curve_marks([(200, 200), (240, 230), (280, 205)], count=4))
+paths.extend(mass_field([(40, 260), (95, 250), (115, 300), (35, 315)], count=6, wash_rows=2, texture_ratio=0.25))
+paths.extend(curve_band([(0, 310), (120, 280), (240, 315)], bottom_y=360, count=5, texture_ratio=0.25))
+paths.extend(tapered_band([(420, 290), (455, 330), (480, 380)], [18, 36, 52], count=6, wash_rows=2, texture_ratio=0.25))
+paths.extend(broken_edge([(500, 300), (560, 285), (620, 310)], count=5))
+paths.extend(fill_polygon([(300, 180), (340, 240), (260, 240)], count=5))
+paths.extend(glow_field(360, 180, 60, count=5, core_marks=2))
+paths.extend(reflection_field(380, 250, 80, 50, count=4))
+paths.extend(radial_cluster(500, 260, count=5, rx=30, ry=20))
+output_paths(paths)
+"""
+            }
+        )
+
+        assert "is_error" not in result
+        text = result["content"][0]["text"]
+        assert "Successfully generated and drew" in text or "Code executed" in text
 
 
 class TestTransformSvgPath:

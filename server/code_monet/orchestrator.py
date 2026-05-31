@@ -2,13 +2,15 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator, Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import Any, Protocol
 
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
 from code_monet.types import (
+    AgentEvent,
     AgentStatus,
     AgentStrokesReadyMessage,
     AgentTurnComplete,
@@ -21,9 +23,6 @@ from code_monet.types import (
     PieceStateMessage,
     ThinkingDeltaMessage,
 )
-
-if TYPE_CHECKING:
-    from code_monet.agent import DrawingAgent
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +40,39 @@ class Broadcaster(Protocol):
         ...
 
 
+class DrawingAgentBackend(Protocol):
+    """Backend contract shared by Claude and OpenAI drawing agents."""
+
+    pending_nudges: list[str]
+
+    @property
+    def paused(self) -> bool:
+        """Whether the agent is paused."""
+        ...
+
+    def set_on_draw(self, callback: Callable[[list[Path]], Coroutine[Any, Any, None]]) -> None:
+        """Set callback for animated paths."""
+        ...
+
+    def set_on_tool_complete(
+        self, callback: Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]]
+    ) -> None:
+        """Set callback for completed tool calls."""
+        ...
+
+    def get_state(self) -> Any:
+        """Return the workspace state."""
+        ...
+
+    async def pause(self) -> None:
+        """Pause the agent."""
+        ...
+
+    def run_turn(self, callbacks: AgentCallbacks | None = None) -> AsyncGenerator[AgentEvent, None]:
+        """Run one agent turn."""
+        ...
+
+
 @dataclass
 class AgentOrchestrator:
     """Orchestrates agent turns and manages the agent loop.
@@ -49,7 +81,7 @@ class AgentOrchestrator:
     the _draw_paths method on this orchestrator.
     """
 
-    agent: "DrawingAgent"
+    agent: DrawingAgentBackend
     broadcaster: Broadcaster
     file_logger: AgentFileLogger | None = field(default=None)
 

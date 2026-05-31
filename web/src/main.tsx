@@ -20,7 +20,7 @@ function Router(): React.ReactElement {
       setCurrentPath(window.location.pathname);
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    return (): void => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Handle magic link callback - extract tokens from URL fragment

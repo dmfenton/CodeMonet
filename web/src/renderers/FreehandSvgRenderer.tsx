@@ -294,7 +294,7 @@ export function FreehandSvgRenderer({
 
       {/* Agent in-progress stroke - using optimized incremental renderer */}
       {agentStroke.length > 0 &&
-        (() => {
+        ((): React.ReactElement => {
           const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
           return agentStroke.length === 1 ? (
             <StrokeDot point={agentStroke[0]!} style={style} />

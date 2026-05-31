@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from code_monet.agent.callbacks import setup_tool_callbacks
-from code_monet.types import Path, Point
+from code_monet.types import Path, PathType, Point
 
 
 class TestSetupToolCallbacks:
@@ -184,8 +184,8 @@ class TestSetupToolCallbacks:
 
         # Create test paths
         paths = [
-            Path(type="line", points=[Point(x=0, y=0), Point(x=100, y=100)]),
-            Path(type="line", points=[Point(x=200, y=200), Point(x=300, y=300)]),
+            Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)]),
+            Path(type=PathType.LINE, points=[Point(x=200, y=200), Point(x=300, y=300)]),
         ]
 
         # Call the callback

@@ -31,7 +31,7 @@ async def workspace(tmp_path: FilePath) -> WorkspaceState:
     user_dir.mkdir(parents=True)
     (user_dir / "gallery").mkdir()
 
-    state = WorkspaceState(user_id=1, user_dir=user_dir)
+    state = WorkspaceState(user_id="1", user_dir=user_dir)
     state._loaded = True
     return state
 

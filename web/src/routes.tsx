@@ -23,7 +23,7 @@ export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/" element={<HomepageRoute initialData={ssrData} />} />
+      <Route path="/" element={<HomepageRoute />} />
       <Route path="/gallery" element={<GalleryRoute initialData={ssrData} />} />
       <Route
         path="/gallery/:userId/:pieceId"
@@ -40,7 +40,7 @@ export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
   );
 }
 
-function HomepageRoute({ initialData }: { initialData?: SSRData }): React.ReactElement {
+function HomepageRoute(): React.ReactElement {
   const navigate = useNavigate();
 
   const handleEnter = (): void => {
@@ -105,7 +105,7 @@ function HomepageRoute({ initialData }: { initialData?: SSRData }): React.ReactE
           })}
         </script>
       </Helmet>
-      <Homepage onEnter={handleEnter} initialGalleryPieces={initialData?.galleryPieces} />
+      <Homepage onEnter={handleEnter} />
     </>
   );
 }

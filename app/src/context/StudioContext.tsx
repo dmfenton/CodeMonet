@@ -357,7 +357,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
           break;
       }
     },
-    [canvas, send, dispatch, openGallery, exitStudio]
+    [canvas, send, dispatch, openModal, openGallery, exitStudio]
   );
 
   // Stroke handlers (from Canvas)

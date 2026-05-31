@@ -1,5 +1,7 @@
 """Tests for workspace size and rate limits."""
 
+from pathlib import Path as FilePath
+
 import pytest
 
 from code_monet.types import Path, PathType, Point
@@ -7,13 +9,13 @@ from code_monet.workspace import WorkspaceState
 
 
 @pytest.fixture
-async def workspace(tmp_path):
+async def workspace(tmp_path: FilePath) -> WorkspaceState:
     """Create a workspace state with a temp directory."""
     user_dir = tmp_path / "1"
     user_dir.mkdir(parents=True)
     (user_dir / "gallery").mkdir()
 
-    state = WorkspaceState(user_id=1, user_dir=user_dir)
+    state = WorkspaceState(user_id="1", user_dir=user_dir)
     state._loaded = True
     return state
 
@@ -150,7 +152,9 @@ class TestGalleryIndex:
         assert len(our_pieces) == 1
 
     @pytest.mark.asyncio
-    async def test_gallery_index_persists(self, workspace: WorkspaceState, tmp_path) -> None:
+    async def test_gallery_index_persists(
+        self, workspace: WorkspaceState, tmp_path: FilePath
+    ) -> None:
         """Gallery index should persist across workspace reloads."""
         path = Path(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=100, y=100)])
         workspace._canvas.strokes.append(path)
@@ -161,7 +165,7 @@ class TestGalleryIndex:
         saved_id = await workspace.new_canvas()
 
         # Create new workspace instance
-        workspace2 = WorkspaceState(user_id=1, user_dir=tmp_path / "1")
+        workspace2 = WorkspaceState(user_id="1", user_dir=tmp_path / "1")
         await workspace2._load_from_file()
 
         gallery = await workspace2.list_gallery()

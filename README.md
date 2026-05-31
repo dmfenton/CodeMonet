@@ -111,7 +111,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 
 | Layer          | Technologies                                            |
 | -------------- | ------------------------------------------------------- |
-| AI             | Claude Agent SDK, in-process MCP tools, subprocess exec |
+| AI             | Claude Agent SDK or OpenAI Responses API, in-process tools, subprocess exec |
 | Backend        | Python 3.11+, FastAPI, SQLAlchemy async, Pydantic       |
 | Frontend       | React Native, Expo, TypeScript, react-native-svg        |
 | Shared         | TypeScript monorepo with npm workspaces                 |
@@ -128,6 +128,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 cd CodeMonet
 cp .env.example .env
 # Add your ANTHROPIC_API_KEY to .env
+# Or set AGENT_PROVIDER=openai and OPENAI_API_KEY for the OpenAI backend
 
 # Install and run
 make install

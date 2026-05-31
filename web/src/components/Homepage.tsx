@@ -3,45 +3,21 @@
  * An artist's studio aesthetic inspired by Monet's world
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getApiUrl } from '../config';
-import { LiveCanvas, ThoughtStream, GalleryItem, GalleryPiece } from './homepage/index';
+import { LiveCanvas, ThoughtStream } from './homepage/index';
+import { SHOWCASE_PIECES } from './homepage/showcase';
 
 interface HomepageProps {
   onEnter: () => void;
-  initialGalleryPieces?: GalleryPiece[];
 }
 
-export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): React.ReactElement {
-  const [mounted, setMounted] = useState(false);
-  const [galleryPieces, setGalleryPieces] = useState<GalleryPiece[]>(initialGalleryPieces ?? []);
+export function Homepage({ onEnter }: HomepageProps): React.ReactElement {
+  const [mounted, setMounted] = React.useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Fetch gallery pieces from public API (skip if we have initial SSR data)
-  useEffect(() => {
-    if (initialGalleryPieces && initialGalleryPieces.length > 0) return;
-
-    const fetchGallery = async (): Promise<void> => {
-      try {
-        const response = await fetch(`${getApiUrl()}/public/gallery?limit=6`);
-        if (response.ok) {
-          const pieces: GalleryPiece[] = await response.json();
-          setGalleryPieces(pieces);
-        }
-      } catch {
-        // Fall back to generated gallery
-      }
-    };
-
-    fetchGallery();
-  }, [initialGalleryPieces]);
-
-  // Use real gallery pieces if available, otherwise generate placeholders
-  const displayPieces = galleryPieces.length > 0 ? galleryPieces : Array.from({ length: 6 });
 
   return (
     <div className={`homepage ${mounted ? 'mounted' : ''}`}>
@@ -305,29 +281,30 @@ export function Homepage({ onEnter, initialGalleryPieces }: HomepageProps): Reac
         <div className="section-content">
           <h2 className="section-title">
             <span className="title-accent" />
-            From the Gallery
+            Public Showcase
           </h2>
-          <p className="section-subtitle">
-            {galleryPieces.length > 0
-              ? 'Original artwork created by Code Monet'
-              : 'A glimpse into the ever-growing collection'}
-          </p>
+          <p className="section-subtitle">Five agent-made studies selected for the public showcase</p>
 
-          <div className="gallery-wall">
-            {displayPieces.map((piece, i) => {
-              const galleryPiece = piece as GalleryPiece | undefined;
-              return galleryPiece ? (
-                <Link
-                  key={galleryPiece.id}
-                  to={`/gallery/${galleryPiece.user_id}/${galleryPiece.id}`}
-                  className="gallery-wall-link"
-                >
-                  <GalleryItem piece={galleryPiece} index={i} delay={i * 0.15} />
-                </Link>
-              ) : (
-                <GalleryItem key={i} index={i} delay={i * 0.15} />
-              );
-            })}
+          <div className="gallery-wall showcase-wall">
+            {SHOWCASE_PIECES.map((piece, i) => (
+              <article
+                key={piece.slug}
+                className="gallery-item showcase-item"
+                style={{ animationDelay: `${i * 0.15}s` }}
+              >
+                <div className="gallery-frame">
+                  <img
+                    src={piece.image}
+                    alt={piece.title}
+                    className="gallery-artwork gallery-showcase-image"
+                  />
+                </div>
+                <span className="gallery-label" title={piece.title}>
+                  {piece.title}
+                </span>
+                <p className="showcase-description">{piece.description}</p>
+              </article>
+            ))}
           </div>
 
           <Link to="/gallery" className="gallery-cta">

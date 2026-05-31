@@ -150,7 +150,7 @@ export function SvgRenderer({
 
       {/* Agent's in-progress stroke */}
       {agentStroke.length > 0 &&
-        (() => {
+        ((): React.ReactElement => {
           // Get effective style - use agentStrokeStyle overrides in paint mode
           const effectiveColor =
             styleConfig.supports_color && agentStrokeStyle?.color

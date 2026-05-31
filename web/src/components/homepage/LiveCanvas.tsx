@@ -15,7 +15,7 @@ export function LiveCanvas(): React.ReactElement {
   const [simStrokes, setSimStrokes] = useState<SimulatedStroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<SimulatedStroke | null>(null);
   const strokeIdRef = useRef(0);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   // Try to connect to WebSocket for live strokes
@@ -107,7 +107,7 @@ export function LiveCanvas(): React.ReactElement {
     animationRef.current = requestAnimationFrame(animate);
 
     return (): void => {
-      if (animationRef.current) {
+      if (animationRef.current !== null) {
         cancelAnimationFrame(animationRef.current);
       }
     };
