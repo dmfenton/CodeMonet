@@ -296,7 +296,7 @@ jobs:
           ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
           CONFIG_BUCKET="compute-deploy-${ACCOUNT_ID}"
 
-          # Deploy: sync config, update IMAGE_TAG, pull new images, restart containers
+          # Deploy: sync config/assets, update IMAGE_TAG, pull new images, restart containers
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
@@ -304,6 +304,8 @@ jobs:
               \"cd /home/ec2-user\",
               \"echo 'Syncing deploy config from S3...'\",
               \"aws s3 sync s3://${CONFIG_BUCKET}/deploy/ . --exclude 'web/*' --exclude 'data/*'\",
+              \"echo 'Syncing web assets from S3...'\",
+              \"aws s3 sync s3://${CONFIG_BUCKET}/deploy/web/ web/ --delete\",
               \"echo 'Setting IMAGE_TAG=v$VERSION and ECR_REGISTRY'\",
               \"sed -i '/^IMAGE_TAG=/d' .env 2>/dev/null || true\",
               \"sed -i '/^ECR_REGISTRY=/d' .env 2>/dev/null || true\",
