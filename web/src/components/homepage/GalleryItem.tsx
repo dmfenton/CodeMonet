@@ -45,7 +45,7 @@ export function GalleryItem({ piece, index, delay }: GalleryItemProps): React.Re
             {/* Show fallback while loading */}
             {!imageLoaded && (
               <svg viewBox="0 0 100 100" className="gallery-artwork gallery-loading">
-                <rect width="100" height="100" fill="#fdfcf8" />
+                <rect width="100" height="100" fill="#fffdf8" />
                 {fallbackStrokes.map((stroke, i) => (
                   <path
                     key={i}
@@ -70,7 +70,7 @@ export function GalleryItem({ piece, index, delay }: GalleryItemProps): React.Re
         ) : (
           <svg viewBox="0 0 100 100" className="gallery-artwork">
             {/* Warm canvas background */}
-            <rect width="100" height="100" fill="#fdfcf8" />
+            <rect width="100" height="100" fill="#fffdf8" />
             {fallbackStrokes.map((stroke, i) => (
               <path
                 key={i}

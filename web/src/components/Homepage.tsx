@@ -148,16 +148,16 @@ export function Homepage({ onEnter }: HomepageProps): React.ReactElement {
                 <svg viewBox="0 0 120 120" className="avatar-svg">
                   <defs>
                     <linearGradient id="brushGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#c4a35a" />
-                      <stop offset="100%" stopColor="#d4a84b" />
+                      <stop offset="0%" stopColor="#e8c98a" />
+                      <stop offset="100%" stopColor="#1f4d34" />
                     </linearGradient>
                     <linearGradient id="brushGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#6a9fb5" />
-                      <stop offset="100%" stopColor="#8b7ea8" />
+                      <stop offset="0%" stopColor="#5a9a70" />
+                      <stop offset="100%" stopColor="#6a8a78" />
                     </linearGradient>
                     <linearGradient id="brushGrad3" x1="0%" y1="100%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#b5606e" />
-                      <stop offset="100%" stopColor="#c8b8d0" />
+                      <stop offset="0%" stopColor="#9b4f45" />
+                      <stop offset="100%" stopColor="#90b0a0" />
                     </linearGradient>
                   </defs>
                   {/* Abstract brush strokes representing the AI artist */}
@@ -185,7 +185,7 @@ export function Homepage({ onEnter }: HomepageProps): React.ReactElement {
                     strokeLinecap="round"
                     opacity="0.7"
                   />
-                  <circle cx="55" cy="55" r="3" fill="#2c3e50" opacity="0.6" />
+                  <circle cx="55" cy="55" r="3" fill="#1f4d34" opacity="0.6" />
                 </svg>
               </div>
             </div>
@@ -287,23 +287,31 @@ export function Homepage({ onEnter }: HomepageProps): React.ReactElement {
 
           <div className="gallery-wall showcase-wall">
             {SHOWCASE_PIECES.map((piece, i) => (
-              <article
+              <a
                 key={piece.slug}
-                className="gallery-item showcase-item"
-                style={{ animationDelay: `${i * 0.15}s` }}
+                href={piece.image}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="gallery-wall-link"
+                aria-label={`Open ${piece.title}`}
               >
-                <div className="gallery-frame">
-                  <img
-                    src={piece.image}
-                    alt={piece.title}
-                    className="gallery-artwork gallery-showcase-image"
-                  />
-                </div>
-                <span className="gallery-label" title={piece.title}>
-                  {piece.title}
-                </span>
-                <p className="showcase-description">{piece.description}</p>
-              </article>
+                <article
+                  className="gallery-item showcase-item"
+                  style={{ animationDelay: `${i * 0.15}s` }}
+                >
+                  <div className="gallery-frame">
+                    <img
+                      src={piece.image}
+                      alt={piece.title}
+                      className="gallery-artwork gallery-showcase-image"
+                    />
+                  </div>
+                  <span className="gallery-label" title={piece.title}>
+                    {piece.title}
+                  </span>
+                  <p className="showcase-description">{piece.description}</p>
+                </article>
+              </a>
             ))}
           </div>
 

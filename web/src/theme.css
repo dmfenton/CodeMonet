@@ -1,38 +1,38 @@
 /**
  * Code Monet - Unified Theme
- * Design system inspired by Monet's atelier and paintings
+ * Design system aligned with dmfenton.net: cream paper, forest ink, fine rules.
  */
 
 /* Import fonts */
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,400..650,40..80&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
 :root {
   /* ============================================
      BASE PALETTE - Monet's Atelier
      ============================================ */
 
-  /* Warm, earthy base tones */
-  --atelier-cream: #f5f0e6;
-  --atelier-parchment: #ebe4d4;
-  --atelier-linen: #e8e0ce;
-  --atelier-canvas: #ffffff;
+  /* dmfenton.net paper system */
+  --atelier-cream: #fdfbf5;
+  --atelier-parchment: #f6efd6;
+  --atelier-linen: #eee2bd;
+  --atelier-canvas: #fffdf8;
 
   /* From Monet's paintings */
-  --atelier-ochre: #c4a35a;
-  --atelier-sienna: #9e6b4a;
-  --atelier-umber: #6b4423;
-  --atelier-indigo: #2c3e50;
-  --atelier-prussian: #1a2634;
+  --atelier-ochre: #e8c98a;
+  --atelier-sienna: #6a8a78;
+  --atelier-umber: #1a1d18;
+  --atelier-indigo: #1f4d34;
+  --atelier-prussian: #102e1e;
 
   /* Water Lilies palette */
-  --atelier-sage: #7d8471;
-  --atelier-water: #6a9fb5;
-  --atelier-lily: #c8b8d0;
+  --atelier-sage: #3a7a55;
+  --atelier-water: #5a9a70;
+  --atelier-lily: #90b0a0;
 
   /* Accent tones */
-  --atelier-rose: #b5606e;
-  --atelier-lavender: #8b7ea8;
-  --atelier-gold: #d4a84b;
+  --atelier-rose: #9b4f45;
+  --atelier-lavender: #6a8a78;
+  --atelier-gold: #e8c98a;
 
   /* ============================================
      SEMANTIC COLORS
@@ -43,42 +43,53 @@
   --bg-surface: var(--atelier-parchment);
   --bg-elevated: var(--atelier-linen);
   --bg-canvas: var(--atelier-canvas);
-  --bg-overlay: rgba(44, 36, 22, 0.6);
+  --bg-overlay: rgba(16, 46, 30, 0.5);
+  --bg-primary: var(--atelier-cream);
+  --bg-secondary: var(--atelier-parchment);
+  --bg-tertiary: var(--atelier-linen);
+  --bg-dark: var(--atelier-prussian);
 
   /* Text hierarchy */
-  --text-primary: #2c2416;
-  --text-secondary: #5a4d3a;
-  --text-muted: #8a7d6b;
-  --text-inverse: #f5f0e6;
+  --text-primary: #1a1d18;
+  --text-secondary: #2f3f32;
+  --text-muted: #6a7468;
+  --text-inverse: #fdfbf5;
+  --text-light: var(--text-inverse);
 
   /* Interactive states */
   --interactive-default: var(--atelier-indigo);
   --interactive-hover: var(--atelier-prussian);
   --interactive-active: var(--atelier-umber);
+  --accent: var(--atelier-indigo);
+  --accent-violet: var(--atelier-lavender);
+  --warning: var(--status-warning);
+  --success: var(--status-success);
+  --error: var(--status-error);
+  --gradient-primary: linear-gradient(135deg, var(--atelier-indigo), var(--atelier-sage));
 
   /* Status colors */
   --status-success: var(--atelier-sage);
-  --status-success-bg: rgba(125, 132, 113, 0.15);
+  --status-success-bg: rgba(58, 122, 85, 0.13);
   --status-warning: var(--atelier-ochre);
-  --status-warning-bg: rgba(196, 163, 90, 0.15);
+  --status-warning-bg: rgba(232, 201, 138, 0.2);
   --status-error: var(--atelier-rose);
-  --status-error-bg: rgba(181, 96, 110, 0.15);
+  --status-error-bg: rgba(155, 79, 69, 0.14);
   --status-info: var(--atelier-water);
-  --status-info-bg: rgba(106, 159, 181, 0.15);
+  --status-info-bg: rgba(90, 154, 112, 0.14);
 
   /* Borders */
-  --border-light: rgba(107, 68, 35, 0.1);
-  --border-default: rgba(107, 68, 35, 0.15);
-  --border-strong: rgba(107, 68, 35, 0.25);
-  --border-focus: var(--atelier-ochre);
+  --border-light: rgba(31, 77, 52, 0.1);
+  --border-default: rgba(31, 77, 52, 0.18);
+  --border-strong: rgba(31, 77, 52, 0.34);
+  --border-focus: var(--atelier-indigo);
 
   /* ============================================
      TYPOGRAPHY
      ============================================ */
 
-  --font-display: 'Cormorant Garamond', Georgia, serif;
-  --font-body: 'EB Garamond', Georgia, serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', Monaco, monospace;
 
   /* Font sizes */
   --text-xs: 0.75rem;
@@ -116,13 +127,13 @@
      SHADOWS
      ============================================ */
 
-  --shadow-sm: 0 2px 8px rgba(44, 36, 22, 0.06);
-  --shadow-md: 0 4px 20px rgba(44, 36, 22, 0.08);
-  --shadow-lg: 0 8px 30px rgba(44, 36, 22, 0.12);
-  --shadow-xl: 0 16px 50px rgba(44, 36, 22, 0.18);
+  --shadow-sm: 0 2px 8px rgba(16, 46, 30, 0.05);
+  --shadow-md: 0 4px 20px rgba(16, 46, 30, 0.07);
+  --shadow-lg: 0 8px 30px rgba(16, 46, 30, 0.1);
+  --shadow-xl: 0 16px 50px rgba(16, 46, 30, 0.15);
 
   /* Canvas frame shadow */
-  --shadow-frame: 0 8px 40px rgba(44, 36, 22, 0.2), 0 2px 8px rgba(44, 36, 22, 0.1);
+  --shadow-frame: 0 8px 40px rgba(16, 46, 30, 0.16), 0 2px 8px rgba(16, 46, 30, 0.08);
 
   /* ============================================
      TRANSITIONS

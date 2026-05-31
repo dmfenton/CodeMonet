@@ -43,43 +43,33 @@ export interface SimulatedStroke {
   progress: number;
 }
 
-// Monet-inspired palette from his actual paintings
-// Colors drawn from Water Lilies, Impression Sunrise, and Giverny gardens
+// dmfenton.net-inspired palette: forest ink, cream paper, brass, moss.
 export const PALETTE = {
-  // Ochres and golds - morning light
-  ochre: ['#c4a35a', '#d4a84b', '#b89b4a'],
-  // Water and sky blues
-  water: ['#6a9fb5', '#7eb3c4', '#5d8a9e'],
-  // Lily pinks and roses
-  rose: ['#b5606e', '#c8868f', '#a85060'],
-  // Garden greens and sage
-  sage: ['#7d8471', '#8f9682', '#6b7560'],
-  // Lavender and violet shadows
-  lavender: ['#8b7ea8', '#9d90b8', '#7a6d98'],
-  // Warm earth tones
-  sienna: ['#9e6b4a', '#b07d5a', '#8a5d40'],
-  // Deep indigos for shadows
-  indigo: ['#2c3e50', '#34495e', '#243342'],
+  paper: ['#fdfbf5', '#fffdf8', '#f6efd6'],
+  forest: ['#1f4d34', '#102e1e', '#3a7a55'],
+  moss: ['#5a9a70', '#6a8a78', '#90b0a0'],
+  brass: ['#e8c98a', '#d8b66c', '#caa55c'],
+  clay: ['#9b4f45', '#7a5746', '#1a1d18'],
+  ink: ['#1a1d18', '#2f3f32', '#6a7468'],
 };
 
 // Flattened array of all colors for random selection
 export const ALL_COLORS = [
-  ...PALETTE.ochre,
-  ...PALETTE.water,
-  ...PALETTE.rose,
-  ...PALETTE.sage,
-  ...PALETTE.lavender,
-  ...PALETTE.sienna,
+  ...PALETTE.forest,
+  ...PALETTE.moss,
+  ...PALETTE.brass,
+  ...PALETTE.clay,
+  ...PALETTE.ink,
 ];
 
-// Subset of warmer, more prominent colors for simulated strokes
+// Subset of prominent colors for simulated strokes
 export const STROKE_COLORS = [
-  '#c4a35a', // ochre
-  '#6a9fb5', // water blue
-  '#b5606e', // rose
-  '#7d8471', // sage
-  '#8b7ea8', // lavender
-  '#9e6b4a', // sienna
-  '#d4a84b', // gold
-  '#7eb3c4', // light blue
+  '#1f4d34', // forest
+  '#102e1e', // deep forest
+  '#3a7a55', // green
+  '#5a9a70', // moss
+  '#6a8a78', // grey green
+  '#e8c98a', // brass
+  '#9b4f45', // clay red
+  '#1a1d18', // ink
 ];

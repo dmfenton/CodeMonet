@@ -74,7 +74,7 @@
   content: '';
   position: absolute;
   inset: 8px;
-  border: 1px solid rgba(196, 163, 90, 0.2);
+  border: 1px solid rgba(31, 77, 52, 0.18);
   border-radius: 2px;
   pointer-events: none;
 }
@@ -192,7 +192,7 @@
 .auth-field input:focus {
   outline: none;
   border-color: var(--atelier-ochre);
-  box-shadow: 0 0 0 3px rgba(196, 163, 90, 0.15);
+  box-shadow: 0 0 0 3px rgba(31, 77, 52, 0.14);
 }
 
 .auth-field input:disabled {
@@ -221,8 +221,8 @@
 
 .auth-error {
   padding: 1rem 1.25rem;
-  background: rgba(181, 96, 110, 0.1);
-  border: 1px solid rgba(181, 96, 110, 0.25);
+  background: rgba(155, 79, 69, 0.1);
+  border: 1px solid rgba(155, 79, 69, 0.25);
   border-left: 3px solid var(--atelier-rose);
   border-radius: 4px;
   color: var(--atelier-rose);
@@ -233,8 +233,8 @@
 
 .auth-success {
   padding: 1rem 1.25rem;
-  background: rgba(125, 132, 113, 0.1);
-  border: 1px solid rgba(125, 132, 113, 0.25);
+  background: rgba(58, 122, 85, 0.1);
+  border: 1px solid rgba(58, 122, 85, 0.25);
   border-left: 3px solid var(--atelier-sage);
   border-radius: 4px;
   color: #5a6b52;
@@ -352,7 +352,7 @@
   width: 40px;
   height: 40px;
   border-width: 3px;
-  border-color: rgba(196, 163, 90, 0.3);
+  border-color: rgba(31, 77, 52, 0.25);
   border-top-color: var(--atelier-ochre);
 }
 

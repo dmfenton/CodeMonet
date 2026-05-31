@@ -189,8 +189,8 @@ export function DebugPanel({
 
         .badge {
           padding: 3px 8px;
-          background: linear-gradient(135deg, var(--warning), #ffaa00);
-          color: #000;
+          background: linear-gradient(135deg, var(--warning), var(--atelier-indigo));
+          color: var(--text-inverse);
           border-radius: 6px;
           font-size: 10px;
           font-weight: 600;

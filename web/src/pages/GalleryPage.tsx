@@ -93,8 +93,8 @@ export function GalleryPage({ initialGalleryPieces }: GalleryPageProps): React.R
       <style>{`
         .gallery-page {
           min-height: 100vh;
-          background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
-          color: #eee;
+          background: var(--bg-page);
+          color: var(--text-primary);
           padding: 2rem;
         }
 
@@ -108,14 +108,14 @@ export function GalleryPage({ initialGalleryPieces }: GalleryPageProps): React.R
           display: inline-flex;
           align-items: center;
           gap: 0.5rem;
-          color: rgba(255, 255, 255, 0.7);
+          color: var(--text-muted);
           text-decoration: none;
           margin-bottom: 2rem;
           transition: color 0.2s;
         }
 
         .gallery-back:hover {
-          color: #c4a35a;
+          color: var(--atelier-indigo);
         }
 
         .gallery-back svg {
@@ -125,19 +125,18 @@ export function GalleryPage({ initialGalleryPieces }: GalleryPageProps): React.R
 
         .gallery-header h1 {
           font-size: 3rem;
-          font-weight: 200;
-          letter-spacing: 0.1em;
+          font-family: var(--font-display);
+          font-weight: 500;
+          letter-spacing: 0;
           margin-bottom: 1rem;
-          background: linear-gradient(135deg, #c4a35a 0%, #d4a84b 50%, #c4a35a 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
+          color: var(--atelier-indigo);
+          font-variation-settings: 'opsz' 72, 'SOFT' 50;
         }
 
         .gallery-intro {
           max-width: 600px;
           margin: 0 auto;
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--text-muted);
           line-height: 1.6;
         }
 
@@ -168,7 +167,7 @@ export function GalleryPage({ initialGalleryPieces }: GalleryPageProps): React.R
         }
 
         .gallery-empty p {
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--text-muted);
           margin-bottom: 1.5rem;
         }
 
