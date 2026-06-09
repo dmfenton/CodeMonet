@@ -25,6 +25,8 @@ class Path(BaseModel):
     color: str | None = None  # Hex color
     stroke_width: float | None = None  # Stroke width
     opacity: float | None = None  # 0-1 alpha
+    fill: str | None = None  # Hex fill color for closed paths
+    fill_opacity: float | None = None  # 0-1 fill alpha
 
     # Brush preset (paint mode only)
     brush: str | None = None  # Brush preset name (e.g., "oil_round", "watercolor")
@@ -65,7 +67,7 @@ class Path(BaseModel):
             color=self.color if self.color and style_config.supports_color else default.color,
             stroke_width=(
                 self.stroke_width
-                if self.stroke_width and style_config.supports_variable_width
+                if self.stroke_width is not None and style_config.supports_variable_width
                 else default.stroke_width
             ),
             opacity=(

@@ -55,6 +55,8 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
                     created_at=data.get("created_at", ""),
                     piece_number=piece_number,
                     stroke_count=len(data.get("strokes", [])),
+                    width=data.get("width", 800),
+                    height=data.get("height", 600),
                     drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),
                     title=data.get("title"),
                     thumbnail_token=piece_id,
@@ -103,6 +105,8 @@ async def scan_gallery_with_strokes(gallery_dir: FilePath) -> list[SavedCanvas]:
                     strokes=[Path.model_validate(s) for s in data.get("strokes", [])],
                     created_at=data.get("created_at", ""),
                     piece_number=piece_number,
+                    width=data.get("width", 800),
+                    height=data.get("height", 600),
                     drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),
                     title=data.get("title"),
                 )
@@ -117,15 +121,15 @@ async def scan_gallery_with_strokes(gallery_dir: FilePath) -> list[SavedCanvas]:
 
 async def load_gallery_piece(
     gallery_dir: FilePath, piece_number: int
-) -> tuple[list[Path], DrawingStyleType] | None:
-    """Load strokes and drawing style from a gallery piece.
+) -> tuple[list[Path], DrawingStyleType, int, int] | None:
+    """Load strokes, drawing style, and dimensions from a gallery piece.
 
     Args:
         gallery_dir: Path to user's gallery directory.
         piece_number: Piece number to load.
 
     Returns:
-        Tuple of (strokes, drawing_style) or None if not found.
+        Tuple of (strokes, drawing_style, width, height) or None if not found.
     """
     # Try both 3-digit and 6-digit formats for backwards compatibility
     for fmt in [f"piece_{piece_number:06d}.json", f"piece_{piece_number:03d}.json"]:
@@ -137,7 +141,12 @@ async def load_gallery_piece(
 
                 strokes = [Path.model_validate(s) for s in data.get("strokes", [])]
                 drawing_style = parse_drawing_style(data.get("drawing_style", "plotter"))
-                return (strokes, drawing_style)
+                return (
+                    strokes,
+                    drawing_style,
+                    data.get("width", 800),
+                    data.get("height", 600),
+                )
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning(f"Failed to load gallery piece {piece_number}: {e}")
                 return None

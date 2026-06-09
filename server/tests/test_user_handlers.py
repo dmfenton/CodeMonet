@@ -26,6 +26,8 @@ class TestHandleNewCanvas:
         workspace.state.piece_number = 1
         workspace.state.list_gallery = AsyncMock(return_value=[])
         workspace.state.canvas = MagicMock()
+        workspace.state.canvas.width = 800
+        workspace.state.canvas.height = 600
         workspace.state.canvas.drawing_style = DrawingStyleType.PLOTTER
         workspace.state.save = AsyncMock()
         workspace.agent = MagicMock()
@@ -90,6 +92,16 @@ class TestHandleNewCanvas:
         await handle_new_canvas(mock_workspace, {"direction": "test"})
 
         mock_workspace.start_agent_loop.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_new_canvas_with_dimensions(self, mock_workspace: MagicMock) -> None:
+        """New canvas should pass validated dimensions to workspace state."""
+        await handle_new_canvas(
+            mock_workspace,
+            {"canvas_width": 1200, "canvas_height": 420},
+        )
+
+        mock_workspace.state.new_canvas.assert_awaited_once_with(width=1200, height=420)
 
 
 class TestHandleResume:
@@ -212,6 +224,8 @@ class TestHandleNewCanvasWithPauseReason:
         workspace.state.piece_number = 1
         workspace.state.list_gallery = AsyncMock(return_value=[])
         workspace.state.canvas = MagicMock()
+        workspace.state.canvas.width = 800
+        workspace.state.canvas.height = 600
         workspace.state.canvas.drawing_style = DrawingStyleType.PLOTTER
         workspace.state.status = AgentStatus.PAUSED
         workspace.state.pause_reason = PauseReason.USER

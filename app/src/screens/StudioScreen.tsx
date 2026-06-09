@@ -91,6 +91,8 @@ export function StudioScreen({
           penPosition={canvasState.performance.penPosition}
           penDown={canvasState.performance.penDown}
           drawingEnabled={!isViewOnly && canvasState.drawingEnabled}
+          canvasWidth={canvasState.canvasWidth}
+          canvasHeight={canvasState.canvasHeight}
           styleConfig={canvasState.styleConfig}
           showIdleAnimation={!isViewOnly && shouldShowIdleAnimation(canvasState)}
           onStrokeStart={onStrokeStart}

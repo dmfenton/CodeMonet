@@ -55,12 +55,16 @@ class TestParsePathData:
             "color": "#ff0000",
             "stroke_width": 5.0,
             "opacity": 0.8,
+            "fill": "#00ff00",
+            "fill_opacity": 0.35,
         }
         result = parse_path_data(data)
         assert result is not None
         assert result.color == "#ff0000"
         assert result.stroke_width == 5.0
         assert result.opacity == 0.8
+        assert result.fill == "#00ff00"
+        assert result.fill_opacity == 0.35
 
 
 class TestPointClamping:
@@ -164,6 +168,19 @@ class TestStrokeWidthClamping:
         result = parse_path_data(data)
         assert result is not None
         assert result.stroke_width == 30.0
+
+    def test_allows_zero_stroke_width_for_filled_shapes(self):
+        """Stroke width 0 should be preserved for fill-only shapes."""
+        data = {
+            "type": "svg",
+            "d": "M 0 0 L 100 0 L 100 100 Z",
+            "fill": "#f7ead0",
+            "stroke_width": 0,
+        }
+        result = parse_path_data(data)
+        assert result is not None
+        assert result.stroke_width == 0.0
+        assert result.fill == "#f7ead0"
 
 
 class TestBrushHandling:

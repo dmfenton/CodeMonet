@@ -120,8 +120,10 @@ async def delete_share(token: str, user: CurrentUser) -> dict[str, str]:
 # =============================================================================
 
 
-async def load_shared_canvas(token: str) -> tuple[CanvasShare, list[Path], DrawingStyleType]:
-    """Load share info, canvas strokes, and drawing style. Returns (share, strokes, style)."""
+async def load_shared_canvas(
+    token: str,
+) -> tuple[CanvasShare, list[Path], DrawingStyleType, int, int]:
+    """Load share info, canvas strokes, drawing style, and dimensions."""
     async with get_session() as session:
         share = await repository.get_canvas_share(session, token)
         if share is None:
@@ -133,16 +135,16 @@ async def load_shared_canvas(token: str) -> tuple[CanvasShare, list[Path], Drawi
         if result is None:
             raise HTTPException(status_code=404, detail="Artwork no longer exists")
 
-        strokes, drawing_style = result
-        return share, strokes, drawing_style
+        strokes, drawing_style, width, height = result
+        return share, strokes, drawing_style, width, height
 
 
 @router.get("/{token}/preview.png")
 async def get_share_preview_image(token: str) -> Response:
     """Get preview image for social media sharing (no auth required)."""
-    share, strokes, drawing_style = await load_shared_canvas(token)
+    _share, strokes, drawing_style, width, height = await load_shared_canvas(token)
 
-    options = options_for_share_preview(drawing_style)
+    options = options_for_share_preview(drawing_style, width, height)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 
@@ -158,7 +160,7 @@ async def get_share_preview_image(token: str) -> Response:
 @router.get("/{token}", response_class=HTMLResponse)
 async def get_share_page(token: str) -> HTMLResponse:
     """Serve SSR HTML page with Open Graph meta tags for social sharing."""
-    share, strokes, drawing_style = await load_shared_canvas(token)
+    share, strokes, drawing_style, width, height = await load_shared_canvas(token)
     style_config = get_style_config(drawing_style)
 
     # Build meta info - escape user-provided content to prevent XSS
@@ -177,9 +179,13 @@ async def get_share_page(token: str) -> HTMLResponse:
             effective_style = path.get_effective_style(style_config)
             escaped_d = html.escape(d, quote=True)
             color = html.escape(effective_style.color, quote=True)
-            width = effective_style.stroke_width
-            opacity = effective_style.opacity
-            svg_paths += f'<path d="{escaped_d}" stroke="{color}" stroke-width="{width}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="{opacity}"/>'
+            fill = html.escape(path.fill, quote=True) if path.fill else "none"
+            fill_opacity = (
+                path.fill_opacity if path.fill_opacity is not None else effective_style.opacity
+            )
+            stroke_width: float = effective_style.stroke_width
+            stroke = color if stroke_width > 0 else "none"
+            svg_paths += f'<path d="{escaped_d}" stroke="{stroke}" stroke-width="{stroke_width}" fill="{fill}" fill-opacity="{fill_opacity}" stroke-linecap="round" stroke-linejoin="round" stroke-opacity="{effective_style.opacity}"/>'
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -194,8 +200,8 @@ async def get_share_page(token: str) -> HTMLResponse:
     <meta property="og:title" content="{title}">
     <meta property="og:description" content="{description}">
     <meta property="og:image" content="{preview_url}">
-    <meta property="og:image:width" content="800">
-    <meta property="og:image:height" content="600">
+    <meta property="og:image:width" content="{width}">
+    <meta property="og:image:height" content="{height}">
     <meta property="og:site_name" content="Monet">
 
     <!-- Twitter -->
@@ -320,7 +326,7 @@ async def get_share_page(token: str) -> HTMLResponse:
 
         <div class="card">
             <div class="canvas-container">
-                <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+                <svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">
                     <rect width="100%" height="100%" fill="#FFFFFF"/>
                     {svg_paths}
                 </svg>
@@ -352,12 +358,14 @@ async def get_share_page(token: str) -> HTMLResponse:
 @router.get("/{token}/api", response_model=dict[str, Any])
 async def get_share_api(token: str) -> dict[str, Any]:
     """Get share metadata as JSON (for programmatic access, no auth required)."""
-    share, strokes, _drawing_style = await load_shared_canvas(token)
+    share, strokes, _drawing_style, width, height = await load_shared_canvas(token)
 
     return {
         "token": share.token,
         "title": share.title or f"Artwork #{share.piece_number}",
         "piece_number": share.piece_number,
+        "canvas_width": width,
+        "canvas_height": height,
         "stroke_count": len(strokes),
         "created_at": share.created_at.isoformat(),
         "url": f"{settings.magic_link_base_url}/s/{share.token}",

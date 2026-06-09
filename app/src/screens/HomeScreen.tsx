@@ -27,6 +27,10 @@ export interface HomeScreenProps {
   drawingStyle: DrawingStyleType;
   /** Current strokes on the canvas (for WIP preview) */
   strokes: Path[];
+  /** Current canvas width */
+  canvasWidth: number;
+  /** Current canvas height */
+  canvasHeight: number;
   /** Current style configuration (for WIP preview) */
   styleConfig: DrawingStyleConfig;
   /** Callback when style is changed */
@@ -49,6 +53,8 @@ export function HomeScreen({
   gallery,
   drawingStyle,
   strokes,
+  canvasWidth,
+  canvasHeight,
   styleConfig,
   onStyleChange,
   onContinue,
@@ -77,6 +83,8 @@ export function HomeScreen({
         recentCanvas={recentCanvas}
         drawingStyle={drawingStyle}
         strokes={strokes}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
         styleConfig={styleConfig}
         galleryCount={gallery.length}
         onStyleChange={onStyleChange}

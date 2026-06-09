@@ -188,8 +188,13 @@ export const handleClear: MessageHandler<ClearMessage> = (_message, dispatch) =>
   dispatch({ type: 'CLEAR_MESSAGES' });
 };
 
-export const handleNewCanvas: MessageHandler<NewCanvasMessage> = (_message, dispatch) => {
+export const handleNewCanvas: MessageHandler<NewCanvasMessage> = (message, dispatch) => {
   dispatch({ type: 'CLEAR_PERFORMANCE' });
+  dispatch({
+    type: 'SET_CANVAS_SIZE',
+    width: message.canvas_width ?? 800,
+    height: message.canvas_height ?? 600,
+  });
   dispatch({ type: 'CLEAR' });
   dispatch({ type: 'CLEAR_MESSAGES' });
 };
@@ -203,6 +208,8 @@ export const handleLoadCanvas: MessageHandler<LoadCanvasMessage> = (message, dis
     type: 'LOAD_CANVAS',
     strokes: message.strokes,
     pieceNumber: message.piece_number,
+    canvasWidth: message.canvas_width,
+    canvasHeight: message.canvas_height,
     drawingStyle: message.drawing_style,
     styleConfig: message.style_config,
   });
@@ -214,6 +221,8 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
     strokes: message.strokes,
     gallery: message.gallery,
     pieceNumber: message.piece_number,
+    canvasWidth: message.canvas_width,
+    canvasHeight: message.canvas_height,
     paused: message.paused,
     drawingStyle: message.drawing_style,
     styleConfig: message.style_config,

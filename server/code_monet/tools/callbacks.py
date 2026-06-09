@@ -105,22 +105,21 @@ def get_canvas_dimensions() -> tuple[int, int]:
     return _canvas_width, _canvas_height
 
 
+def image_content_from_png(png_bytes: bytes) -> dict[str, Any]:
+    """Build MCP image content for a PNG payload."""
+    return {
+        "type": "image",
+        "data": base64.standard_b64encode(png_bytes).decode("utf-8"),
+        "mimeType": "image/png",
+    }
+
+
 def inject_canvas_image(content: list[dict[str, Any]]) -> None:
     """Inject current canvas image into response content if callback is set."""
     if _get_canvas_callback is None:
         return
     try:
         png_bytes = _get_canvas_callback()
-        image_b64 = base64.standard_b64encode(png_bytes).decode("utf-8")
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": image_b64,
-                },
-            }
-        )
+        content.append(image_content_from_png(png_bytes))
     except Exception as e:
         logger.warning(f"Failed to get canvas image: {e}")

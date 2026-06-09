@@ -60,6 +60,8 @@ class GalleryEntry(BaseModel):
     created_at: str  # ISO timestamp
     piece_number: int
     stroke_count: int
+    width: int = 800
+    height: int = 600
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER
     title: str | None = None  # Piece title (set by agent via name_piece tool)
     thumbnail_token: str | None = None  # Token for thumbnail URL (same as id)
@@ -72,6 +74,8 @@ class SavedCanvas(BaseModel):
     strokes: list[Path]
     created_at: str  # ISO timestamp
     piece_number: int
+    width: int = 800
+    height: int = 600
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER
     title: str | None = None  # Piece title (set by agent via name_piece tool)
 
@@ -87,6 +91,8 @@ class SavedCanvas(BaseModel):
             created_at=self.created_at,
             piece_number=self.piece_number,
             stroke_count=self.num_strokes,
+            width=self.width,
+            height=self.height,
             drawing_style=self.drawing_style,
             title=self.title,
             thumbnail_token=self.id,  # Use id as token for thumbnail URL

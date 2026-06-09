@@ -305,6 +305,19 @@ def _render_paint_stroke_reusing_layer(
     return Image.alpha_composite(img, composited_layer)
 
 
+def _render_filled_path(
+    img: Image.Image,
+    points: list[tuple[float, float]],
+    fill: tuple[int, int, int, int],
+) -> Image.Image:
+    if len(points) < 3:
+        return img
+    layer = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(layer)
+    draw.polygon(points, fill=fill)
+    return Image.alpha_composite(img, layer)
+
+
 def render_strokes(
     strokes: list[Path],
     options: RenderOptions | None = None,
@@ -370,6 +383,20 @@ def render_strokes(
 
         # Apply scaling
         scaled_points = transform.apply(points)
+        fill_color = path.fill
+        if fill_color:
+            if not per_stroke_compositing:
+                img = Image.alpha_composite(img, shared_layer)
+                shared_layer = Image.new("RGBA", (options.width, options.height), (0, 0, 0, 0))
+                draw = ImageDraw.Draw(shared_layer)
+            fill_opacity = (
+                path.fill_opacity if path.fill_opacity is not None else effective_style.opacity
+            )
+            img = _render_filled_path(img, scaled_points, hex_to_rgba(fill_color, fill_opacity))
+
+        if effective_style.stroke_width <= 0:
+            continue
+
         stroke_width = max(1, int(effective_style.stroke_width * transform.scale))
 
         if per_stroke_compositing:
@@ -498,13 +525,15 @@ def options_for_agent_view(canvas: CanvasState) -> RenderOptions:
 
 def options_for_og_image(
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
+    source_width: int = 800,
+    source_height: int = 600,
 ) -> RenderOptions:
     """Options for Open Graph social sharing images.
 
     - 1200x630 (optimal OG size)
     - Dark background matching site theme
     - White strokes for plotter mode visibility
-    - Scales from 800x600 with padding
+    - Scales from source canvas dimensions with padding
     """
     return RenderOptions(
         width=1200,
@@ -512,7 +541,7 @@ def options_for_og_image(
         background_color=(26, 26, 46, 255),  # Dark background
         drawing_style=drawing_style,
         plotter_stroke_override="#FFFFFF" if drawing_style == DrawingStyleType.PLOTTER else None,
-        scale_from=(800, 600),
+        scale_from=(source_width, source_height),
         scale_padding=50,
         optimize_png=True,
     )
@@ -520,15 +549,17 @@ def options_for_og_image(
 
 def options_for_thumbnail(
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
+    width: int = 800,
+    height: int = 600,
 ) -> RenderOptions:
     """Options for gallery thumbnails.
 
-    - 800x600 standard canvas size
+    - Uses saved canvas dimensions
     - White background
     """
     return RenderOptions(
-        width=800,
-        height=600,
+        width=width,
+        height=height,
         background_color="#FFFFFF",
         drawing_style=drawing_style,
         expand_brushes=False,
@@ -537,16 +568,18 @@ def options_for_thumbnail(
 
 def options_for_share_preview(
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
+    width: int = 800,
+    height: int = 600,
 ) -> RenderOptions:
     """Options for share link preview images.
 
-    - 800x600 standard canvas size
+    - Uses saved canvas dimensions
     - White background
     - PNG optimization for smaller files
     """
     return RenderOptions(
-        width=800,
-        height=600,
+        width=width,
+        height=height,
         background_color="#FFFFFF",
         drawing_style=drawing_style,
         expand_brushes=False,

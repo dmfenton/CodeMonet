@@ -9,6 +9,11 @@ from typing import Any, Protocol
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
+from code_monet.tools.quality_gate import (
+    get_quality_gate_snapshot,
+    is_finish_gate_blocked,
+    parse_critique_verdict,
+)
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -55,7 +60,11 @@ class DrawingAgentBackend(Protocol):
         ...
 
     def set_on_tool_complete(
-        self, callback: Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]]
+        self,
+        callback: Callable[
+            [str, dict[str, Any] | None, int, str | None, int | None],
+            Coroutine[Any, Any, None],
+        ],
     ) -> None:
         """Set callback for completed tool calls."""
         ...
@@ -94,6 +103,7 @@ class AgentOrchestrator:
 
     # Track piece completion - prevents auto-starting new turns
     _piece_completed: bool = field(default=False)
+    _quality_gate_revision_turns: int = field(default=0)
 
     def __post_init__(self) -> None:
         # Set up the agent's draw callback to use our _draw_paths method
@@ -224,6 +234,13 @@ class AgentOrchestrator:
     async def _handle_code_result(self, result: CodeExecutionResult) -> None:
         """Handle when code execution completes."""
         logger.info(f"Code execution completed (iteration {result.iteration})")
+        if result.tool_name == "critique_canvas":
+            verdict = parse_critique_verdict(result.stdout or result.stderr or "")
+            logger.info(
+                "critique_canvas completed: verdict=%s return_code=%s",
+                verdict or "UNKNOWN",
+                result.return_code,
+            )
         if self.file_logger:
             await self.file_logger.log_code_result(
                 iteration=result.iteration,
@@ -246,7 +263,12 @@ class AgentOrchestrator:
         )
 
     async def _handle_tool_complete(
-        self, tool_name: str, tool_input: dict[str, Any] | None, iteration: int
+        self,
+        tool_name: str,
+        tool_input: dict[str, Any] | None,
+        iteration: int,
+        stdout: str | None = None,
+        return_code: int | None = None,
     ) -> None:
         """Handle tool completion from PostToolUse hook.
 
@@ -259,7 +281,8 @@ class AgentOrchestrator:
                 status="completed",
                 tool_name=tool_name,
                 tool_input=tool_input,
-                return_code=0,  # PostToolUse only runs on success
+                stdout=stdout[: settings.max_stdout_chars] if stdout else None,
+                return_code=return_code if return_code is not None else 0,
                 iteration=iteration,
             )
         )
@@ -313,6 +336,7 @@ class AgentOrchestrator:
             state = self.agent.get_state()
             piece_num = state.piece_number
             logger.info(f"Piece {piece_num} complete")
+            self._quality_gate_revision_turns = 0
 
             # Broadcast piece state with completed=True
             await self.broadcaster.broadcast(PieceStateMessage(number=piece_num, completed=True))
@@ -329,8 +353,30 @@ class AgentOrchestrator:
 
             # Mark piece as completed - orchestrator won't auto-start new turns
             self._piece_completed = True
+        elif self._should_auto_revise_quality_gate():
+            self._quality_gate_revision_turns += 1
+            gate = get_quality_gate_snapshot()
+            logger.info(
+                "Quality gate blocked; scheduling auto-revision turn %s/%s (verdict=%s)",
+                self._quality_gate_revision_turns,
+                settings.quality_gate_auto_revision_turns,
+                gate.get("last_verdict"),
+            )
+            self._wake_event.set()
+        elif not is_finish_gate_blocked():
+            self._quality_gate_revision_turns = 0
 
         return done
+
+    def _should_auto_revise_quality_gate(self) -> bool:
+        """Continue drawing while a failed critique blocks finishing."""
+        if not is_finish_gate_blocked():
+            return False
+        if self.agent.paused:
+            return False
+        if not self.broadcaster.active_connections:
+            return False
+        return self._quality_gate_revision_turns < settings.quality_gate_auto_revision_turns
 
     def clear_piece_completed(self) -> None:
         """Clear the piece_completed flag to allow new turns.
@@ -338,6 +384,7 @@ class AgentOrchestrator:
         Call this when user requests a new canvas or provides a nudge.
         """
         self._piece_completed = False
+        self._quality_gate_revision_turns = 0
 
     async def run_loop(self) -> None:
         """Main agent loop that runs continuously.

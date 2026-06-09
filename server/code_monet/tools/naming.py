@@ -8,6 +8,7 @@ from typing import Any
 from claude_agent_sdk import tool
 
 from .callbacks import get_piece_title_callback
+from .quality_gate import finish_block_message
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,13 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
     if not title or not isinstance(title, str):
         return {
             "content": [{"type": "text", "text": "Error: Please provide a title for the piece"}],
+            "is_error": True,
+        }
+
+    block_message = finish_block_message()
+    if block_message is not None:
+        return {
+            "content": [{"type": "text", "text": block_message}],
             "is_error": True,
         }
 

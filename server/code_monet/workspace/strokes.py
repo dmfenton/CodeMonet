@@ -59,9 +59,11 @@ def enforce_pending_limit(
     Returns:
         Updated pending strokes list with oldest dropped if needed.
     """
-    if len(pending_strokes) >= max_pending:
+    overflow = len(pending_strokes) + new_count - max_pending
+    if overflow > 0:
         logger.warning(
-            f"User {user_id}: pending strokes limit reached ({max_pending}), dropping oldest"
+            f"User {user_id}: pending strokes limit reached ({max_pending}), "
+            f"dropping {overflow} oldest"
         )
-        return pending_strokes[new_count:]
+        return pending_strokes[overflow:]
     return pending_strokes

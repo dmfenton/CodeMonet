@@ -9,6 +9,7 @@ from typing import Any
 from code_monet.config import settings
 from code_monet.rate_limiter import RateLimiter, RateLimiterConfig
 from code_monet.registry import ActiveWorkspace
+from code_monet.tools.quality_gate import reset_quality_gate
 from code_monet.types import (
     AgentStatus,
     ClearMessage,
@@ -25,6 +26,26 @@ from code_monet.types import (
 )
 
 logger = logging.getLogger(__name__)
+
+MIN_CANVAS_DIMENSION = 240
+MAX_CANVAS_DIMENSION = 2400
+
+
+def _canvas_dimension_from_message(
+    message: dict[str, Any] | None,
+    key: str,
+    default: int,
+) -> int:
+    """Read and clamp a canvas dimension from a client message."""
+    raw_value = message.get(key) if message else None
+    if raw_value is None:
+        return default
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+    return max(MIN_CANVAS_DIMENSION, min(MAX_CANVAS_DIMENSION, value))
+
 
 # Rate limiter for user strokes
 _stroke_limiter = RateLimiter(
@@ -69,6 +90,7 @@ async def handle_nudge(workspace: ActiveWorkspace, message: dict[str, Any]) -> N
 async def handle_clear(workspace: ActiveWorkspace) -> None:
     """Handle canvas clear request."""
     await workspace.state.clear_canvas()
+    reset_quality_gate()
     await workspace.connections.broadcast(ClearMessage())
     logger.info(f"User {workspace.user_id}: canvas cleared")
 
@@ -77,7 +99,9 @@ async def handle_new_canvas(
     workspace: ActiveWorkspace, message: dict[str, Any] | None = None
 ) -> None:
     """Handle new canvas request (save current and start fresh)."""
-    saved_id = await workspace.state.new_canvas()
+    canvas_width = _canvas_dimension_from_message(message, "canvas_width", 800)
+    canvas_height = _canvas_dimension_from_message(message, "canvas_height", 600)
+    saved_id = await workspace.state.new_canvas(width=canvas_width, height=canvas_height)
     workspace.agent.reset_container()
 
     # If direction provided, add it as an initial nudge for the new piece
@@ -97,7 +121,13 @@ async def handle_new_canvas(
         except ValueError:
             logger.warning(f"User {workspace.user_id}: invalid style in new_canvas: {style_str}")
 
-    await workspace.connections.broadcast(NewCanvasMessage(saved_id=saved_id))
+    await workspace.connections.broadcast(
+        NewCanvasMessage(
+            saved_id=saved_id,
+            canvas_width=workspace.state.canvas.width,
+            canvas_height=workspace.state.canvas.height,
+        )
+    )
 
     # Send updated gallery
     gallery_entries = await workspace.state.list_gallery()
@@ -136,13 +166,15 @@ async def handle_load_canvas(workspace: ActiveWorkspace, message: dict[str, Any]
     result = await workspace.state.load_from_gallery(piece_num)
 
     if result:
-        strokes, drawing_style = result
+        strokes, drawing_style, width, height = result
         # Read-only: send strokes to client without mutating workspace state
         style_config = get_style_config(drawing_style)
         await workspace.connections.broadcast(
             LoadCanvasMessage(
                 strokes=strokes,
                 piece_number=piece_num,
+                canvas_width=width,
+                canvas_height=height,
                 drawing_style=drawing_style,
                 style_config=style_config,
             )

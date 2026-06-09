@@ -23,6 +23,10 @@ export function GalleryPiecePage({
 }: GalleryPiecePageProps): React.ReactElement {
   const [piece, setPiece] = useState<GalleryPiece | undefined>(initialPiece);
   const [strokes, setStrokes] = useState<Path[]>((initialStrokes?.strokes ?? []) as Path[]);
+  const [canvasSize, setCanvasSize] = useState({
+    width: initialStrokes?.canvas_width ?? initialPiece?.width ?? 800,
+    height: initialStrokes?.canvas_height ?? initialPiece?.height ?? 600,
+  });
   const [loading, setLoading] = useState(!initialStrokes);
   const navigate = useNavigate();
 
@@ -35,12 +39,18 @@ export function GalleryPiecePage({
         if (response.ok) {
           const data: PieceStrokes = await response.json();
           setStrokes((data.strokes ?? []) as Path[]);
+          setCanvasSize({
+            width: data.canvas_width ?? 800,
+            height: data.canvas_height ?? 600,
+          });
           // Create a piece object from the response
           setPiece({
             id: data.id,
             user_id: userId,
             piece_number: data.piece_number,
             stroke_count: data.strokes?.length ?? 0,
+            width: data.canvas_width,
+            height: data.canvas_height,
             created_at: data.created_at,
           });
         }
@@ -96,20 +106,36 @@ export function GalleryPiecePage({
           <article className="piece-content">
             <div className="piece-canvas-container">
               <div className="piece-frame">
-                <svg viewBox="0 0 800 800" className="piece-artwork" aria-label={title}>
-                  <rect width="800" height="800" fill="#fffdf8" />
-                  {strokes.map((stroke, i) => (
-                    <path
-                      key={i}
-                      d={pathToSvgDScaled(stroke, 1)}
-                      fill="none"
-                      stroke={stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34')}
-                      strokeWidth={stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3)}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      opacity={stroke.opacity ?? 0.85}
-                    />
-                  ))}
+                <svg
+                  viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+                  className="piece-artwork"
+                  aria-label={title}
+                >
+                  <rect width={canvasSize.width} height={canvasSize.height} fill="#fffdf8" />
+                  {strokes.map((stroke, i) => {
+                    const strokeWidth = stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3);
+                    const strokeColor =
+                      strokeWidth > 0
+                        ? (stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34'))
+                        : 'none';
+                    const fill = stroke.fill ?? 'none';
+                    const fillOpacity = stroke.fill
+                      ? (stroke.fill_opacity ?? stroke.opacity ?? 0.85)
+                      : undefined;
+                    return (
+                      <path
+                        key={i}
+                        d={pathToSvgDScaled(stroke, 1)}
+                        fill={fill}
+                        fillOpacity={fillOpacity}
+                        stroke={strokeColor}
+                        strokeWidth={strokeWidth}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeOpacity={stroke.opacity ?? 0.85}
+                      />
+                    );
+                  })}
                 </svg>
               </div>
             </div>

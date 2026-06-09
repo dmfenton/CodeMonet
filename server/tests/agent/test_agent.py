@@ -1,6 +1,8 @@
 """Tests for the drawing agent module."""
 
+import asyncio
 import base64
+from collections.abc import Generator
 from importlib.metadata import version
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -9,7 +11,15 @@ import pytest
 from PIL import Image
 
 from code_monet.agent import DrawingAgent
+from code_monet.tools.quality_gate import record_mark_piece_done_attempt, reset_quality_gate
 from code_monet.types import AgentTurnComplete, DrawingStyleType, Path, PathType, Point
+
+
+@pytest.fixture(autouse=True)
+def reset_tool_quality_gate() -> Generator[None]:
+    reset_quality_gate()
+    yield
+    reset_quality_gate()
 
 
 class TestDrawingAgentPauseResume:
@@ -181,6 +191,21 @@ class TestDrawingAgentContainerManagement:
         assert agent._abort is True
         # Client disconnect happens async - just verify abort is set
 
+    @pytest.mark.asyncio
+    async def test_reset_container_clears_client_immediately(self) -> None:
+        """reset_container does not leave a stale SDK client available for reuse."""
+        agent = DrawingAgent()
+        client = MagicMock()
+        client.disconnect = AsyncMock()
+        agent._client = client
+
+        agent.reset_container()
+        await asyncio.sleep(0)
+
+        assert agent._abort is True
+        assert agent._client is None
+        client.disconnect.assert_awaited_once()
+
 
 class TestPostToolUseHook:
     """Tests for _post_tool_use_hook behavior."""
@@ -260,14 +285,25 @@ class TestPostToolUseHook:
 
     @pytest.mark.asyncio
     async def test_hook_sets_piece_done_for_mark_piece_done(self) -> None:
-        """Hook sets _piece_done flag when mark_piece_done tool completes."""
+        """Hook sets _piece_done only when mark_piece_done was accepted."""
         agent = DrawingAgent()
         assert agent._piece_done is False
+        record_mark_piece_done_attempt(True)
 
         input_data = {"tool_name": "mcp__drawing__mark_piece_done", "tool_input": {}}
         await agent._post_tool_use_hook(input_data, None, MagicMock())
 
         assert agent._piece_done is True
+
+    @pytest.mark.asyncio
+    async def test_hook_does_not_finish_after_rejected_mark_piece_done(self) -> None:
+        """Hook does not complete the piece when the finish gate rejected done."""
+        agent = DrawingAgent()
+
+        input_data = {"tool_name": "mcp__drawing__mark_piece_done", "tool_input": {}}
+        await agent._post_tool_use_hook(input_data, None, MagicMock())
+
+        assert agent._piece_done is False
 
     @pytest.mark.asyncio
     async def test_hook_calls_on_draw_for_sign_canvas(self) -> None:

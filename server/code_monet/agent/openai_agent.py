@@ -22,6 +22,7 @@ from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
 from code_monet.rendering import options_for_agent_view, render_strokes
 from code_monet.tools import (
+    handle_critique_canvas,
     handle_draw_paths,
     handle_generate_svg,
     handle_imagine,
@@ -30,6 +31,7 @@ from code_monet.tools import (
     handle_sign_canvas,
     handle_view_canvas,
 )
+from code_monet.tools.quality_gate import quality_gate_prompt_context, reset_quality_gate
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -47,7 +49,7 @@ OPENAI_DRAWING_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "draw_paths",
-        "description": "Draw path objects on the 800x600 canvas.",
+        "description": "Draw path objects on the current canvas.",
         "parameters": {
             "type": "object",
             "properties": {
@@ -93,6 +95,8 @@ OPENAI_DRAWING_TOOLS: list[dict[str, Any]] = [
                             "color": {"type": "string"},
                             "stroke_width": {"type": "number"},
                             "opacity": {"type": "number"},
+                            "fill": {"type": "string"},
+                            "fill_opacity": {"type": "number"},
                         },
                         "required": ["type"],
                         "additionalProperties": False,
@@ -123,6 +127,17 @@ OPENAI_DRAWING_TOOLS: list[dict[str, Any]] = [
         "name": "view_canvas",
         "description": "Return the current canvas image.",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+    {
+        "type": "function",
+        "name": "critique_canvas",
+        "description": "Strictly critique the current rendered canvas against a visual brief.",
+        "parameters": {
+            "type": "object",
+            "properties": {"brief": {"type": "string"}},
+            "required": ["brief"],
+            "additionalProperties": False,
+        },
     },
     {
         "type": "function",
@@ -193,7 +208,10 @@ class OpenAIDrawingAgent:
         self._client: AsyncOpenAI | None = None
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
         self._on_tool_complete: (
-            Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]] | None
+            Callable[
+                [str, dict[str, Any] | None, int, str | None, int | None], Coroutine[Any, Any, None]
+            ]
+            | None
         ) = None
 
     @property
@@ -220,7 +238,11 @@ class OpenAIDrawingAgent:
         self._on_draw = callback
 
     def set_on_tool_complete(
-        self, callback: Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]]
+        self,
+        callback: Callable[
+            [str, dict[str, Any] | None, int, str | None, int | None],
+            Coroutine[Any, Any, None],
+        ],
     ) -> None:
         self._on_tool_complete = callback
 
@@ -237,6 +259,7 @@ class OpenAIDrawingAgent:
 
     def reset_container(self) -> None:
         self._abort = True
+        reset_quality_gate()
 
     async def _save_state(self) -> None:
         state = self.get_state()
@@ -251,12 +274,15 @@ class OpenAIDrawingAgent:
     def _build_prompt(self) -> str:
         state = self.get_state()
         parts = [
-            f"Canvas size: {settings.canvas_width}x{settings.canvas_height}\n"
+            f"Canvas size: {state.canvas.width}x{state.canvas.height}\n"
             f"Existing strokes: {len(state.canvas.strokes)}\n"
             f"Piece number: {state.piece_number + 1}"
         ]
         if state.notes:
             parts.append(f"Your notes:\n{state.notes}")
+        gate_context = quality_gate_prompt_context()
+        if gate_context:
+            parts.append(gate_context)
         if self.pending_nudges:
             parts.append("Human nudges:\n" + "\n".join(f"- {n}" for n in self.pending_nudges))
             self.pending_nudges = []
@@ -329,6 +355,7 @@ class OpenAIDrawingAgent:
             "draw_paths": handle_draw_paths,
             "generate_svg": handle_generate_svg,
             "view_canvas": lambda _args: handle_view_canvas(),
+            "critique_canvas": handle_critique_canvas,
             "sign_canvas": handle_sign_canvas,
             "name_piece": handle_name_piece,
             "mark_piece_done": lambda _args: handle_mark_piece_done(),
@@ -344,9 +371,11 @@ class OpenAIDrawingAgent:
             result = await handler(args)
 
         await self._flush_collected_paths()
-        if name == "mark_piece_done" or (name == "draw_paths" and args.get("done")):
+        if not result.get("is_error") and (
+            name == "mark_piece_done" or (name == "draw_paths" and args.get("done"))
+        ):
             self._piece_done = True
-        if name == "generate_svg" and args.get("done"):
+        if not result.get("is_error") and name == "generate_svg" and args.get("done"):
             self._piece_done = True
 
         return_code = 1 if result.get("is_error") else 0
@@ -362,7 +391,13 @@ class OpenAIDrawingAgent:
                 )
             )
         if self._on_tool_complete:
-            await self._on_tool_complete(name, args, self._current_iteration)
+            await self._on_tool_complete(
+                name,
+                args,
+                self._current_iteration,
+                _tool_result_text(result),
+                return_code,
+            )
         return result
 
     async def run_turn(
@@ -399,8 +434,8 @@ class OpenAIDrawingAgent:
         setup_tool_callbacks(
             state=state,
             get_canvas_png=get_canvas_png,
-            canvas_width=settings.canvas_width,
-            canvas_height=settings.canvas_height,
+            canvas_width=state.canvas.width,
+            canvas_height=state.canvas.height,
             on_paths_collected=on_draw,
         )
 

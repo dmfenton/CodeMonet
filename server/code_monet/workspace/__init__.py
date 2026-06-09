@@ -362,6 +362,8 @@ class WorkspaceState:
             created_at = datetime.now(UTC).isoformat()
             piece_data = {
                 "piece_number": self._piece_number,
+                "width": self._canvas.width,
+                "height": self._canvas.height,
                 "strokes": [s.model_dump() for s in self._canvas.strokes],
                 "created_at": created_at,
                 "drawing_style": self._canvas.drawing_style.value,
@@ -379,13 +381,15 @@ class WorkspaceState:
         await self.save()
         return saved_id
 
-    async def new_canvas(self) -> str | None:
+    async def new_canvas(self, *, width: int = 800, height: int = 600) -> str | None:
         """Save current canvas to gallery and start fresh. Returns saved ID."""
         # First save to gallery
         saved_id = await self.save_to_gallery()
 
         # Then clear for new canvas
         async with self._write_lock:
+            self._canvas.width = width
+            self._canvas.height = height
             self._canvas.strokes = []
             self._piece_number += 1
             self._monologue = ""  # Clear thinking for new piece
@@ -416,9 +420,9 @@ class WorkspaceState:
 
     async def load_from_gallery(
         self, piece_number: int
-    ) -> tuple[list[Path], DrawingStyleType] | None:
-        """Load strokes and drawing style from a gallery piece.
+    ) -> tuple[list[Path], DrawingStyleType, int, int] | None:
+        """Load strokes, drawing style, and dimensions from a gallery piece.
 
-        Returns (strokes, drawing_style) tuple or None if not found.
+        Returns (strokes, drawing_style, width, height) tuple or None if not found.
         """
         return await load_gallery_piece(self._gallery_dir, piece_number)

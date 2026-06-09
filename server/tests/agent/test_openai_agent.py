@@ -161,7 +161,13 @@ async def test_run_tool_reports_unknown_tool() -> None:
     assert result["is_error"] is True
     on_code_start.assert_awaited_once()
     on_code_result.assert_awaited_once()
-    on_tool_complete.assert_awaited_once_with("missing_tool", {}, 1)
+    on_tool_complete.assert_awaited_once_with(
+        "missing_tool",
+        {},
+        1,
+        "Error: unknown tool missing_tool",
+        1,
+    )
 
 
 @pytest.mark.asyncio

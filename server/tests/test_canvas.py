@@ -162,6 +162,21 @@ class TestPngRasterization:
         assert pixel[1] < 100, f"Expected low green, got {pixel}"
         assert pixel[2] < 100, f"Expected low blue, got {pixel}"
 
+    def test_paint_renders_fill_only_svg_shape(self) -> None:
+        """Paint mode should render filled closed SVG paths with no outline."""
+        path = Path(
+            type=PathType.SVG,
+            d="M 20 20 L 180 20 L 180 80 L 20 80 Z",
+            fill="#ff0000",
+            fill_opacity=1,
+            stroke_width=0,
+        )
+        png = _render_strokes_to_png_sync(
+            [path], width=200, height=100, drawing_style=DrawingStyleType.PAINT
+        )
+
+        assert self._get_pixel(png, 100, 50) == (255, 0, 0)
+
     def test_paint_uses_custom_stroke_width(self) -> None:
         """Paint mode should respect custom stroke width."""
         # Wide stroke

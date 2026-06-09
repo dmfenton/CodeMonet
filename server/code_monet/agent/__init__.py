@@ -6,6 +6,7 @@ import asyncio
 import io
 import logging
 from collections.abc import AsyncGenerator, Callable, Coroutine
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,11 @@ from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
 from code_monet.rendering import options_for_agent_view, render_strokes
 from code_monet.tools import create_drawing_server
+from code_monet.tools.quality_gate import (
+    consume_mark_piece_done_accepted,
+    quality_gate_prompt_context,
+    reset_quality_gate,
+)
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -121,7 +127,10 @@ class DrawingAgent:
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
         # Tool completion callback - orchestrator sets this to broadcast completed events
         self._on_tool_complete: (
-            Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]] | None
+            Callable[
+                [str, dict[str, Any] | None, int, str | None, int | None], Coroutine[Any, Any, None]
+            ]
+            | None
         ) = None
         self._collected_paths: list[Path] = []
         self._piece_done = False
@@ -140,6 +149,7 @@ class DrawingAgent:
                 "mcp__drawing__mark_piece_done",
                 "mcp__drawing__generate_svg",
                 "mcp__drawing__view_canvas",
+                "mcp__drawing__critique_canvas",
                 "mcp__drawing__imagine",
                 "mcp__drawing__sign_canvas",
                 "mcp__drawing__name_piece",
@@ -187,7 +197,11 @@ class DrawingAgent:
         self._on_draw = callback
 
     def set_on_tool_complete(
-        self, callback: Callable[[str, dict[str, Any] | None, int], Coroutine[Any, Any, None]]
+        self,
+        callback: Callable[
+            [str, dict[str, Any] | None, int, str | None, int | None],
+            Coroutine[Any, Any, None],
+        ],
     ) -> None:
         """Set the callback for tool completion. Called by orchestrator.
 
@@ -238,7 +252,7 @@ class DrawingAgent:
 
         # After mark_piece_done, flag completion
         elif tool_name == "mcp__drawing__mark_piece_done":
-            self._piece_done = True
+            self._piece_done = consume_mark_piece_done_accepted()
 
         # Signal tool completion for all drawing tools (broadcasts "completed" message)
         # This unblocks client-side stroke rendering that waits for in-progress events to clear
@@ -249,7 +263,16 @@ class DrawingAgent:
                 if tool_name.startswith("mcp__drawing__")
                 else tool_name
             )
-            await self._on_tool_complete(clean_name, tool_input, self._current_iteration)
+            tool_response = _extract_hook_tool_response(input_data)
+            stdout = _tool_response_text(tool_response)
+            return_code = 1 if _tool_response_is_error(tool_response) else 0
+            await self._on_tool_complete(
+                clean_name,
+                tool_input,
+                self._current_iteration,
+                stdout,
+                return_code,
+            )
 
         return SyncHookJSONOutput()
 
@@ -297,18 +320,48 @@ class DrawingAgent:
     def reset_container(self) -> None:
         """Reset the session for a new piece."""
         self._abort = True  # Abort any running turn
+        reset_quality_gate()
         # Disconnect client to start fresh
         if self._client:
-            asyncio.create_task(self._disconnect_client())
+            client = self._client
+            self._client = None
+            asyncio.create_task(self._disconnect_client(client))
 
-    async def _disconnect_client(self) -> None:
+    async def _disconnect_client(self, client: ClaudeSDKClient | None = None) -> None:
         """Disconnect the client."""
-        if self._client:
+        client_to_disconnect = client or self._client
+        self._client = None
+        if client_to_disconnect:
             try:
-                await self._client.disconnect()
+                await client_to_disconnect.disconnect()
             except Exception as e:
                 logger.warning(f"Error disconnecting client: {e}")
-            self._client = None
+
+    async def _connect_client(
+        self,
+        style_type: DrawingStyleType,
+        workspace_dir: str | None,
+    ) -> None:
+        """Connect a fresh SDK client, retrying once after SDK cleanup failures."""
+        options = self._build_options(style_type, workspace_dir)
+        last_error: Exception | None = None
+
+        for attempt in range(2):
+            client = ClaudeSDKClient(options=options)
+            self._client = client
+            try:
+                await client.connect()
+                return
+            except Exception as e:
+                last_error = e
+                self._client = None
+                with suppress(Exception):
+                    await client.disconnect()
+                if attempt == 0:
+                    logger.warning("Agent client connect failed; retrying once", exc_info=True)
+
+        if last_error is not None:
+            raise last_error
 
     def _image_to_base64(self, img: Any) -> str:
         """Convert PIL Image to base64 string."""
@@ -321,7 +374,7 @@ class DrawingAgent:
 
         # Canvas info
         parts.append(
-            f"Canvas size: {settings.canvas_width}x{settings.canvas_height}\n"
+            f"Canvas size: {state.canvas.width}x{state.canvas.height}\n"
             f"Existing strokes: {len(state.canvas.strokes)}\n"
             f"Piece number: {state.piece_number + 1}"
         )
@@ -330,6 +383,10 @@ class DrawingAgent:
         notes = state.notes
         if notes:
             parts.append(f"Your notes:\n{notes}")
+
+        gate_context = quality_gate_prompt_context()
+        if gate_context:
+            parts.append(gate_context)
 
         # Nudges
         if self.pending_nudges:
@@ -438,20 +495,21 @@ class DrawingAgent:
         setup_tool_callbacks(
             state=state,
             get_canvas_png=get_canvas_png,
-            canvas_width=settings.canvas_width,
-            canvas_height=settings.canvas_height,
+            canvas_width=state.canvas.width,
+            canvas_height=state.canvas.height,
             on_paths_collected=on_draw,
         )
 
         try:
             # Connect client if needed
             if self._client is None:
-                options = self._build_options(state.canvas.drawing_style, state.workspace_dir)
-                self._client = ClaudeSDKClient(options=options)
-                await self._client.connect()
+                await self._connect_client(state.canvas.drawing_style, state.workspace_dir)
+            client = self._client
+            if client is None:
+                raise RuntimeError("Agent client did not connect")
 
             # Send the turn prompt with canvas image
-            await self._client.query(self._build_multimodal_prompt())
+            await client.query(self._build_multimodal_prompt())
 
             # Track iteration for tool completion callback
             self._current_iteration = 1
@@ -462,7 +520,7 @@ class DrawingAgent:
 
             # Process messages using the processor module
             result = await _process_turn_messages(
-                client=self._client,
+                client=client,
                 callbacks=cb,
                 is_aborted=lambda: self._abort,
                 iteration=self._current_iteration,
@@ -494,3 +552,44 @@ class DrawingAgent:
                 await cb.on_error(str(e), None)
 
             raise RuntimeError(f"Agent turn failed: {e}") from e
+
+
+def _extract_hook_tool_response(input_data: HookInputOrDict) -> Any:
+    """Extract PostToolUse response payload from SDK hook input."""
+    if isinstance(input_data, dict):
+        return input_data.get("tool_response")
+    return getattr(input_data, "tool_response", None)
+
+
+def _tool_response_is_error(response: Any) -> bool:
+    """Return whether a hook tool response represents an execution error."""
+    if isinstance(response, dict):
+        return bool(response.get("is_error"))
+    return bool(getattr(response, "is_error", False))
+
+
+def _tool_response_text(response: Any) -> str | None:
+    """Extract text content from a Claude SDK tool response payload."""
+    if response is None:
+        return None
+    if isinstance(response, str):
+        return response
+    if isinstance(response, dict):
+        content = response.get("content")
+        if content is not None:
+            return _tool_response_text(content)
+        text = response.get("text")
+        if isinstance(text, str):
+            return text
+        return None
+    if isinstance(response, list):
+        parts = [_tool_response_text(item) for item in response]
+        joined = "\n".join(part for part in parts if part)
+        return joined or None
+    content = getattr(response, "content", None)
+    if content is not None:
+        return _tool_response_text(content)
+    text = getattr(response, "text", None)
+    if isinstance(text, str):
+        return text
+    return None

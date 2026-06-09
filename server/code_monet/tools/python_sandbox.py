@@ -24,7 +24,8 @@ async def run_python_code(code: str, canvas_width: int, canvas_height: int) -> d
     2. {"svg_paths": [...]} - array of SVG d-strings
 
     The code has access to canvas_width and canvas_height variables.
-    Helper functions support optional style parameters: color, stroke_width, opacity.
+    Helper functions support optional style parameters: color, stroke_width, opacity,
+    fill, and fill_opacity.
 
     Returns dict with stdout, stderr, return_code, and parsed paths.
     """
@@ -45,7 +46,7 @@ canvas_height = {canvas_height}
 BRUSHES = {brushes_list}
 
 # Helper function to add style properties to a path dict
-def _add_style(path_dict: dict, brush=None, color=None, stroke_width=None, opacity=None) -> dict:
+def _add_style(path_dict: dict, brush=None, color=None, stroke_width=None, opacity=None, fill=None, fill_opacity=None) -> dict:
     \"\"\"Add optional style and brush properties to a path dict.\"\"\"
     if brush is not None:
         path_dict["brush"] = brush
@@ -55,12 +56,54 @@ def _add_style(path_dict: dict, brush=None, color=None, stroke_width=None, opaci
         path_dict["stroke_width"] = stroke_width
     if opacity is not None:
         path_dict["opacity"] = opacity
+    if fill is not None:
+        path_dict["fill"] = fill
+    if fill_opacity is not None:
+        path_dict["fill_opacity"] = fill_opacity
     return path_dict
 
 # Helper functions for generating paths (all support optional brush and style parameters)
-def svg_path(d: str, brush=None, color=None, stroke_width=None, opacity=None) -> dict:
+def svg_path(d: str, brush=None, color=None, stroke_width=None, opacity=None, fill=None, fill_opacity=None) -> dict:
     \"\"\"Create an SVG path dict with optional brush and style.\"\"\"
-    return _add_style({{"type": "svg", "d": d}}, brush, color, stroke_width, opacity)
+    return _add_style({{"type": "svg", "d": d}}, brush, color, stroke_width, opacity, fill, fill_opacity)
+
+def filled_svg_path(d: str, fill: str, fill_opacity: float = 1.0, stroke=None, stroke_width=0, opacity=None) -> dict:
+    \"\"\"Create a closed filled SVG path. Use this for silhouettes, backgrounds, clouds, land, water, and large color masses.\"\"\"
+    return svg_path(d, color=stroke, stroke_width=stroke_width, opacity=opacity, fill=fill, fill_opacity=fill_opacity)
+
+def filled_polygon_path(vertices, fill: str, fill_opacity: float = 1.0, stroke=None, stroke_width=0, opacity=None) -> dict:
+    \"\"\"Create a filled polygon path from (x, y) vertices.\"\"\"
+    if not vertices:
+        return filled_svg_path("M 0 0 Z", fill, fill_opacity, stroke, stroke_width, opacity)
+    commands = ["M {{}} {{}}".format(vertices[0][0], vertices[0][1])]
+    for x, y in vertices[1:]:
+        commands.append("L {{}} {{}}".format(x, y))
+    commands.append("Z")
+    return filled_svg_path(" ".join(commands), fill, fill_opacity, stroke, stroke_width, opacity)
+
+def rect_shape(x: float, y: float, width: float, height: float, fill: str, fill_opacity: float = 1.0, stroke=None, stroke_width=0, opacity=None) -> dict:
+    \"\"\"Create a filled rectangle. Use rect_shape(0, 0, canvas_width, canvas_height, color) for a solid ground.\"\"\"
+    d = "M {{}} {{}} L {{}} {{}} L {{}} {{}} L {{}} {{}} Z".format(
+        x, y, x + width, y, x + width, y + height, x, y + height
+    )
+    return filled_svg_path(d, fill, fill_opacity, stroke, stroke_width, opacity)
+
+def ellipse_shape(cx: float, cy: float, rx: float, ry: float, fill: str, fill_opacity: float = 1.0, stroke=None, stroke_width=0, opacity=None) -> dict:
+    \"\"\"Create a filled ellipse with cubic Beziers.\"\"\"
+    k = 0.5522847498
+    d = (
+        "M {{}} {{}} C {{}} {{}} {{}} {{}} {{}} {{}} "
+        "C {{}} {{}} {{}} {{}} {{}} {{}} "
+        "C {{}} {{}} {{}} {{}} {{}} {{}} "
+        "C {{}} {{}} {{}} {{}} {{}} {{}} Z"
+    ).format(
+        cx + rx, cy,
+        cx + rx, cy + k * ry, cx + k * rx, cy + ry, cx, cy + ry,
+        cx - k * rx, cy + ry, cx - rx, cy + k * ry, cx - rx, cy,
+        cx - rx, cy - k * ry, cx - k * rx, cy - ry, cx, cy - ry,
+        cx + k * rx, cy - ry, cx + rx, cy - k * ry, cx + rx, cy,
+    )
+    return filled_svg_path(d, fill, fill_opacity, stroke, stroke_width, opacity)
 
 def line(x1: float, y1: float, x2: float, y2: float, brush=None, color=None, stroke_width=None, opacity=None) -> dict:
     \"\"\"Create a line path with optional brush and style.\"\"\"
@@ -111,6 +154,10 @@ def _mix_hex(a: str, b: str, t: float) -> str:
         ag + (bg - ag) * t,
         ab + (bb - ab) * t,
     ))
+
+def _luminance(color: str) -> float:
+    red, green, blue = _hex_to_rgb(color)
+    return red * 0.2126 + green * 0.7152 + blue * 0.0722
 
 def _jitter_hex(color: str, amount: int = 10) -> str:
     r, g, b = _hex_to_rgb(color)
@@ -288,6 +335,63 @@ def ramp_field(
             stroke_width=_rand_range(width_range, (8, 28)),
             opacity=_rand_range(opacity_range, (0.12, 0.42)),
         ))
+    return paths
+
+def background_wash(
+    count: int = 420,
+    stops=None,
+    y_range=None,
+    angle: float = 0.0,
+    angle_jitter: float = 0.08,
+    length_range=None,
+    width_range=None,
+    brushes=None,
+    opacity_range=None,
+    exclude_polygons=None,
+    wash_rows: int = 14,
+    texture_ratio: float = 0.18,
+) -> list:
+    \"\"\"Lay a full-canvas colored ground before subjects: sky, paper tone, atmosphere, sea, wall, stage, or shadow field.\"\"\"
+    y_range = _choose(y_range, (0, canvas_height))
+    stops = _choose(stops, [
+        (0.0, ["#dbe7f4", "#c9d9ee", "#b7c7d8"]),
+        (0.55, ["#f7ead0", "#e9d9b5", "#d8c7a4"]),
+        (1.0, ["#b7c7d8", "#91a7b8", "#6f8fa8"]),
+    ])
+    length_range = _choose(length_range, (120, 280))
+    width_range = _choose(width_range, (18, 30))
+    brushes = _choose(brushes, ["watercolor", "airbrush", "oil_flat"])
+    opacity_range = _choose(opacity_range, (0.34, 0.74))
+    exclude_polygons = _choose(exclude_polygons, [])
+    paths = ramp_field(
+        count,
+        x_range=(-30, canvas_width + 30),
+        y_range=y_range,
+        axis="y",
+        stops=stops,
+        angle=angle,
+        angle_jitter=angle_jitter,
+        length_range=length_range,
+        width_range=width_range,
+        brushes=brushes,
+        opacity_range=opacity_range,
+        exclude_polygons=exclude_polygons,
+        wash_rows=wash_rows,
+        texture_ratio=texture_ratio,
+    )
+    paths.extend(stroke_field(
+        max(18, count // 9),
+        x_range=(0, canvas_width),
+        y_range=y_range,
+        angle=angle,
+        angle_jitter=angle_jitter * 1.7,
+        length_range=(80, 210),
+        width_range=(10, 24),
+        colors=[color for _, colors_for_stop in stops for color in colors_for_stop],
+        brushes=brushes,
+        opacity_range=(0.10, min(0.34, opacity_range[1] * 0.45)),
+        exclude_polygons=exclude_polygons,
+    ))
     return paths
 
 def curve_marks(
@@ -928,6 +1032,803 @@ def cubic(x1: float, y1: float, cx1: float, cy1: float, cx2: float, cy2: float, 
         ]}},
         brush, color, stroke_width, opacity
     )
+
+def sector_bounds(column: int, row: int, columns: int = 3, rows: int = 3, padding: float = 0) -> tuple:
+    \"\"\"Return (left, top, right, bottom) for a compositional sector of the current canvas.\"\"\"
+    cell_w = canvas_width / max(1, columns)
+    cell_h = canvas_height / max(1, rows)
+    left = column * cell_w + padding
+    top = row * cell_h + padding
+    right = (column + 1) * cell_w - padding
+    bottom = (row + 1) * cell_h - padding
+    return left, top, right, bottom
+
+def sector_vertices(column: int, row: int, columns: int = 3, rows: int = 3, padding: float = 0) -> list:
+    \"\"\"Return rectangle vertices for a compositional sector. Useful for reserving, filling, or auditing regions.\"\"\"
+    left, top, right, bottom = sector_bounds(column, row, columns, rows, padding)
+    return [(left, top), (right, top), (right, bottom), (left, bottom)]
+
+def contour_stack(
+    points,
+    offsets=None,
+    colors=None,
+    brushes=None,
+    count_per_offset: int = 16,
+    width_range=None,
+    length_range=None,
+    opacity_range=None,
+    jitter: float = 5,
+) -> list:
+    \"\"\"Create repeated offset contour lines and short marks around any flowing edge, fold, current, ridge, fabric, smoke, or body plane.\"\"\"
+    offsets = _choose(offsets, [-24, -12, 0, 12, 24])
+    colors = _choose(colors, ["#dfe8df", "#8bbcc6", "#2f7897", "#0d2f4c"])
+    brushes = _choose(brushes, ["ink", "dry_brush", "watercolor"])
+    width_range = _choose(width_range, (1.2, 4.5))
+    length_range = _choose(length_range, (12, 52))
+    opacity_range = _choose(opacity_range, (0.16, 0.48))
+    paths = []
+    for offset in offsets:
+        shifted = [(x, y + offset) for x, y in points]
+        paths.append(polyline(
+            *shifted,
+            brush=random.choice(brushes),
+            color=random.choice(colors),
+            stroke_width=_rand_range(width_range, (1.2, 4.5)),
+            opacity=_rand_range(opacity_range, (0.16, 0.48)),
+        ))
+        paths.extend(curve_marks(
+            shifted,
+            count=count_per_offset,
+            colors=colors,
+            brushes=brushes,
+            width_range=width_range,
+            length_range=length_range,
+            opacity_range=opacity_range,
+            jitter=jitter,
+        ))
+    return paths
+
+def edge_fingers(
+    points,
+    count: int = 18,
+    side: float = -1,
+    colors=None,
+    brushes=None,
+    length_range=None,
+    width_range=None,
+    opacity_range=None,
+) -> list:
+    \"\"\"Create tapered organic projections from an edge: useful for foam, flame, leaves, hair, spray, torn cloth, or claw-like highlights.\"\"\"
+    colors = _choose(colors, ["#fbf5e5", "#dfe8df", "#b8ccd1"])
+    brushes = _choose(brushes, ["ink", "dry_brush", "oil_filbert"])
+    length_range = _choose(length_range, (16, 70))
+    width_range = _choose(width_range, (2, 9))
+    opacity_range = _choose(opacity_range, (0.28, 0.78))
+    paths = []
+    if len(points) < 2:
+        return paths
+    for _ in range(count):
+        index = random.randrange(0, len(points) - 1)
+        x1, y1 = points[index]
+        x2, y2 = points[index + 1]
+        t = random.random()
+        x = x1 + (x2 - x1) * t
+        y = y1 + (y2 - y1) * t
+        dx = x2 - x1
+        dy = y2 - y1
+        length = max(1.0, math.hypot(dx, dy))
+        nx = -dy / length * side
+        ny = dx / length * side
+        projection = _rand_range(length_range, (16, 70))
+        width = _rand_range(width_range, (2, 9))
+        tip_x = x + nx * projection + random.uniform(-width, width)
+        tip_y = y + ny * projection + random.uniform(-width, width)
+        cx1 = x + nx * projection * 0.35 + random.uniform(-width, width)
+        cy1 = y + ny * projection * 0.35 + random.uniform(-width, width)
+        cx2 = x + nx * projection * 0.72 + random.uniform(-width, width)
+        cy2 = y + ny * projection * 0.72 + random.uniform(-width, width)
+        paths.append(cubic(
+            x,
+            y,
+            cx1,
+            cy1,
+            cx2,
+            cy2,
+            tip_x,
+            tip_y,
+            brush=random.choice(brushes),
+            color=random.choice(colors),
+            stroke_width=width,
+            opacity=_rand_range(opacity_range, (0.28, 0.78)),
+        ))
+    return paths
+
+def _smooth_closed_path(points) -> str:
+    if not points:
+        return "M 0 0 Z"
+    if len(points) < 3:
+        return " ".join(["M {{}} {{}}".format(points[0][0], points[0][1])] + [
+            "L {{}} {{}}".format(x, y) for x, y in points[1:]
+        ] + ["Z"])
+    commands = ["M {{}} {{}}".format(points[0][0], points[0][1])]
+    count = len(points)
+    for index in range(count):
+        p0 = points[(index - 1) % count]
+        p1 = points[index]
+        p2 = points[(index + 1) % count]
+        p3 = points[(index + 2) % count]
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6)
+        commands.append(
+            "C {{}} {{}} {{}} {{}} {{}} {{}}".format(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
+        )
+    commands.append("Z")
+    return " ".join(commands)
+
+def curved_ribbon_mass(
+    center_points,
+    widths,
+    fill: str,
+    fill_opacity: float = 0.92,
+    stroke=None,
+    stroke_width: float = 0,
+    contour_color=None,
+    contour_count: int = 0,
+) -> list:
+    \"\"\"Create a filled variable-width ribbon around a centerline for separate folded lips, overhangs, loops, smoke curls, fabric edges, limbs, branches, or bold graphic strokes.\"\"\"
+    if len(center_points) < 2:
+        return []
+    widths = list(widths)
+    if len(widths) < len(center_points):
+        widths = widths + [widths[-1]] * (len(center_points) - len(widths))
+    widths = widths[:len(center_points)]
+
+    left = []
+    right = []
+    for index, (x, y) in enumerate(center_points):
+        if index == 0:
+            x2, y2 = center_points[1]
+            dx = x2 - x
+            dy = y2 - y
+        elif index == len(center_points) - 1:
+            x0, y0 = center_points[index - 1]
+            dx = x - x0
+            dy = y - y0
+        else:
+            x0, y0 = center_points[index - 1]
+            x2, y2 = center_points[index + 1]
+            dx = x2 - x0
+            dy = y2 - y0
+        length = max(1.0, math.hypot(dx, dy))
+        nx = -dy / length
+        ny = dx / length
+        half = max(1.0, widths[index] / 2)
+        left.append((x + nx * half, y + ny * half))
+        right.append((x - nx * half, y - ny * half))
+
+    vertices = left + list(reversed(right))
+    d = _smooth_closed_path(vertices)
+    paths = [
+        filled_svg_path(
+            d,
+            fill,
+            fill_opacity=fill_opacity,
+            stroke=stroke,
+            stroke_width=stroke_width,
+        )
+    ]
+    if contour_count > 0:
+        paths.extend(contour_stack(
+            center_points,
+            offsets=[-max(widths) * 0.22, 0, max(widths) * 0.22],
+            colors=[contour_color or stroke or fill],
+            count_per_offset=contour_count,
+            width_range=(1.5, 4.5),
+            length_range=(14, 48),
+            opacity_range=(0.22, 0.55),
+            jitter=4,
+        ))
+    return paths
+
+def hooked_counterform_masses(
+    x: float | None = None,
+    y: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    body_fill: str | None = None,
+    lip_fill: str | None = None,
+    opening_fill: str | None = None,
+    underside_fill: str | None = None,
+    fill_opacity: float = 0.94,
+    opening_opacity: float = 0.98,
+    contour_color=None,
+    foam: bool = False,
+    foam_colors=None,
+    **kwargs,
+) -> list:
+    \"\"\"Create separate body, overhanging lip, underside, and opening masses for any hooked hollow form: breaking curl, smoke loop, draped cloth fold, overhanging cliff, petal, shell, or cave mouth.\"\"\"
+    rx = kwargs.get("rx")
+    ry = kwargs.get("ry")
+    width = width or kwargs.get("w") or (rx * 2 if rx is not None else None) or canvas_width * 0.48
+    height = height or kwargs.get("h") or (ry * 2 if ry is not None else None) or canvas_height * 0.74
+    if x is None:
+        cx = kwargs.get("cx")
+        x = (cx - width / 2) if cx is not None else kwargs.get("left", canvas_width * 0.46)
+    if y is None:
+        cy = kwargs.get("cy")
+        y = (cy - height / 2) if cy is not None else kwargs.get("top", canvas_height * 0.03)
+    if y < 0 and "top" not in kwargs and not kwargs.get("allow_crop", False):
+        y = 0
+    curl = str(kwargs.get("curl") or kwargs.get("direction") or "right").lower()
+    mirror_x = curl in ("left", "west", "counterclockwise", "ccw")
+    body_opacity = kwargs.get("body_opacity", fill_opacity)
+    lip_opacity = kwargs.get("lip_opacity", fill_opacity)
+    opening_opacity = kwargs.get("opening_opacity", kwargs.get("tunnel_opacity", opening_opacity))
+    underside_opacity = kwargs.get("underside_opacity", fill_opacity * 0.96)
+    body_fill = body_fill or kwargs.get("body_color") or kwargs.get("fill") or "#2f7897"
+    lip_fill = lip_fill or kwargs.get("lip_color") or kwargs.get("hook_fill") or "#123a57"
+    opening_fill = (
+        opening_fill
+        or kwargs.get("opening_color")
+        or kwargs.get("tunnel_fill")
+        or kwargs.get("tunnel_color")
+        or kwargs.get("cutout_fill")
+        or "#eef4ef"
+    )
+    underside_fill = (
+        underside_fill
+        or kwargs.get("underside_color")
+        or kwargs.get("shadow_fill")
+        or kwargs.get("shadow_color")
+    )
+    underside_fill = underside_fill or body_fill
+    if lip_fill.lower() == body_fill.lower():
+        lip_fill = _mix_hex(body_fill, "#061625", 0.42)
+    if underside_fill.lower() == body_fill.lower():
+        underside_fill = _mix_hex(body_fill, "#061625", 0.58)
+    foam_colors = _choose(foam_colors, ["#fffaf0", "#f4f0dc", "#dfe8df"])
+    paths = []
+
+    def sx(px):
+        if mirror_x:
+            px = 1 - px
+        return x + px * width
+
+    def sy(py):
+        return y + py * height
+
+    def pc(command, *values):
+        return command + " " + " ".join(str(round(value, 3)) for value in values)
+
+    body = " ".join([
+        pc("M", sx(0.05), sy(0.86)),
+        pc("C", sx(0.20), sy(0.70), sx(0.36), sy(0.54), sx(0.54), sy(0.42)),
+        pc("C", sx(0.66), sy(0.34), sx(0.79), sy(0.29), sx(0.91), sy(0.30)),
+        pc("C", sx(0.79), sy(0.42), sx(0.70), sy(0.57), sx(0.64), sy(0.77)),
+        pc("C", sx(0.48), sy(0.92), sx(0.24), sy(0.96), sx(0.05), sy(0.86)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(body, body_fill, fill_opacity=body_opacity, stroke_width=0))
+
+    lip = " ".join([
+        pc("M", sx(0.54), sy(0.32)),
+        pc("C", sx(0.63), sy(0.08), sx(0.83), sy(-0.07), sx(1.10), sy(0.03)),
+        pc("C", sx(1.26), sy(0.08), sx(1.26), sy(0.26), sx(1.08), sy(0.37)),
+        pc("C", sx(0.95), sy(0.45), sx(0.80), sy(0.47), sx(0.65), sy(0.42)),
+        pc("C", sx(0.78), sy(0.33), sx(0.86), sy(0.22), sx(0.86), sy(0.13)),
+        pc("C", sx(0.72), sy(0.13), sx(0.61), sy(0.21), sx(0.54), sy(0.32)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(lip, lip_fill, fill_opacity=lip_opacity, stroke_width=0))
+
+    underside = " ".join([
+        pc("M", sx(0.55), sy(0.38)),
+        pc("C", sx(0.70), sy(0.30), sx(0.93), sy(0.27), sx(1.07), sy(0.35)),
+        pc("C", sx(0.96), sy(0.50), sx(0.76), sy(0.60), sx(0.58), sy(0.59)),
+        pc("C", sx(0.50), sy(0.52), sx(0.49), sy(0.44), sx(0.55), sy(0.38)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(underside, underside_fill, fill_opacity=underside_opacity, stroke_width=0))
+
+    opening = " ".join([
+        pc("M", sx(0.50), sy(0.42)),
+        pc("C", sx(0.61), sy(0.27), sx(0.83), sy(0.20), sx(1.05), sy(0.31)),
+        pc("C", sx(0.98), sy(0.51), sx(0.76), sy(0.70), sx(0.57), sy(0.68)),
+        pc("C", sx(0.45), sy(0.59), sx(0.43), sy(0.49), sx(0.50), sy(0.42)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(opening, opening_fill, fill_opacity=opening_opacity, stroke_width=0))
+
+    tunnel_floor = " ".join([
+        pc("M", sx(0.56), sy(0.68)),
+        pc("C", sx(0.70), sy(0.66), sx(0.88), sy(0.58), sx(1.01), sy(0.48)),
+        pc("C", sx(0.93), sy(0.63), sx(0.78), sy(0.82), sx(0.61), sy(0.79)),
+        pc("C", sx(0.54), sy(0.76), sx(0.52), sy(0.71), sx(0.56), sy(0.68)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(
+        tunnel_floor,
+        body_fill,
+        fill_opacity=min(1.0, body_opacity * 0.76),
+        stroke_width=0,
+    ))
+
+    if foam:
+        foam_specs = [
+            (0.60, 0.17, 0.08, 0.20, -0.24),
+            (0.72, 0.10, 0.10, 0.24, -0.10),
+            (0.86, 0.09, 0.09, 0.26, 0.04),
+            (1.00, 0.15, 0.11, 0.24, 0.17),
+            (1.10, 0.28, 0.08, 0.18, 0.28),
+        ]
+        for fx, fy, fw, fh, lean in foam_specs:
+            left_base = (sx(fx - fw * 0.42), sy(fy + fh * 0.08))
+            tip = (sx(fx + lean), sy(fy + fh))
+            right_base = (sx(fx + fw * 0.42), sy(fy + fh * 0.08))
+            blob = " ".join([
+                pc("M", left_base[0], left_base[1]),
+                pc("C", sx(fx - fw * 0.62), sy(fy + fh * 0.28), sx(fx - fw * 0.24 + lean), sy(fy + fh * 0.72), tip[0], tip[1]),
+                pc("C", sx(fx + fw * 0.34 + lean), sy(fy + fh * 0.68), sx(fx + fw * 0.64), sy(fy + fh * 0.24), right_base[0], right_base[1]),
+                pc("C", sx(fx + fw * 0.20), sy(fy - fh * 0.03), sx(fx - fw * 0.20), sy(fy - fh * 0.03), left_base[0], left_base[1]),
+                "Z",
+            ])
+            paths.append(filled_svg_path(
+                blob,
+                random.choice(foam_colors),
+                fill_opacity=random.uniform(0.82, 0.96),
+                stroke_width=0,
+            ))
+        spray_curve = [(sx(0.54), sy(0.38)), (sx(0.66), sy(0.30)), (sx(0.82), sy(0.28))]
+        paths.extend(contour_stack(
+            spray_curve,
+            offsets=[-height * 0.05, -height * 0.02, height * 0.02],
+            colors=foam_colors,
+            count_per_offset=6,
+            width_range=(2, 5),
+            length_range=(10, 26),
+            opacity_range=(0.32, 0.58),
+            jitter=height * 0.025,
+        ))
+    return paths
+
+def breaking_wave_masses(
+    x: float | None = None,
+    y: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    body_fill: str | None = None,
+    lip_fill: str | None = None,
+    opening_fill: str | None = None,
+    underside_fill: str | None = None,
+    fill_opacity: float = 0.94,
+    opening_opacity: float = 0.98,
+    curl: str = "right",
+    foam: bool = True,
+    foam_colors=None,
+    contour_color=None,
+    **kwargs,
+) -> list:
+    \"\"\"Create a reusable breaking-curl wave architecture: steep body wall, forward/down lip, dark underside, large tunnel opening, and chunky foam claws.\"\"\"
+    rx = kwargs.get("rx")
+    ry = kwargs.get("ry")
+    width = width or kwargs.get("w") or (rx * 2 if rx is not None else None) or canvas_width * 0.72
+    height = height or kwargs.get("h") or (ry * 2 if ry is not None else None) or canvas_height * 0.82
+    if x is None:
+        cx = kwargs.get("cx")
+        x = (cx - width / 2) if cx is not None else kwargs.get("left", canvas_width * 0.15)
+    if y is None:
+        cy = kwargs.get("cy")
+        y = (cy - height / 2) if cy is not None else kwargs.get("top", canvas_height * 0.02)
+    elif y + height > canvas_height * 1.12 and "top" not in kwargs:
+        y = y - height
+    if y < 0 and "top" not in kwargs and not kwargs.get("allow_crop", False):
+        y = 0
+
+    body_opacity = kwargs.get("body_opacity", fill_opacity)
+    lip_opacity = kwargs.get("lip_opacity", fill_opacity)
+    underside_opacity = kwargs.get("underside_opacity", fill_opacity * 0.96)
+    body_fill = body_fill or kwargs.get("body_color") or kwargs.get("fill") or "#2f7897"
+    lip_fill = lip_fill or kwargs.get("lip_color") or kwargs.get("hook_fill") or "#123a57"
+    opening_fill = (
+        opening_fill
+        or kwargs.get("opening_color")
+        or kwargs.get("tunnel_fill")
+        or kwargs.get("tunnel_color")
+        or kwargs.get("cutout_fill")
+        or "#eef4ef"
+    )
+    underside_fill = (
+        underside_fill
+        or kwargs.get("underside_color")
+        or kwargs.get("shadow_fill")
+        or kwargs.get("shadow_color")
+        or _mix_hex(body_fill, "#061625", 0.62)
+    )
+    if lip_fill.lower() == body_fill.lower():
+        lip_fill = _mix_hex(body_fill, "#061625", 0.45)
+    elif _luminance(lip_fill) > _luminance(body_fill) * 0.95:
+        lip_fill = _mix_hex(body_fill, "#061625", 0.52)
+    if _luminance(underside_fill) > _luminance(body_fill) * 0.72:
+        underside_fill = _mix_hex(body_fill, "#061625", 0.70)
+    foam_colors = _choose(foam_colors, ["#fffaf0", "#ffffff", "#dfe8df"])
+    mirror_x = str(curl).lower() in ("left", "west", "counterclockwise", "ccw")
+    paths = []
+
+    def sx(px):
+        if mirror_x:
+            px = 1 - px
+        return x + px * width
+
+    def sy(py):
+        return y + py * height
+
+    def pc(command, *values):
+        return command + " " + " ".join(str(round(value, 3)) for value in values)
+
+    body = " ".join([
+        pc("M", sx(-0.06), sy(0.95)),
+        pc("C", sx(0.02), sy(0.80), sx(0.08), sy(0.56), sx(0.20), sy(0.38)),
+        pc("C", sx(0.30), sy(0.24), sx(0.42), sy(0.17), sx(0.54), sy(0.20)),
+        pc("C", sx(0.45), sy(0.34), sx(0.39), sy(0.52), sx(0.36), sy(0.70)),
+        pc("C", sx(0.27), sy(0.84), sx(0.12), sy(0.98), sx(-0.06), sy(0.95)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(body, body_fill, fill_opacity=body_opacity, stroke_width=0))
+
+    lip = " ".join([
+        pc("M", sx(0.46), sy(0.21)),
+        pc("C", sx(0.58), sy(0.04), sx(0.79), sy(-0.02), sx(0.98), sy(0.12)),
+        pc("C", sx(1.12), sy(0.23), sx(1.05), sy(0.41), sx(0.87), sy(0.49)),
+        pc("C", sx(0.74), sy(0.55), sx(0.59), sy(0.47), sx(0.50), sy(0.36)),
+        pc("C", sx(0.61), sy(0.32), sx(0.72), sy(0.23), sx(0.74), sy(0.15)),
+        pc("C", sx(0.62), sy(0.13), sx(0.52), sy(0.16), sx(0.46), sy(0.21)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(lip, lip_fill, fill_opacity=lip_opacity, stroke_width=0))
+
+    underside = " ".join([
+        pc("M", sx(0.50), sy(0.38)),
+        pc("C", sx(0.66), sy(0.28), sx(0.89), sy(0.30), sx(0.99), sy(0.43)),
+        pc("C", sx(0.84), sy(0.61), sx(0.62), sy(0.67), sx(0.46), sy(0.57)),
+        pc("C", sx(0.40), sy(0.50), sx(0.43), sy(0.42), sx(0.50), sy(0.38)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(
+        underside,
+        underside_fill,
+        fill_opacity=underside_opacity,
+        stroke_width=0,
+    ))
+
+    opening = " ".join([
+        pc("M", sx(0.43), sy(0.42)),
+        pc("C", sx(0.56), sy(0.29), sx(0.77), sy(0.28), sx(0.95), sy(0.42)),
+        pc("C", sx(0.85), sy(0.56), sx(0.66), sy(0.65), sx(0.47), sy(0.59)),
+        pc("C", sx(0.37), sy(0.52), sx(0.36), sy(0.45), sx(0.43), sy(0.42)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(
+        opening,
+        opening_fill,
+        fill_opacity=opening_opacity,
+        stroke_width=0,
+    ))
+
+    lower_jaw = " ".join([
+        pc("M", sx(0.42), sy(0.61)),
+        pc("C", sx(0.58), sy(0.73), sx(0.82), sy(0.64), sx(0.99), sy(0.46)),
+        pc("C", sx(0.88), sy(0.68), sx(0.66), sy(0.85), sx(0.43), sy(0.78)),
+        pc("C", sx(0.34), sy(0.72), sx(0.34), sy(0.64), sx(0.42), sy(0.61)),
+        "Z",
+    ])
+    paths.append(filled_svg_path(
+        lower_jaw,
+        body_fill,
+        fill_opacity=min(1.0, body_opacity * 0.90),
+        stroke_width=0,
+    ))
+
+    paths.append(cubic(
+        sx(0.43), sy(0.42), sx(0.56), sy(0.27), sx(0.78), sy(0.26), sx(0.96), sy(0.42),
+        brush="ink",
+        color=underside_fill,
+        stroke_width=max(2, width * 0.008),
+        opacity=0.92,
+    ))
+    paths.append(cubic(
+        sx(0.96), sy(0.42), sx(0.85), sy(0.59), sx(0.62), sy(0.72), sx(0.42), sy(0.61),
+        brush="ink",
+        color=underside_fill,
+        stroke_width=max(2, width * 0.006),
+        opacity=0.86,
+    ))
+    lip_edge = [(sx(0.46), sy(0.21)), (sx(0.62), sy(0.13)), (sx(0.82), sy(0.15)), (sx(1.00), sy(0.40))]
+    opening_edge = [(sx(0.43), sy(0.42)), (sx(0.59), sy(0.34)), (sx(0.80), sy(0.34)), (sx(0.96), sy(0.42))]
+    paths.extend(curve_marks(
+        lip_edge,
+        count=18,
+        colors=[lip_fill, underside_fill],
+        width_range=(2, 5),
+        length_range=(12, 30),
+        opacity_range=(0.42, 0.78),
+        jitter=height * 0.018,
+    ))
+    paths.extend(curve_marks(
+        opening_edge,
+        count=16,
+        colors=[underside_fill, lip_fill],
+        width_range=(2, 6),
+        length_range=(10, 26),
+        opacity_range=(0.45, 0.82),
+        jitter=height * 0.015,
+    ))
+
+    if foam:
+        foam_specs = [
+            (0.56, 0.16, 0.09, 0.20, -0.12),
+            (0.66, 0.09, 0.10, 0.26, -0.04),
+            (0.78, 0.06, 0.11, 0.27, 0.08),
+            (0.91, 0.11, 0.10, 0.24, 0.18),
+            (1.02, 0.22, 0.09, 0.21, 0.30),
+        ]
+        for fx, fy, fw, fh, lean in foam_specs:
+            left_base = (sx(fx - fw * 0.48), sy(fy + fh * 0.04))
+            tip = (sx(fx + lean), sy(fy - fh))
+            right_base = (sx(fx + fw * 0.48), sy(fy + fh * 0.10))
+            blob = " ".join([
+                pc("M", left_base[0], left_base[1]),
+                pc("C", sx(fx - fw * 0.72), sy(fy - fh * 0.24), sx(fx - fw * 0.20 + lean), sy(fy - fh * 0.78), tip[0], tip[1]),
+                pc("C", sx(fx + fw * 0.48 + lean), sy(fy - fh * 0.68), sx(fx + fw * 0.72), sy(fy - fh * 0.18), right_base[0], right_base[1]),
+                pc("C", sx(fx + fw * 0.22), sy(fy + fh * 0.12), sx(fx - fw * 0.22), sy(fy + fh * 0.08), left_base[0], left_base[1]),
+                "Z",
+            ])
+            paths.append(filled_svg_path(
+                blob,
+                random.choice(foam_colors),
+                fill_opacity=random.uniform(0.88, 1.0),
+                stroke_width=0,
+            ))
+        crest = [(sx(0.50), sy(0.23)), (sx(0.66), sy(0.10)), (sx(0.86), sy(0.10)), (sx(1.04), sy(0.24))]
+        paths.extend(contour_stack(
+            crest,
+            offsets=[-height * 0.035, 0, height * 0.035],
+            colors=foam_colors,
+            count_per_offset=7,
+            width_range=(2, 6),
+            length_range=(10, 28),
+            opacity_range=(0.34, 0.70),
+            jitter=height * 0.022,
+        ))
+
+    if contour_color:
+        paths.extend(contour_stack(
+            [(sx(0.02), sy(0.92)), (sx(0.22), sy(0.43)), (sx(0.52), sy(0.20)), (sx(0.98), sy(0.42))],
+            offsets=[-height * 0.03, 0, height * 0.04],
+            colors=[contour_color],
+            count_per_offset=8,
+            width_range=(1.5, 4.5),
+            length_range=(12, 34),
+            opacity_range=(0.22, 0.56),
+            jitter=height * 0.02,
+        ))
+    return paths
+
+def sweeping_body_wall(
+    x: float | None = None,
+    y: float | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    fill: str | None = None,
+    fill_opacity: float = 0.9,
+    curl: str = "right",
+    stroke=None,
+    stroke_width: float = 0,
+    **kwargs,
+) -> list:
+    \"\"\"Create a broad curved body wall or swell with no rectangular closure face; useful before adding a hooked lip, cliff overhang, fold, or cave mouth.\"\"\"
+    rx = kwargs.get("rx")
+    ry = kwargs.get("ry")
+    width = width or kwargs.get("w") or (rx * 2 if rx is not None else None) or canvas_width * 0.56
+    height = height or kwargs.get("h") or (ry * 2 if ry is not None else None) or canvas_height * 0.58
+    if x is None:
+        cx = kwargs.get("cx")
+        x = (cx - width / 2) if cx is not None else kwargs.get("left", canvas_width * 0.26)
+    if y is None:
+        cy = kwargs.get("cy")
+        y = (cy - height / 2) if cy is not None else kwargs.get("top", canvas_height * 0.34)
+    elif y + height > canvas_height * 1.12 and "top" not in kwargs:
+        y = y - height
+    colors = _choose(kwargs.get("colors"), [])
+    wall_fill = fill or kwargs.get("body_fill") or kwargs.get("body_color")
+    if wall_fill is None and colors:
+        wall_fill = colors[min(1, len(colors) - 1)]
+    wall_fill = wall_fill or "#2f7897"
+    mirror_x = str(curl).lower() in ("left", "west", "counterclockwise", "ccw")
+
+    def sx(px):
+        if mirror_x:
+            px = 1 - px
+        return x + px * width
+
+    def sy(py):
+        return y + py * height
+
+    def pc(command, *values):
+        return command + " " + " ".join(str(round(value, 3)) for value in values)
+
+    wall = " ".join([
+        pc("M", sx(-0.10), sy(0.94)),
+        pc("C", sx(0.06), sy(0.78), sx(0.16), sy(0.50), sx(0.34), sy(0.30)),
+        pc("C", sx(0.50), sy(0.12), sx(0.70), sy(0.02), sx(1.02), sy(0.15)),
+        pc("C", sx(0.86), sy(0.24), sx(0.73), sy(0.40), sx(0.63), sy(0.60)),
+        pc("C", sx(0.50), sy(0.86), sx(0.24), sy(1.04), sx(-0.10), sy(0.94)),
+        "Z",
+    ])
+    paths = [
+        filled_svg_path(
+            wall,
+            wall_fill,
+            fill_opacity=fill_opacity,
+            stroke=stroke,
+            stroke_width=stroke_width,
+        )
+    ]
+    texture_count = int(kwargs.get("texture_count") or 0)
+    if texture_count > 0:
+        paths.extend(mass_field(
+            [
+                (sx(-0.08), sy(0.92)),
+                (sx(0.34), sy(0.30)),
+                (sx(1.00), sy(0.15)),
+                (sx(0.63), sy(0.60)),
+            ],
+            count=texture_count,
+            colors=colors or [wall_fill],
+            angle=kwargs.get("angle", 0.0),
+            angle_jitter=kwargs.get("angle_jitter", 0.24),
+            length_range=kwargs.get("length_range", (10, 34)),
+            width_range=kwargs.get("width_range", (3, 12)),
+            opacity_range=kwargs.get("opacity_range", (0.16, 0.42)),
+            texture_ratio=kwargs.get("texture_ratio", 0.75),
+            edge=False,
+        ))
+    return paths
+
+def crescent_mass(
+    cx: float,
+    cy: float,
+    rx: float,
+    ry: float,
+    fill: str,
+    cutout_fill: str,
+    curl: str = "right",
+    fill_opacity: float = 0.92,
+    cutout_opacity: float = 0.96,
+    stroke=None,
+    stroke_width: float = 0,
+    cutout_stroke=None,
+    cutout_stroke_width: float = 0,
+) -> list:
+    \"\"\"Create a generic curved mass with an explicit negative-space bite: useful for curls, moons, arches, smoke loops, cloud scrolls, or hollow forms.\"\"\"
+    angle = 0.0
+    if curl == "left":
+        angle = math.pi
+    elif curl == "up":
+        angle = -math.pi / 2
+    elif curl == "down":
+        angle = math.pi / 2
+
+    def transform(x, y):
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        return (
+            cx + x * cos_a - y * sin_a,
+            cy + x * sin_a + y * cos_a,
+        )
+
+    def cmd(kind, *coords):
+        parts = [kind]
+        for i in range(0, len(coords), 2):
+            x, y = transform(coords[i] * rx, coords[i + 1] * ry)
+            parts.append(str(round(x, 3)))
+            parts.append(str(round(y, 3)))
+        return " ".join(parts)
+
+    outer = " ".join([
+        cmd("M", -1.00, 0.48),
+        cmd("C", -0.90, -0.62, 0.06, -1.14, 0.82, -0.48),
+        cmd("C", 1.18, -0.16, 1.10, 0.48, 0.36, 0.78),
+        cmd("C", -0.18, 0.98, -0.72, 0.78, -1.00, 0.48),
+        "Z",
+    ])
+    inner = " ".join([
+        cmd("M", -0.02, 0.22),
+        cmd("C", 0.14, -0.44, 0.66, -0.46, 0.84, -0.02),
+        cmd("C", 0.74, 0.48, 0.26, 0.66, -0.08, 0.38),
+        cmd("C", -0.20, 0.30, -0.14, 0.24, -0.02, 0.22),
+        "Z",
+    ])
+    return [
+        filled_svg_path(outer, fill, fill_opacity=fill_opacity, stroke=stroke, stroke_width=stroke_width, opacity=0.92),
+        filled_svg_path(inner, cutout_fill, fill_opacity=cutout_opacity, stroke=cutout_stroke, stroke_width=cutout_stroke_width, opacity=0.78),
+    ]
+
+def small_figure_silhouette(
+    cx: float,
+    cy: float,
+    scale: float = 1,
+    pose: str = "crouch",
+    color: str = "#0b263e",
+    ground: bool = False,
+    ground_color: str = "#734534",
+) -> list:
+    \"\"\"Create a readable small human silhouette with head, torso, limbs, and optional grounding line.\"\"\"
+    paths = []
+    paths.append(ellipse_shape(cx, cy - 26 * scale, 8 * scale, 10 * scale, color, fill_opacity=0.95, stroke_width=0))
+    if pose == "upright":
+        paths.append(line(cx, cy - 16 * scale, cx, cy + 22 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.9))
+        paths.append(line(cx - 18 * scale, cy - 2 * scale, cx + 18 * scale, cy - 4 * scale, brush="ink", color=color, stroke_width=3 * scale, opacity=0.82))
+        paths.append(line(cx, cy + 20 * scale, cx - 14 * scale, cy + 42 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.88))
+        paths.append(line(cx, cy + 20 * scale, cx + 14 * scale, cy + 42 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.88))
+    else:
+        paths.append(cubic(cx, cy - 16 * scale, cx - 12 * scale, cy + 2 * scale, cx - 16 * scale, cy + 20 * scale, cx - 28 * scale, cy + 36 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.9))
+        paths.append(line(cx - 10 * scale, cy + 2 * scale, cx - 36 * scale, cy + 28 * scale, brush="ink", color=color, stroke_width=3.5 * scale, opacity=0.82))
+        paths.append(line(cx - 20 * scale, cy + 26 * scale, cx + 20 * scale, cy + 38 * scale, brush="ink", color=color, stroke_width=4.5 * scale, opacity=0.86))
+        paths.append(line(cx - 26 * scale, cy + 36 * scale, cx - 52 * scale, cy + 38 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.86))
+    if ground:
+        paths.append(line(cx - 52 * scale, cy + 42 * scale, cx + 54 * scale, cy + 39 * scale, brush="oil_flat", color=ground_color, stroke_width=7 * scale, opacity=0.78))
+    return paths
+
+def _rotated_rect_vertices(cx: float, cy: float, length: float, width: float, angle: float) -> list:
+    tx = math.cos(angle)
+    ty = math.sin(angle)
+    nx = -ty
+    ny = tx
+    half_l = length / 2
+    half_w = width / 2
+    return [
+        (cx - tx * half_l - nx * half_w, cy - ty * half_l - ny * half_w),
+        (cx + tx * half_l - nx * half_w, cy + ty * half_l - ny * half_w),
+        (cx + tx * half_l + nx * half_w, cy + ty * half_l + ny * half_w),
+        (cx - tx * half_l + nx * half_w, cy - ty * half_l + ny * half_w),
+    ]
+
+def small_figure_with_prop(
+    cx: float,
+    cy: float,
+    scale: float = 1,
+    pose: str = "crouch",
+    color: str = "#0b263e",
+    prop_color: str = "#39405a",
+    prop_length: float = 78,
+    prop_width: float = 10,
+    prop_angle: float = 0,
+    ground: bool = False,
+    ground_color: str = "#734534",
+) -> list:
+    \"\"\"Create a small readable figure attached to a broad prop: board, oar, tool, instrument, beam, handle, or vehicle element.\"\"\"
+    paths = []
+    paths.append(filled_polygon_path(
+        _rotated_rect_vertices(cx + 2 * scale, cy + 34 * scale, prop_length * scale, prop_width * scale, prop_angle),
+        prop_color,
+        fill_opacity=0.90,
+        stroke_width=0,
+    ))
+    paths.append(ellipse_shape(cx, cy - 30 * scale, 8.5 * scale, 10.5 * scale, color, fill_opacity=0.96, stroke_width=0))
+    paths.append(ellipse_shape(cx - 4 * scale, cy - 9 * scale, 10 * scale, 18 * scale, color, fill_opacity=0.90, stroke_width=0))
+    if pose == "upright":
+        paths.append(line(cx - 5 * scale, cy + 8 * scale, cx - 16 * scale, cy + 34 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.88))
+        paths.append(line(cx + 1 * scale, cy + 8 * scale, cx + 18 * scale, cy + 34 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.88))
+        paths.append(line(cx - 10 * scale, cy - 8 * scale, cx - 28 * scale, cy + 8 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.82))
+        paths.append(line(cx + 2 * scale, cy - 8 * scale, cx + 28 * scale, cy + 8 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.82))
+    else:
+        paths.append(line(cx - 4 * scale, cy + 2 * scale, cx - 28 * scale, cy + 30 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.88))
+        paths.append(line(cx - 2 * scale, cy + 4 * scale, cx + 28 * scale, cy + 30 * scale, brush="ink", color=color, stroke_width=5 * scale, opacity=0.88))
+        paths.append(line(cx - 10 * scale, cy - 12 * scale, cx - 34 * scale, cy + 12 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.82))
+        paths.append(line(cx + 2 * scale, cy - 12 * scale, cx + 34 * scale, cy + 10 * scale, brush="ink", color=color, stroke_width=4 * scale, opacity=0.82))
+    if ground:
+        paths.append(line(cx - 50 * scale, cy + 42 * scale, cx + 58 * scale, cy + 39 * scale, brush="oil_flat", color=ground_color, stroke_width=7 * scale, opacity=0.70))
+    return paths
 
 def output_paths(paths: list):
     \"\"\"Output paths as JSON to stdout.\"\"\"

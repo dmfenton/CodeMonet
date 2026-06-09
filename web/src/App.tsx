@@ -24,6 +24,11 @@ import { useWebSocket } from './hooks/useWebSocket';
 import { useDebug } from './hooks/useDebug';
 import { useAuth } from './context/AuthContext';
 
+interface CanvasDimensions {
+  canvas_width: number;
+  canvas_height: number;
+}
+
 function App(): React.ReactElement {
   const { state, dispatch, handleMessage, startStroke, addPoint, endStroke, toggleDrawing, setPaused } =
     useCanvas();
@@ -125,14 +130,14 @@ function App(): React.ReactElement {
     send({ type: 'pause' });
   }, [setPaused, send]);
 
-  const handleStart = useCallback((direction?: string) => {
+  const handleStart = useCallback((direction?: string, canvas?: CanvasDimensions) => {
     setPaused(false);
-    send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle });
+    send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle, ...canvas });
     send({ type: 'resume' });
   }, [setPaused, send, state.drawingStyle]);
 
-  const handleNewCanvas = useCallback(() => {
-    send({ type: 'new_canvas', drawing_style: state.drawingStyle });
+  const handleNewCanvas = useCallback((canvas?: CanvasDimensions) => {
+    send({ type: 'new_canvas', drawing_style: state.drawingStyle, ...canvas });
   }, [send, state.drawingStyle]);
 
   const handleStyleChange = useCallback((style: DrawingStyleType) => {
@@ -197,6 +202,8 @@ function App(): React.ReactElement {
           penPosition={state.performance.penPosition}
           penDown={state.performance.penDown}
           drawingEnabled={state.drawingEnabled}
+          canvasWidth={state.canvasWidth}
+          canvasHeight={state.canvasHeight}
           styleConfig={state.styleConfig}
           showIdleAnimation={shouldShowIdleAnimation(state)}
           onStrokeStart={startStroke}

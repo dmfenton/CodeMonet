@@ -15,6 +15,7 @@ from .callbacks import (
     get_draw_callback,
     inject_canvas_image,
 )
+from .quality_gate import finish_block_message
 
 # Tiny "CM" monogram. The previous long cursive signature competed with the painting.
 _SIGNATURE_SVG = """M 34 13 C 25 3 8 8 6 25 C 4 42 24 48 36 36
@@ -151,6 +152,12 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     position = args.get("position", "bottom_right")
     size = args.get("size", "small")
     color = args.get("color")
+    block_message = finish_block_message()
+    if block_message is not None:
+        return {
+            "content": [{"type": "text", "text": block_message}],
+            "is_error": True,
+        }
 
     # Validate position
     valid_positions = ["bottom_right", "bottom_left", "bottom_center"]

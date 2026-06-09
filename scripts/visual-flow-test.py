@@ -44,6 +44,7 @@ import websockets
 # Constants
 BASE_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
+WS_MAX_SIZE = 16 * 1024 * 1024
 DEFAULT_EXPO_PORT = 8081
 DEFAULT_VIEWPORT = (390, 844)  # iPhone 14 Pro
 
@@ -101,7 +102,7 @@ async def full_teardown(token: str) -> None:
 
     print(f"{CYAN}[TEARDOWN] Clearing agent state...{RESET}")
     try:
-        async with websockets.connect(f"{WS_URL}?token={token}") as ws:
+        async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
             # Wait for init
             init_timeout = 5.0
             start = time.monotonic()
@@ -370,7 +371,7 @@ class VisualFlowTest:
 
     async def websocket_monitor(self, stop_event: asyncio.Event) -> None:
         """Monitor WebSocket events and track state."""
-        async with websockets.connect(f"{WS_URL}?token={self.token}") as ws:
+        async with websockets.connect(f"{WS_URL}?token={self.token}", max_size=WS_MAX_SIZE) as ws:
             self.log("[WS] Connected", GREEN)
 
             # Monitor events

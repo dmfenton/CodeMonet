@@ -369,6 +369,8 @@ export interface Path {
   color?: string; // Hex color
   stroke_width?: number; // Stroke width
   opacity?: number; // 0-1 alpha
+  fill?: string; // Hex fill color for closed paths
+  fill_opacity?: number; // 0-1 fill alpha
   // Brush preset (paint mode only)
   brush?: BrushName; // Brush preset name for paint-like rendering
 }
@@ -389,7 +391,7 @@ export function getEffectiveStyle(path: Path, styleConfig: DrawingStyleConfig): 
   return {
     color: path.color && styleConfig.supports_color ? path.color : defaultStyle.color,
     stroke_width:
-      path.stroke_width && styleConfig.supports_variable_width
+      typeof path.stroke_width === 'number' && styleConfig.supports_variable_width
         ? path.stroke_width
         : defaultStyle.stroke_width,
     opacity:
@@ -415,7 +417,7 @@ export function getEffectiveAgentStrokeStyle(
         ? agentStrokeStyle.color
         : styleConfig.agent_stroke.color,
     stroke_width:
-      styleConfig.supports_variable_width && agentStrokeStyle?.stroke_width
+      styleConfig.supports_variable_width && typeof agentStrokeStyle?.stroke_width === 'number'
         ? agentStrokeStyle.stroke_width
         : styleConfig.agent_stroke.stroke_width,
     opacity:
@@ -482,6 +484,8 @@ export interface GalleryEntry {
   stroke_count: number;
   created_at: string;
   piece_number: number;
+  width?: number;
+  height?: number;
   drawing_style?: DrawingStyleType; // Style used for this piece (defaults to plotter)
   thumbnail_token?: string; // Capability token for thumbnail access
   title?: string; // Piece title (set by agent via name_piece tool)
@@ -493,6 +497,8 @@ export type SavedCanvas = GalleryEntry;
 export interface NewCanvasMessage {
   type: 'new_canvas';
   saved_id: string | null;
+  canvas_width?: number;
+  canvas_height?: number;
 }
 
 export interface GalleryUpdateMessage {
@@ -504,6 +510,8 @@ export interface LoadCanvasMessage {
   type: 'load_canvas';
   strokes: Path[];
   piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
   drawing_style?: DrawingStyleType;
   style_config?: DrawingStyleConfig;
 }
@@ -515,6 +523,8 @@ export interface InitMessage {
   status: AgentStatus;
   paused: boolean;
   piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
   monologue: string;
   drawing_style?: DrawingStyleType;
   style_config?: DrawingStyleConfig;
@@ -537,6 +547,7 @@ export type ToolName =
   | 'draw_paths'
   | 'generate_svg'
   | 'view_canvas'
+  | 'critique_canvas'
   | 'mark_piece_done'
   | 'imagine'
   | 'sign_canvas'
@@ -549,6 +560,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   draw_paths: 'drawing paths',
   generate_svg: 'generating SVG',
   view_canvas: 'viewing canvas',
+  critique_canvas: 'critiquing canvas',
   mark_piece_done: 'marking done',
   imagine: 'imagining',
   sign_canvas: 'signing',
@@ -638,6 +650,8 @@ export interface ClientNewCanvasMessage {
   type: 'new_canvas';
   direction?: string; // Optional direction for the agent
   drawing_style?: DrawingStyleType; // Optional style for the new canvas
+  canvas_width?: number;
+  canvas_height?: number;
 }
 
 export interface ClientLoadCanvasMessage {

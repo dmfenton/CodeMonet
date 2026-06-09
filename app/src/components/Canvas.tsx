@@ -12,7 +12,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { screenToCanvas } from '../hooks/useCanvas';
 import { SkiaRenderer } from '../renderers';
 import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
-import { CANVAS_ASPECT_RATIO, CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 import { borderRadius, spacing, typography, useTheme } from '../theme';
 
 interface CanvasProps {
@@ -23,6 +23,8 @@ interface CanvasProps {
   penPosition: Point | null;
   penDown: boolean;
   drawingEnabled: boolean;
+  canvasWidth?: number;
+  canvasHeight?: number;
   styleConfig?: DrawingStyleConfig; // Current drawing style (defaults to plotter)
   showIdleAnimation: boolean; // Whether to show idle particles
   onStrokeStart: (x: number, y: number) => void;
@@ -38,6 +40,8 @@ export function Canvas({
   penPosition,
   penDown,
   drawingEnabled,
+  canvasWidth = CANVAS_WIDTH,
+  canvasHeight = CANVAS_HEIGHT,
   styleConfig = PLOTTER_STYLE,
   showIdleAnimation,
   onStrokeStart,
@@ -72,7 +76,7 @@ export function Canvas({
         .onStart((event) => {
           const { width, height } = containerRef.current;
           if (width > 0 && height > 0) {
-            const point = screenToCanvas(event.x, event.y, width, height);
+            const point = screenToCanvas(event.x, event.y, width, height, canvasWidth, canvasHeight);
             // Use ref to get latest callback and guard against undefined
             if (typeof onStrokeStartRef.current === 'function') {
               onStrokeStartRef.current(point.x, point.y);
@@ -82,7 +86,7 @@ export function Canvas({
         .onUpdate((event) => {
           const { width, height } = containerRef.current;
           if (width > 0 && height > 0) {
-            const point = screenToCanvas(event.x, event.y, width, height);
+            const point = screenToCanvas(event.x, event.y, width, height, canvasWidth, canvasHeight);
             // Use ref to get latest callback and guard against undefined
             if (typeof onStrokeMoveRef.current === 'function') {
               onStrokeMoveRef.current(point.x, point.y);
@@ -95,7 +99,7 @@ export function Canvas({
             onStrokeEndRef.current();
           }
         }),
-    [drawingEnabled]
+    [drawingEnabled, canvasWidth, canvasHeight]
   );
 
   // Build renderer props
@@ -108,14 +112,18 @@ export function Canvas({
     penDown,
     styleConfig,
     showIdleAnimation,
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
+    width: canvasWidth,
+    height: canvasHeight,
     primaryColor: colors.primary,
   };
 
   return (
     <View
-      style={[styles.container, { backgroundColor: colors.canvasBackground }, shadows.md]}
+      style={[
+        styles.container,
+        { aspectRatio: canvasWidth / canvasHeight, backgroundColor: colors.canvasBackground },
+        shadows.md,
+      ]}
       onLayout={handleLayout}
       testID="canvas-view"
     >
@@ -140,7 +148,6 @@ export function Canvas({
 const styles = StyleSheet.create({
   container: {
     width: '100%',
-    aspectRatio: CANVAS_ASPECT_RATIO,
     borderRadius: borderRadius.lg,
     overflow: 'hidden',
   },
