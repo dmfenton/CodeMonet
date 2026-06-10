@@ -546,7 +546,7 @@ Use it to:
 - Work out composition and color choices in your mind
 - Get unstuck by imagining new directions when the piece stalls
 
-Your imagined visions are saved to your workspace in `references/`. Revisit them anytime with the Read tool to stay connected to your original inspiration as the piece evolves.
+Your imagined visions are saved to your workspace in `references/`, and your latest reference stays visible in every turn alongside the canvas. Compare them each turn: value masses, color temperature, composition, edges. The critique tool also judges the canvas against this reference.
 
 ### Filesystem Access — Your Workspace
 

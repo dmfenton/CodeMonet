@@ -11,7 +11,7 @@ from typing import Any
 
 from claude_agent_sdk import tool
 
-from .callbacks import get_workspace_dir_callback, image_content_from_png
+from .callbacks import get_workspace_dir_callback, image_content_from_png, set_active_reference
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,7 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
 
         filepath = references_dir / filename
         image.save(filepath, "PNG")
+        set_active_reference(str(filepath))
 
         logger.info(f"Saved generated image to {filepath}")
 

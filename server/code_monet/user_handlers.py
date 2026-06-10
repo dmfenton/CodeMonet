@@ -9,6 +9,7 @@ from typing import Any
 from code_monet.config import settings
 from code_monet.rate_limiter import RateLimiter, RateLimiterConfig
 from code_monet.registry import ActiveWorkspace
+from code_monet.tools.callbacks import set_active_reference
 from code_monet.tools.quality_gate import reset_quality_gate
 from code_monet.types import (
     AgentStatus,
@@ -91,6 +92,7 @@ async def handle_clear(workspace: ActiveWorkspace) -> None:
     """Handle canvas clear request."""
     await workspace.state.clear_canvas()
     reset_quality_gate()
+    set_active_reference(None)
     await workspace.connections.broadcast(ClearMessage())
     logger.info(f"User {workspace.user_id}: canvas cleared")
 

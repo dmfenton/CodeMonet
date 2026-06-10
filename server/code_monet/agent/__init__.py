@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import io
 import logging
 from collections.abc import AsyncGenerator, Callable, Coroutine
@@ -33,6 +34,7 @@ from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
 from code_monet.rendering import options_for_agent_view, render_strokes
 from code_monet.tools import create_drawing_server
+from code_monet.tools.callbacks import get_active_reference_png, set_active_reference
 from code_monet.tools.quality_gate import (
     consume_mark_piece_done_accepted,
     quality_gate_prompt_context,
@@ -321,6 +323,7 @@ class DrawingAgent:
         """Reset the session for a new piece."""
         self._abort = True  # Abort any running turn
         reset_quality_gate()
+        set_active_reference(None)
         # Disconnect client to start fresh
         if self._client:
             client = self._client
@@ -442,6 +445,31 @@ class DrawingAgent:
                 },
             },
         ]
+
+        # Keep the active reference visible every turn so the agent can
+        # compare the canvas against it instead of recalling it from memory.
+        reference_png = await asyncio.to_thread(get_active_reference_png)
+        if reference_png is not None:
+            content.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "Your reference image for this piece (from imagine). Compare the "
+                        "canvas above against it: value masses, color temperature, "
+                        "composition, edges."
+                    ),
+                }
+            )
+            content.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": base64.standard_b64encode(reference_png).decode("utf-8"),
+                    },
+                }
+            )
 
         yield {
             "type": "user",
