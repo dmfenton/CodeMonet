@@ -107,17 +107,19 @@ class TestHexToRgba:
     def test_zero_opacity(self) -> None:
         assert hex_to_rgba("#0000FF", 0.0) == (0, 0, 255, 0)
 
-    def test_invalid_short_hex(self) -> None:
-        import pytest
+    def test_invalid_short_hex_falls_back_to_gray(self) -> None:
+        assert hex_to_rgba("#FF") == (128, 128, 128, 255)
 
-        with pytest.raises(ValueError, match="expected 6 characters"):
-            hex_to_rgba("#FF")
+    def test_shorthand_hex_expands(self) -> None:
+        assert hex_to_rgba("#f0a") == (255, 0, 170, 255)
 
-    def test_invalid_long_hex(self) -> None:
-        import pytest
+    def test_hex_with_alpha_channel(self) -> None:
+        assert hex_to_rgba("#FF00FF00") == (255, 0, 255, 0)
+        assert hex_to_rgba("#ff0000ff", 1.0) == (255, 0, 0, 255)
 
-        with pytest.raises(ValueError, match="expected 6 characters"):
-            hex_to_rgba("#FF00FF00")
+    def test_garbage_hex_never_raises(self) -> None:
+        assert hex_to_rgba("#1a2550f") == (26, 37, 80, 255)
+        assert hex_to_rgba("not-a-color") == (128, 128, 128, 255)
 
 
 class TestPngRasterization:

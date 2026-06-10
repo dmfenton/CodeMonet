@@ -27,21 +27,29 @@ if TYPE_CHECKING:
 def hex_to_rgba(hex_color: str, opacity: float = 1.0) -> tuple[int, int, int, int]:
     """Convert hex color and opacity to RGBA tuple.
 
+    Tolerates sloppy model-emitted colors: 3-digit shorthand, 8-digit
+    hex-with-alpha, and stray characters. A bad color must never crash a
+    render — it falls back to mid gray.
+
     Args:
-        hex_color: Hex color string like "#FF0000" or "FF0000"
+        hex_color: Hex color string like "#FF0000", "#F00", or "#FF0000CC"
         opacity: Opacity value from 0.0 to 1.0
 
     Returns:
         RGBA tuple (r, g, b, a) with values 0-255
-
-    Raises:
-        ValueError: If hex_color is not a valid 6-character hex string
     """
-    hex_color = hex_color.lstrip("#")
-    if len(hex_color) != 6:
-        raise ValueError(f"Invalid hex color: expected 6 characters, got {len(hex_color)}")
-    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
-    return (r, g, b, int(opacity * 255))
+    # Filtering guarantees every remaining character parses as hex.
+    value = "".join(c for c in hex_color.lstrip("#") if c in "0123456789abcdefABCDEF")
+    if len(value) == 3:
+        value = "".join(c * 2 for c in value)
+    alpha = opacity
+    if len(value) == 8:
+        alpha = opacity * int(value[6:8], 16) / 255
+        value = value[:6]
+    if len(value) < 6:
+        return (128, 128, 128, int(opacity * 255))
+    r, g, b = int(value[0:2], 16), int(value[2:4], 16), int(value[4:6], 16)
+    return (r, g, b, int(alpha * 255))
 
 
 def image_to_base64(img: Image.Image) -> str:
