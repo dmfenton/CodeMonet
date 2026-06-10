@@ -238,31 +238,59 @@ uv run python scripts/ws-client.py view output.png
 uv run python scripts/ws-client.py start "draw a cat"
 ```
 
-### Visual Flow Testing (`scripts/visual-flow-test.py`)
+### Render Studies (`scripts/render-study.py`)
 
-Time-lapse screenshot capture during agent execution to verify rendering flow:
+The fast iteration loop for renderer/visual work — sandbox code → paint render →
+PNG, no agent or API calls:
 
 ```bash
-# Run from server directory (for uv dependencies)
 cd server
 
-# Basic test - screenshots every 1 second
-uv run python ../scripts/visual-flow-test.py "draw a simple line"
+# Server-side render (painting.py) to screenshots/studies/<stem>.png
+uv run python ../scripts/render-study.py ../studies/monet_lilies.py
 
-# Fast interval to capture progressive text reveal
-uv run python ../scripts/visual-flow-test.py "draw a landscape" --interval 0.5
-
-# Use Vite web app (port 5173) instead of Expo (8081)
-uv run python ../scripts/visual-flow-test.py "draw shapes" --expo-port 5173
-
-# Show browser window for debugging
-uv run python ../scripts/visual-flow-test.py "draw a cat" --no-headless
+# ALSO render via the web client (stamping.ts) and produce a labeled
+# side-by-side with a diff heatmap + mean-diff metric.
+# Requires the Vite dev server (make dev-web or make web).
+uv run python ../scripts/render-study.py ../studies/brush_swatches.py --compare
 ```
 
-**Output:** `screenshots/flow-{timestamp}/` containing:
-- Numbered screenshots: `001-00000ms.png`, `002-01000ms.png`, ...
-- `events.json`: WebSocket event log with timestamps
-- `summary.txt`: Test results and ffmpeg command for time-lapse
+`--compare` drives the dev-only `/replay` route (web/src/pages/ReplayPage.tsx),
+which renders the exported paths through the production StampCanvasLayer.
+Use it to verify painting.py / stamping.ts parity — what users actually see is
+the client render. `--json out.json` exports paths for manual replay
+(`http://localhost:5173/replay?src=...`).
+
+### Visual Flow Testing (`scripts/visual-flow-test.py`)
+
+Watch a full agent run end-to-end and produce judgeable artifacts:
+
+```bash
+# From repo root (or use cd server + ../scripts/...)
+uv run --project server python scripts/visual-flow-test.py "draw a simple line"
+
+# Use Vite web app (port 5173) instead of Expo (8081)
+uv run --project server python scripts/visual-flow-test.py "draw shapes" --expo-port 5173
+
+# Show browser window for debugging
+uv run --project server python scripts/visual-flow-test.py "draw a cat" --no-headless
+```
+
+**Output:** `screenshots/flow-{timestamp}/` — start with `report.md`:
+- `report.md`: event timeline (thinking text, tool calls, critique verdicts,
+  stroke batches) aligned with screenshots, plus client-lag stats
+- `contact-sheet.png`: one-glance grid of the whole run
+- Interval frames `001-000000ms.png` PLUS event-triggered frames
+  (`-strokes-batchN`, `-critique`, `-state-*`, `-final`)
+- `canvas-*-batchN.png`: canvas-only crops per stroke batch
+- `final-canvas.png` + `server-render.png` + `parity.png`: client (stamping.ts)
+  vs server (painting.py) side-by-side with diff heatmap
+- `events.json` (compacted), `summary.txt`, `timelapse.mp4`
+
+The web app exposes `window.__CM_DEV_STATE__` in dev (strokes painted, queue
+depth, revealed chars); the report uses it to flag when the client performance
+lags the server — if the run timed out mid-piece, parity.png compares an
+incomplete client canvas.
 
 **Options:**
 
@@ -271,9 +299,12 @@ uv run python ../scripts/visual-flow-test.py "draw a cat" --no-headless
 | `--interval N` | 1.0 | Screenshot interval in seconds |
 | `--timeout N` | 120 | Max test duration in seconds |
 | `--output DIR` | auto | Custom output directory |
-| `--expo-port N` | 8081 | Expo port (8081 mobile, 5173 web) |
+| `--expo-port N` | 8081 | App port (8081 mobile, 5173 web) |
+| `--web` | auto | Force Vite-web mode (auto for port 5173) |
+| `--viewport WxH` | per app | 390x844 mobile, 1280x900 web |
 | `--no-headless` | false | Show browser window |
 | `--no-clear` | false | Skip clearing canvas |
+| `--no-video` | false | Skip timelapse video |
 
 ### Full Development Loop
 
@@ -387,6 +418,8 @@ If screenshot shows issues:
 
 **TestIDs for `--selector`:**
 
+Mobile app (port 8081):
+
 | Element | Selector |
 |---------|----------|
 | HomePanel | `[data-testid="home-panel"]` |
@@ -394,6 +427,18 @@ If screenshot shows issues:
 | Continue button | `[data-testid="home-continue-button"]` |
 | Gallery button | `[data-testid="home-gallery"]` |
 | Surprise Me | `[data-testid="home-surprise-me"]` |
+
+Web studio (port 5173, `/studio`):
+
+| Element | Selector |
+|---------|----------|
+| Canvas | `[data-testid="canvas-view"]` |
+| Status pill | `[data-testid="status-pill"]` |
+| Thinking strip | `[data-testid="thinking-strip"]` |
+| Start button | `[data-testid="start-button"]` |
+| Start modal input/submit | `[data-testid="start-modal-input"]` / `"start-modal-submit"` |
+| Nudge input/send | `[data-testid="nudge-input"]` / `"nudge-send"` |
+| Pause | `[data-testid="pause-button"]` |
 
 **Common Issues:**
 

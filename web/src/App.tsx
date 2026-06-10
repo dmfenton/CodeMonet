@@ -29,6 +29,20 @@ interface CanvasDimensions {
   canvas_height: number;
 }
 
+interface DevState {
+  strokesPainted: number;
+  bufferLength: number;
+  revealedChars: number;
+  paused: boolean;
+  pieceNumber: number;
+}
+
+declare global {
+  interface Window {
+    __CM_DEV_STATE__?: DevState;
+  }
+}
+
 function App(): React.ReactElement {
   const { state, dispatch, handleMessage, startStroke, addPoint, endStroke, toggleDrawing, setPaused } =
     useCanvas();
@@ -153,6 +167,20 @@ function App(): React.ReactElement {
     sendRef.current = send;
   }, [send]);
 
+  // Dev-only: expose render state so the visual-flow-test harness can tell
+  // how far the client performance lags behind the server (painted strokes,
+  // queued items, revealed monologue).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    window.__CM_DEV_STATE__ = {
+      strokesPainted: state.strokes.length,
+      bufferLength: state.performance.buffer.length,
+      revealedChars: state.performance.revealedText.length,
+      paused: state.paused,
+      pieceNumber: state.pieceNumber,
+    };
+  });
+
   const handleStrokeEnd = useCallback(() => {
     const path = endStroke();
     if (path) {
@@ -170,7 +198,7 @@ function App(): React.ReactElement {
           </div>
         </div>
         <div className="header-center">
-          <div className={`status-pill ${agentStatus}`}>{STATUS_LABELS[agentStatus]}</div>
+          <div className={`status-pill ${agentStatus}`} data-testid="status-pill">{STATUS_LABELS[agentStatus]}</div>
         </div>
         <div className="header-right">
           <span className="piece-count">Piece #{state.pieceNumber}</span>
@@ -189,7 +217,7 @@ function App(): React.ReactElement {
         onNewCanvas={handleNewCanvas}
       />
 
-      <div className="thinking-strip">
+      <div className="thinking-strip" data-testid="thinking-strip">
         <StatusOverlay status={agentStatus} performance={state.performance} messages={state.messages} />
       </div>
 
