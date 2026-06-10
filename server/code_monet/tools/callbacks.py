@@ -146,12 +146,19 @@ def get_active_reference_png() -> bytes | None:
         return None
 
 
-def image_content_from_png(png_bytes: bytes) -> dict[str, Any]:
-    """Build MCP image content for a PNG payload."""
+def image_mime_type(data: bytes) -> str:
+    """Detect PNG vs JPEG from magic bytes (canvas images may be either)."""
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    return "image/png"
+
+
+def image_content_from_png(image_bytes: bytes) -> dict[str, Any]:
+    """Build MCP image content for a PNG or JPEG payload."""
     return {
         "type": "image",
-        "data": base64.standard_b64encode(png_bytes).decode("utf-8"),
-        "mimeType": "image/png",
+        "data": base64.standard_b64encode(image_bytes).decode("utf-8"),
+        "mimeType": image_mime_type(image_bytes),
     }
 
 

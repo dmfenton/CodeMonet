@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import io
 import logging
 from collections.abc import AsyncGenerator, Callable, Coroutine
 from contextlib import suppress
@@ -32,7 +31,7 @@ from code_monet.agent.processor import process_turn_messages as _process_turn_me
 from code_monet.agent.prompts import SYSTEM_PROMPT, build_system_prompt
 from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
-from code_monet.rendering import options_for_agent_view, render_strokes
+from code_monet.rendering import image_to_jpeg_bytes, options_for_agent_view, render_strokes
 from code_monet.tools import create_drawing_server
 from code_monet.tools.callbacks import get_active_reference_png, set_active_reference
 from code_monet.tools.quality_gate import (
@@ -165,6 +164,8 @@ class DrawingAgent:
             "permission_mode": "acceptEdits",
             "model": settings.agent_model if settings.dev_mode else settings.agent_model_prod,
             "include_partial_messages": True,
+            # Painterly canvas images are large; default 1MB buffer is too small.
+            "max_buffer_size": 16 * 1024 * 1024,
             "hooks": {"PostToolUse": [HookMatcher(hooks=[self._post_tool_use_hook])]},
             "env": {"ANTHROPIC_API_KEY": settings.anthropic_api_key},
         }
@@ -430,9 +431,10 @@ class DrawingAgent:
         Yields message dicts for the Claude SDK query:
         - User message with text and image content blocks
         """
-        # Canvas image (non-blocking)
+        # Canvas image (non-blocking). JPEG keeps textured renders small.
         img = await self._get_canvas_image_async(highlight_human=True)
-        image_b64 = await asyncio.to_thread(self._image_to_base64, img)
+        jpeg_bytes = await asyncio.to_thread(image_to_jpeg_bytes, img)
+        image_b64 = base64.standard_b64encode(jpeg_bytes).decode("utf-8")
 
         content = [
             {"type": "text", "text": self._build_prompt()},
@@ -440,7 +442,7 @@ class DrawingAgent:
                 "type": "image",
                 "source": {
                     "type": "base64",
-                    "media_type": "image/png",
+                    "media_type": "image/jpeg",
                     "data": image_b64,
                 },
             },
@@ -512,12 +514,11 @@ class DrawingAgent:
             if done:
                 self._piece_done = True
 
-        # Set up canvas callback for view_canvas tool
+        # Set up canvas callback for view_canvas tool. JPEG keeps textured
+        # painterly renders well under the SDK's per-message buffer limit.
         def get_canvas_png() -> bytes:
             img = self._get_canvas_image(highlight_human=True)
-            buffer = io.BytesIO()
-            img.save(buffer, format="PNG")
-            return buffer.getvalue()
+            return image_to_jpeg_bytes(img)
 
         # Set up callbacks
         setup_tool_callbacks(

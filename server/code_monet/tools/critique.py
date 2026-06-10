@@ -56,13 +56,14 @@ largest divergences that weaken the canvas.
 """
 
 
-def _image_block(png_bytes: bytes) -> dict[str, Any]:
+def _image_block(image_bytes: bytes) -> dict[str, Any]:
+    media_type = "image/jpeg" if image_bytes[:2] == b"\xff\xd8" else "image/png"
     return {
         "type": "image",
         "source": {
             "type": "base64",
-            "media_type": "image/png",
-            "data": base64.standard_b64encode(png_bytes).decode("utf-8"),
+            "media_type": media_type,
+            "data": base64.standard_b64encode(image_bytes).decode("utf-8"),
         },
     }
 

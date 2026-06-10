@@ -51,6 +51,17 @@ def image_to_base64(img: Image.Image) -> str:
     return base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
 
 
+def image_to_jpeg_bytes(img: Image.Image, quality: int = 82) -> bytes:
+    """Encode a PIL image as JPEG bytes.
+
+    Painterly renders compress ~10x better as JPEG than PNG, which keeps
+    canvas images well under transport message-size limits.
+    """
+    buffer = io.BytesIO()
+    img.convert("RGB").save(buffer, format="JPEG", quality=quality)
+    return buffer.getvalue()
+
+
 @dataclass(frozen=True)
 class RenderOptions:
     """Configuration for stroke rendering.
