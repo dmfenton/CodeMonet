@@ -189,6 +189,8 @@ def screenshot_app(
             context.add_init_script(f"""
                 localStorage.setItem('access_token', {token_js});
                 localStorage.setItem('refresh_token', {token_js});
+                localStorage.setItem('auth_access_token', {token_js});
+                localStorage.setItem('auth_refresh_token', {token_js});
             """)
             print_status("Injected auth token into localStorage")
 

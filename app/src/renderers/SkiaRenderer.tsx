@@ -39,6 +39,7 @@ import {
 
 import { SkiaIdleParticles } from '../components/SkiaIdleParticles';
 import { SkiaInProgressStroke } from './SkiaInProgressStroke';
+import { SkiaStampedStroke } from './SkiaStampedStroke';
 
 const DEFAULT_STROKE_COLOR = '#1a1a2e';
 
@@ -244,18 +245,18 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
     ) : null;
   }
 
-  // Freehand/painterly strokes
+  // Freehand/painterly strokes. In paint mode, completed strokes use the
+  // stamp-based painterly model (matches the server renderer).
   return (
     <Group>
       {fillPath && fillColor && (
         <SkiaPath path={fillPath} color={fillColor} style="fill" opacity={fillOpacity} />
       )}
-      <PainterlyStroke
-        points={points}
-        style={style}
-        brushName={isPaintMode ? stroke.brush : undefined}
-        blur={isPaintMode ? 1.5 : 0}
-      />
+      {isPaintMode ? (
+        <SkiaStampedStroke points={points} style={style} brushName={stroke.brush} />
+      ) : (
+        <PainterlyStroke points={points} style={style} blur={0} />
+      )}
     </Group>
   );
 });

@@ -11,6 +11,7 @@ import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 
 import { useRendererConfig } from '../context/RendererContext';
 import { SvgRenderer, FreehandSvgRenderer } from '../renderers';
+import { StampCanvasLayer } from '../renderers/StampCanvasLayer';
 
 interface CanvasProps {
   strokes: Path[];
@@ -143,9 +144,14 @@ export function Canvas({
     }
   }, [isDrawing, onStrokeEnd]);
 
+  // In paint mode, completed strokes render on a raster stamp layer
+  // (painterly, matches the server renderer); the SVG overlay keeps
+  // in-progress strokes, the pen indicator, and idle animation.
+  const useStampLayer = styleConfig.type === 'paint';
+
   // Build renderer props
   const rendererProps: RendererProps = {
-    strokes,
+    strokes: useStampLayer ? [] : strokes,
     currentStroke,
     agentStroke,
     agentStrokeStyle: agentStrokeStyle ?? null,
@@ -184,6 +190,14 @@ export function Canvas({
           aspectRatio: `${canvasWidth} / ${canvasHeight}`,
         }}
       >
+        {useStampLayer && (
+          <StampCanvasLayer
+            strokes={strokes}
+            styleConfig={styleConfig}
+            width={canvasWidth}
+            height={canvasHeight}
+          />
+        )}
         <svg
           ref={svgRef}
           width="100%"
