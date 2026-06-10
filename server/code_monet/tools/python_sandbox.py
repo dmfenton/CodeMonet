@@ -379,19 +379,6 @@ def background_wash(
         wash_rows=wash_rows,
         texture_ratio=texture_ratio,
     )
-    paths.extend(stroke_field(
-        max(18, count // 9),
-        x_range=(0, canvas_width),
-        y_range=y_range,
-        angle=angle,
-        angle_jitter=angle_jitter * 1.7,
-        length_range=(80, 210),
-        width_range=(10, 24),
-        colors=[color for _, colors_for_stop in stops for color in colors_for_stop],
-        brushes=brushes,
-        opacity_range=(0.10, min(0.34, opacity_range[1] * 0.45)),
-        exclude_polygons=exclude_polygons,
-    ))
     return paths
 
 def curve_marks(
