@@ -93,6 +93,9 @@ export function StampCanvasLayer({
     if (!ctx) return;
 
     const painted = paintedRef.current;
+    // Assumes the reducer only appends strokes or replaces the whole array
+    // (a replace produces a new strokes[0] reference). In-place edits of
+    // existing strokes would require a full-repaint signal here.
     const sameSession =
       strokes.length >= painted.count &&
       (painted.count === 0 || strokes[0] === painted.first) &&

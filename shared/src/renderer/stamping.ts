@@ -280,7 +280,14 @@ export interface Rgb {
 }
 
 export function hexToRgb(hex: string): Rgb {
-  const value = hex.replace('#', '');
+  let value = hex.replace('#', '');
+  // Mirror the server's tolerance: expand #f0a shorthand.
+  if (value.length === 3) {
+    value = value
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
   return {
     r: parseInt(value.slice(0, 2), 16) || 0,
     g: parseInt(value.slice(2, 4), 16) || 0,

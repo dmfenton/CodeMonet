@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Stamp-based painterly stroke renderer: variable width with taper, bristle texture, dry-brush breakup over canvas tooth, per-stamp broken color, watercolor wet edges, impasto lighting, and canvas grain (server `painting.py`, ported to web canvas and Skia Atlas via `shared/renderer/stamping.ts`)
+- `critique_canvas` compares the canvas against the active `imagine` reference with a painter's rubric; the reference image stays visible in every agent turn
+- Overwork circuit breaker: after 3 consecutive failed critiques the agent is directed to repaint failed regions with opaque masses instead of adding texture
+- Homepage hero replays a real recorded artwork (Poplars at Dusk) being painted stroke by stroke — deterministic, no model calls — with phase-synced captions, a brush-tip indicator, title card, and loop
+- `scripts/render-study.py` + `studies/` for fast visual iteration on the paint pipeline; `--json` exports stroke data for replay
+
+### Changed
+
+- Public showcase replaced with five new works: The Great Wave (after Hokusai), Poplars at Dusk, The Lily Pond, Village Nocturne, Field of Poppies
+- Agent-facing canvas images are JPEG-encoded (textured renders exceeded the SDK's 1MB message buffer); SDK buffer raised to 16MB
+- Quality gate generalized: removed wave-specific structural helpers and critique-keyword repair forcing
+
+### Fixed
+
+- Malformed model-emitted hex colors no longer crash a render mid-turn (shorthand and 8-digit alpha hex now parse; garbage falls back to gray)
+
 ## [1.37.3] - 2026-04-02
 
 ### Fixed

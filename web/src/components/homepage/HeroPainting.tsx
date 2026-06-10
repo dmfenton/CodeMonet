@@ -119,9 +119,26 @@ export function HeroPainting(): React.ReactElement {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async (): Promise<void> => {
-      const response = await fetch(HERO_PIECE_URL);
-      if (!response.ok || cancelled) return;
-      const piece = (await response.json()) as HeroPiece;
+      let piece: HeroPiece;
+      try {
+        const response = await fetch(HERO_PIECE_URL);
+        if (!response.ok || cancelled) return;
+        piece = (await response.json()) as HeroPiece;
+      } catch {
+        // Network/parse failure: fall back to the static showcase image.
+        const img = new Image();
+        img.src = '/showcase/poplars-at-dusk.png';
+        img.onload = (): void => {
+          const ctx = canvas.getContext('2d');
+          if (!ctx || cancelled) return;
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          setFinished(true);
+        };
+        return;
+      }
+      if (cancelled) return;
       const plan = buildPlan(piece);
       const totalStamps = plan.reduce(
         (sum, el) => sum + (el.kind === 'stroke' ? el.stamps.length : 0),

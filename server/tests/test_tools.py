@@ -402,6 +402,37 @@ class TestHandleCritiqueCanvas:
         assert "FINISH GATE: BLOCKED" in message
         assert "structural revision" in message
 
+    def test_consecutive_failures_trigger_repaint_directive(self) -> None:
+        """After 3 FAILs the gate orders an opaque repaint, not more texture."""
+        for _ in range(2):
+            record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
+
+        # Two failures: still ordinary revision guidance.
+        assert "OVERWORK ALERT" not in critique_gate_message("FAIL")
+        context = quality_gate_prompt_context()
+        assert context is not None
+        assert "OVERWORK ALERT" not in context
+
+        record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
+
+        # Third consecutive failure: repaint directive becomes binding.
+        assert get_quality_gate_snapshot()["consecutive_failures"] == 3
+        assert "OVERWORK ALERT" in critique_gate_message("FAIL")
+        context = quality_gate_prompt_context()
+        assert context is not None
+        assert "OVERWORK ALERT" in context
+        assert "fill_opacity=1.0" in context
+
+    def test_pass_resets_consecutive_failures(self) -> None:
+        for _ in range(3):
+            record_critique_result("VERDICT: FAIL\nFINDINGS:\n- mud")
+        assert get_quality_gate_snapshot()["consecutive_failures"] == 3
+
+        record_critique_result("VERDICT: PASS\nFINDINGS:\n- reads cleanly")
+
+        assert get_quality_gate_snapshot()["consecutive_failures"] == 0
+        assert "OVERWORK ALERT" not in critique_gate_message("FAIL")
+
 
 class TestInjectCanvasImage:
     """Tests for _inject_canvas_image helper function."""
