@@ -94,9 +94,10 @@ class Settings(BaseSettings):
     agent_workspace: str = "data/agent_workspace"  # Inside mounted volume for persistence
     workspace_base_dir: str = "data/agent_workspace/users"  # Per-user workspace directories
     max_agent_iterations: int = 5  # max iterations per turn
+    quality_gate_auto_revision_turns: int = 3  # extra turns after failed visual critique
     agent_max_tokens: int = 8192  # max tokens for Claude response
     agent_provider: str = _ssm("agent_provider", "anthropic")  # anthropic or openai
-    agent_model: str = "claude-haiku-4-5-20251001"  # Haiku for dev, override in prod
+    agent_model: str = "claude-sonnet-4-5-20250929"  # Sonnet for visual planning in dev
     agent_model_prod: str = "claude-opus-4-5-20251101"  # Production model
     openai_agent_model: str = "gpt-5-mini"
     openai_agent_model_prod: str = "gpt-5"
@@ -128,7 +129,7 @@ class Settings(BaseSettings):
 
     # Rate limiting (prevent abuse)
     max_strokes_per_minute: int = 60  # max user strokes per minute
-    max_pending_strokes: int = 1000  # max pending strokes queued for animation
+    max_pending_strokes: int = 5000  # max pending strokes queued for animation
     max_workspace_size_bytes: int = 10 * 1024 * 1024  # 10MB max workspace.json size
 
     # Tracing (OpenTelemetry + X-Ray via ADOT Collector)

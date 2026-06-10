@@ -5,6 +5,7 @@ This package provides all drawing tools used by the agent:
 - mark_piece_done: Signal piece completion
 - generate_svg: Generate paths via Python code
 - view_canvas: View current canvas state
+- critique_canvas: Strict visual finish gate
 - imagine: Generate AI reference images
 - sign_canvas: Add artist signature
 - name_piece: Title the artwork
@@ -21,6 +22,7 @@ from .callbacks import (
     set_piece_title_callback,
     set_workspace_dir_callback,
 )
+from .critique import critique_canvas, handle_critique_canvas
 from .drawing import (
     draw_paths,
     handle_draw_paths,
@@ -32,6 +34,14 @@ from .drawing import (
 from .image_generation import handle_imagine, imagine
 from .naming import handle_name_piece, name_piece
 from .path_parsing import parse_path_data
+from .quality_gate import (
+    consume_mark_piece_done_accepted,
+    get_quality_gate_snapshot,
+    is_finish_gate_blocked,
+    quality_gate_prompt_context,
+    record_critique_result,
+    reset_quality_gate,
+)
 from .signature import (
     _generate_signature_paths,
     _transform_svg_path,
@@ -51,6 +61,7 @@ def create_drawing_server():
             mark_piece_done,
             generate_svg,
             view_canvas,
+            critique_canvas,
             imagine,
             sign_canvas,
             name_piece,
@@ -71,10 +82,17 @@ __all__ = [
     "_inject_canvas_image",
     # Path parsing
     "parse_path_data",
+    "consume_mark_piece_done_accepted",
+    "get_quality_gate_snapshot",
+    "is_finish_gate_blocked",
+    "quality_gate_prompt_context",
+    "record_critique_result",
+    "reset_quality_gate",
     # Drawing handlers (for testing)
     "handle_draw_paths",
     "handle_mark_piece_done",
     "handle_view_canvas",
+    "handle_critique_canvas",
     "handle_generate_svg",
     "handle_imagine",
     "handle_sign_canvas",
@@ -87,6 +105,7 @@ __all__ = [
     "mark_piece_done",
     "generate_svg",
     "view_canvas",
+    "critique_canvas",
     "imagine",
     "sign_canvas",
     "name_piece",

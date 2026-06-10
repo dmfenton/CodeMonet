@@ -29,11 +29,13 @@ async def get_gallery_piece_strokes(piece_number: int, user: CurrentUser) -> dic
     result = await state.load_from_gallery(piece_number)
     if not result:
         raise HTTPException(status_code=404, detail="Piece not found")
-    strokes, drawing_style = result
+    strokes, drawing_style, width, height = result
     style_config = get_style_config(drawing_style)
     return {
         "strokes": [s.model_dump() for s in strokes],
         "piece_number": piece_number,
+        "canvas_width": width,
+        "canvas_height": height,
         "drawing_style": drawing_style.value,
         "style_config": style_config.model_dump(),
     }
@@ -62,11 +64,13 @@ async def get_gallery_thumbnail(piece_id: str, user: CurrentUser) -> Response:
     if result is None:
         raise HTTPException(status_code=404, detail="Piece not found")
 
-    strokes, style = result
+    strokes, style, width, height = result
     if not strokes:
         raise HTTPException(status_code=404, detail="Piece has no strokes")
 
-    png_bytes = await render_strokes_to_png(strokes, drawing_style=style)
+    png_bytes = await render_strokes_to_png(
+        strokes, width=width, height=height, drawing_style=style
+    )
     return Response(
         content=png_bytes,
         media_type="image/png",

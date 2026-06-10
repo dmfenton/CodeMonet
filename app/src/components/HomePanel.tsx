@@ -28,6 +28,8 @@ interface HomePanelProps {
   recentCanvas: SavedCanvas | null;
   drawingStyle: DrawingStyleType;
   strokes: Path[];
+  canvasWidth: number;
+  canvasHeight: number;
   styleConfig: DrawingStyleConfig;
   galleryCount: number;
   onStyleChange: (style: DrawingStyleType) => void;
@@ -45,6 +47,8 @@ export function HomePanel({
   recentCanvas,
   drawingStyle,
   strokes,
+  canvasWidth,
+  canvasHeight,
   styleConfig,
   galleryCount,
   onStyleChange,
@@ -132,6 +136,8 @@ export function HomePanel({
             recentCanvas={recentCanvas}
             hasCurrentWork={hasCurrentWork}
             strokes={strokes}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
             styleConfig={styleConfig}
             onContinue={onContinue}
             disabled={!connected}

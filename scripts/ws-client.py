@@ -18,14 +18,20 @@ import argparse
 import asyncio
 import json
 import sys
+import tempfile
 import time
 from datetime import datetime
+from pathlib import Path
 
 import httpx
 import websockets
 
 BASE_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
+WS_MAX_SIZE = 16 * 1024 * 1024
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
 
 # ANSI colors
 CYAN = "\033[96m"
@@ -38,6 +44,20 @@ DIM = "\033[2m"
 RESET = "\033[0m"
 
 
+def save_generate_svg_code(code_text: str, helper_flags: list[str]) -> str | None:
+    """Persist full generate_svg code for later inspection."""
+    try:
+        output_dir = Path(tempfile.gettempdir()) / "code-monet-tool-code"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")[:-3]
+        helper_slug = "-".join(helper_flags) if helper_flags else "none"
+        path = output_dir / f"{timestamp}-generate-svg-{helper_slug}.py"
+        path.write_text(f"{code_text.rstrip()}\n", encoding="utf-8")
+        return str(path.resolve())
+    except OSError:
+        return None
+
+
 def ts() -> str:
     return datetime.now().strftime("%H:%M:%S.%f")[:-3]
 
@@ -46,11 +66,12 @@ def format_event(msg: dict) -> str:
     """Format a WebSocket event for display."""
     msg_type = msg.get("type", "unknown")
 
-    if msg_type == "thinking":
-        text = msg.get("thinking", "")[:100]
-        if len(msg.get("thinking", "")) > 100:
+    if msg_type in ("thinking", "thinking_delta"):
+        source_key = "thinking" if msg_type == "thinking" else "text"
+        text = msg.get(source_key, "")[:120]
+        if len(msg.get(source_key, "")) > 120:
             text += "..."
-        return f"{CYAN}[{ts()}] thinking{RESET} {text}"
+        return f"{CYAN}[{ts()}] {msg_type}{RESET} {text}"
 
     elif msg_type == "text":
         text = msg.get("text", "")[:100]
@@ -61,6 +82,55 @@ def format_event(msg: dict) -> str:
         status = msg.get("status", "")
         color = GREEN if status == "completed" else YELLOW
         return f"{color}[{ts()}] tool_use{RESET} {name} ({status})"
+
+    elif msg_type == "code_execution":
+        tool = msg.get("tool_name") or "unknown"
+        status = msg.get("status") or "unknown"
+        code = msg.get("return_code")
+        color = GREEN if status == "completed" and code in (0, None) else YELLOW
+        if status == "started":
+            input_data = msg.get("tool_input") if isinstance(msg.get("tool_input"), dict) else {}
+            if tool == "generate_svg":
+                code_text = str(input_data.get("code", "")).strip()
+                if code_text:
+                    helper_flags = []
+                    for helper_name in (
+                        "curved_ribbon_mass",
+                        "crescent_mass",
+                        "small_figure_with_prop",
+                        "background_wash",
+                        "mass_field",
+                    ):
+                        if helper_name in code_text:
+                            helper_flags.append(helper_name)
+                    helper_note = (
+                        f" helpers={','.join(helper_flags)}" if helper_flags else " helpers=none"
+                    )
+                    saved_path = save_generate_svg_code(code_text, helper_flags)
+                    saved_note = f" saved={saved_path}" if saved_path else ""
+                    preview = " ".join(code_text.split())[:360]
+                    return (
+                        f"{YELLOW}[{ts()}] code_execution{RESET} {tool} started"
+                        f"{helper_note}{saved_note} code={preview}"
+                    )
+            return f"{YELLOW}[{ts()}] code_execution{RESET} {tool} started"
+
+        output = (msg.get("stdout") or msg.get("stderr") or "").strip()
+        if tool == "critique_canvas" and output:
+            lines = [line.strip() for line in output.splitlines() if line.strip()]
+            verdict = next((line for line in lines if line.startswith("VERDICT:")), "")
+            gate = next((line for line in lines if line.startswith("FINISH GATE:")), "")
+            repair = next((line for line in lines if line.startswith("STRUCTURAL REPAIR")), "")
+            findings = [line for line in lines if line.startswith("- ")][:4]
+            summary_parts = [part for part in [verdict, gate, repair, *findings] if part]
+            summary = " | ".join(summary_parts)
+            return f"{color}[{ts()}] critique{RESET} {summary[:700]}"
+
+        first_line = output.splitlines()[0] if output else ""
+        suffix = f" rc={code}" if code is not None else ""
+        if first_line:
+            suffix += f" {first_line[:220]}"
+        return f"{color}[{ts()}] code_execution{RESET} {tool} completed{suffix}"
 
     elif msg_type == "paths":
         paths = msg.get("paths", [])
@@ -106,7 +176,7 @@ async def watch():
     print(f"{GREEN}Connecting...{RESET}")
     token = await get_token()
 
-    async with websockets.connect(f"{WS_URL}?token={token}") as ws:
+    async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
         print(f"{GREEN}Connected. Watching events (Ctrl+C to stop){RESET}\n")
         try:
             async for raw in ws:
@@ -120,7 +190,7 @@ async def send_and_watch(message: dict, watch_duration: int = 0):
     """Send a message and optionally watch for responses."""
     token = await get_token()
 
-    async with websockets.connect(f"{WS_URL}?token={token}") as ws:
+    async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
         # Send the message
         await ws.send(json.dumps(message))
         print(f"{GREEN}Sent:{RESET} {json.dumps(message)}")
@@ -168,17 +238,27 @@ async def fetch_and_animate_strokes(token: str) -> int:
         return len(strokes)
 
 
-async def start(prompt: str | None = None, duration: int = 60, drawing_style: str | None = None):
+async def start(
+    prompt: str | None = None,
+    duration: int = 60,
+    drawing_style: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
+):
     """Start drawing and watch."""
     token = await get_token()
 
-    async with websockets.connect(f"{WS_URL}?token={token}") as ws:
+    async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
         # Send new_canvas with optional direction (prompt)
         new_canvas_msg = {"type": "new_canvas"}
         if prompt:
             new_canvas_msg["direction"] = prompt
         if drawing_style:
             new_canvas_msg["drawing_style"] = drawing_style
+        if width is not None:
+            new_canvas_msg["canvas_width"] = width
+        if height is not None:
+            new_canvas_msg["canvas_height"] = height
         await ws.send(json.dumps(new_canvas_msg))
         print(f"{GREEN}Sent:{RESET} {json.dumps(new_canvas_msg)}")
 
@@ -216,22 +296,22 @@ async def start(prompt: str | None = None, duration: int = 60, drawing_style: st
             print(f"\n{DIM}Stopped{RESET}")
 
 
-async def pause():
+async def pause(duration: int = 3):
     """Pause the agent."""
-    await send_and_watch({"type": "pause"}, watch_duration=3)
+    await send_and_watch({"type": "pause"}, watch_duration=duration)
 
 
-async def resume():
+async def resume(duration: int = 30):
     """Resume the agent."""
-    await send_and_watch({"type": "resume"}, watch_duration=30)
+    await send_and_watch({"type": "resume"}, watch_duration=duration)
 
 
-async def nudge(message: str | None = None):
+async def nudge(message: str | None = None, duration: int = 30):
     """Send a nudge."""
     msg = {"type": "nudge"}
     if message:
         msg["text"] = message
-    await send_and_watch(msg, watch_duration=30)
+    await send_and_watch(msg, watch_duration=duration)
 
 
 async def clear():
@@ -257,6 +337,15 @@ async def status():
         print(f"  piece_count: {data.get('piece_count')}")
         print(f"  stroke_count: {data.get('stroke_count')}")
         print(f"  connected_clients: {data.get('connected_clients')}")
+        gate = data.get("quality_gate") or {}
+        print("  quality_gate:")
+        print(f"    last_verdict: {gate.get('last_verdict')}")
+        print(f"    blocked_by_failure: {gate.get('blocked_by_failure')}")
+        print(f"    drew_after_failure: {gate.get('drew_after_failure')}")
+        critique = (gate.get("last_critique") or "").strip()
+        if critique:
+            first_lines = " | ".join(critique.splitlines()[:4])
+            print(f"    last_critique: {first_lines[:300]}")
 
 
 async def view(output_path: str = "canvas.png"):
@@ -294,7 +383,7 @@ async def test(prompt: str, expected_strokes: int, timeout: int = 120):
     print(f"  Expected strokes: {expected_strokes}")
     print(f"  Timeout: {timeout}s\n")
 
-    async with websockets.connect(f"{WS_URL}?token={token}") as ws:
+    async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
         # Clear canvas first
         await ws.send(json.dumps({"type": "clear"}))
         print(f"{GREEN}[{ts()}] Cleared canvas{RESET}")
@@ -415,7 +504,7 @@ def main():
         "-d",
         type=int,
         default=60,
-        help="Watch duration for start command",
+        help="Watch duration for start, pause, resume, and nudge commands",
     )
     parser.add_argument("--strokes", "-s", type=int, help="Expected stroke count for test command")
     parser.add_argument("--timeout", "-t", type=int, default=120, help="Timeout for test command")
@@ -424,6 +513,8 @@ def main():
         choices=["plotter", "paint"],
         help="Drawing style for start command",
     )
+    parser.add_argument("--width", type=int, help="Canvas width for start command")
+    parser.add_argument("--height", type=int, help="Canvas height for start command")
 
     args = parser.parse_args()
 
@@ -432,14 +523,14 @@ def main():
             asyncio.run(watch())
         elif args.command == "start":
             prompt = " ".join(args.args) if args.args else None
-            asyncio.run(start(prompt, args.duration, args.style))
+            asyncio.run(start(prompt, args.duration, args.style, args.width, args.height))
         elif args.command == "pause":
-            asyncio.run(pause())
+            asyncio.run(pause(args.duration))
         elif args.command == "resume":
-            asyncio.run(resume())
+            asyncio.run(resume(args.duration))
         elif args.command == "nudge":
             message = " ".join(args.args) if args.args else None
-            asyncio.run(nudge(message))
+            asyncio.run(nudge(message, args.duration))
         elif args.command == "clear":
             asyncio.run(clear())
         elif args.command == "status":

@@ -8,6 +8,7 @@ import { renderToString } from 'react-dom/server';
 import { StaticRouter } from 'react-router-dom/server';
 import { HelmetProvider, HelmetServerState } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
+import { RendererProvider } from './context/RendererContext';
 import { AppRoutes } from './routes';
 
 export interface SSRData {
@@ -21,6 +22,8 @@ export interface GalleryPieceData {
   user_id: string;
   piece_number: number;
   stroke_count: number;
+  width?: number;
+  height?: number;
   created_at: string;
   title?: string;
   description?: string;
@@ -30,6 +33,8 @@ export interface PieceStrokesData {
   id: string;
   strokes: PathData[];
   piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
   created_at: string;
 }
 
@@ -43,6 +48,8 @@ export interface PathData {
   color?: string;
   stroke_width?: number;
   opacity?: number;
+  fill?: string;
+  fill_opacity?: number;
 }
 
 export interface RenderResult {
@@ -66,9 +73,11 @@ export function render(url: string, initialData?: SSRData): RenderResult {
     <StrictMode>
       <HelmetProvider context={helmetContext}>
         <StaticRouter location={url}>
-          <AuthProvider>
-            <AppRoutes initialData={initialData} />
-          </AuthProvider>
+          <RendererProvider>
+            <AuthProvider>
+              <AppRoutes initialData={initialData} />
+            </AuthProvider>
+          </RendererProvider>
         </StaticRouter>
       </HelmetProvider>
     </StrictMode>

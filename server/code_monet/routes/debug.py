@@ -11,6 +11,7 @@ from code_monet.auth.dependencies import CurrentUser
 from code_monet.config import settings
 from code_monet.registry import workspace_registry
 from code_monet.routes.canvas import get_user_state
+from code_monet.tools.quality_gate import get_quality_gate_snapshot
 from code_monet.types import AgentStatus, PausedMessage
 from code_monet.user_handlers import handle_new_canvas
 
@@ -35,6 +36,7 @@ async def get_agent_debug(user: CurrentUser) -> dict[str, Any]:
             "monologue": state.monologue[:500] if state.monologue else None,
             "stroke_count": len(state.canvas.strokes),
             "connected_clients": 0,
+            "quality_gate": get_quality_gate_snapshot(),
         }
 
     state = workspace.state
@@ -46,6 +48,7 @@ async def get_agent_debug(user: CurrentUser) -> dict[str, Any]:
         "monologue": state.monologue[:500] if state.monologue else None,
         "stroke_count": len(state.canvas.strokes),
         "connected_clients": workspace.connections.connection_count,
+        "quality_gate": get_quality_gate_snapshot(),
     }
 
 

@@ -151,15 +151,21 @@ const MemoizedStroke = memo(function MemoizedStroke({
     const d = pathToSvgD(stroke, isPaintMode);
     if (!d) return null;
     const filterId = isPaintMode ? 'painterly-blur' : undefined;
+    const fill = stroke.fill ?? 'none';
+    const fillOpacity = stroke.fill
+      ? (stroke.fill_opacity ?? style.opacity)
+      : undefined;
+    const strokeColor = style.stroke_width > 0 ? style.color : 'none';
     return (
       <path
         d={d}
-        stroke={style.color}
+        stroke={strokeColor}
         strokeWidth={style.stroke_width}
-        fill="none"
+        fill={fill}
+        fillOpacity={fillOpacity}
         strokeLinecap={style.stroke_linecap}
         strokeLinejoin={style.stroke_linejoin}
-        opacity={style.opacity}
+        strokeOpacity={style.opacity}
         filter={filterId ? `url(#${filterId})` : undefined}
       />
     );
@@ -172,13 +178,26 @@ const MemoizedStroke = memo(function MemoizedStroke({
     return <StrokeDot point={points[0]} style={style} />;
   }
 
+  const fillColor = stroke.fill;
+  const fillPath = fillColor ? pathToSvgD(stroke, isPaintMode) : '';
+  const fillOpacity = fillColor ? (stroke.fill_opacity ?? style.opacity) : undefined;
+
+  if (fillColor && style.stroke_width <= 0) {
+    return fillPath ? (
+      <path d={fillPath} fill={fillColor} fillOpacity={fillOpacity} />
+    ) : null;
+  }
+
   return (
-    <FreehandStroke
-      points={points}
-      style={style}
-      brushName={isPaintMode ? stroke.brush : undefined}
-      blur={isPaintMode}
-    />
+    <>
+      {fillPath && <path d={fillPath} fill={fillColor} fillOpacity={fillOpacity} />}
+      <FreehandStroke
+        points={points}
+        style={style}
+        brushName={isPaintMode ? stroke.brush : undefined}
+        blur={isPaintMode}
+      />
+    </>
   );
 });
 

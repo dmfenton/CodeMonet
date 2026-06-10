@@ -226,6 +226,8 @@ async def websocket_endpoint(
                 "status": workspace.state.status.value,
                 "paused": workspace.agent.paused,
                 "piece_number": workspace.state.piece_number,
+                "canvas_width": workspace.state.canvas.width,
+                "canvas_height": workspace.state.canvas.height,
                 "monologue": workspace.state.monologue or "",
                 "drawing_style": drawing_style.value,
                 "style_config": style_config.model_dump(),

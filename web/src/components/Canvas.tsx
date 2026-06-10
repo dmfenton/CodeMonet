@@ -5,16 +5,13 @@
  * to the appropriate renderer (SVG or Skia) based on configuration.
  */
 
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
-import {
-  CANVAS_HEIGHT,
-  CANVAS_WIDTH,
-  PLOTTER_STYLE,
-} from '@code-monet/shared';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 
 import { useRendererConfig } from '../context/RendererContext';
 import { SvgRenderer, FreehandSvgRenderer } from '../renderers';
+import { StampCanvasLayer } from '../renderers/StampCanvasLayer';
 
 interface CanvasProps {
   strokes: Path[];
@@ -24,6 +21,8 @@ interface CanvasProps {
   penPosition: Point | null;
   penDown: boolean;
   drawingEnabled: boolean;
+  canvasWidth?: number;
+  canvasHeight?: number;
   styleConfig?: DrawingStyleConfig; // Current drawing style (defaults to plotter)
   showIdleAnimation: boolean; // Whether to show idle particles
   onStrokeStart: (x: number, y: number) => void;
@@ -34,9 +33,15 @@ interface CanvasProps {
 /**
  * Convert screen coordinates to canvas coordinates.
  */
-function screenToCanvas(clientX: number, clientY: number, rect: DOMRect): Point {
-  const scaleX = CANVAS_WIDTH / rect.width;
-  const scaleY = CANVAS_HEIGHT / rect.height;
+function screenToCanvas(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+  canvasWidth: number,
+  canvasHeight: number
+): Point {
+  const scaleX = canvasWidth / rect.width;
+  const scaleY = canvasHeight / rect.height;
   return {
     x: (clientX - rect.left) * scaleX,
     y: (clientY - rect.top) * scaleY,
@@ -51,21 +56,56 @@ export function Canvas({
   penPosition,
   penDown,
   drawingEnabled,
+  canvasWidth = CANVAS_WIDTH,
+  canvasHeight = CANVAS_HEIGHT,
   styleConfig = PLOTTER_STYLE,
   showIdleAnimation,
   onStrokeStart,
   onStrokeMove,
   onStrokeEnd,
 }: CanvasProps): React.ReactElement {
+  const fitRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [frameSize, setFrameSize] = useState({ width: 0, height: 0 });
   const { config } = useRendererConfig();
+
+  useEffect(() => {
+    const fitEl = fitRef.current;
+    if (!fitEl) return;
+
+    const updateFrameSize = (): void => {
+      const rect = fitEl.getBoundingClientRect();
+      const availableWidth = rect.width;
+      const availableHeight = rect.height;
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+
+      const aspect = canvasWidth / canvasHeight;
+      const availableAspect = availableWidth / availableHeight;
+      if (availableAspect > aspect) {
+        setFrameSize({
+          width: availableHeight * aspect,
+          height: availableHeight,
+        });
+      } else {
+        setFrameSize({
+          width: availableWidth,
+          height: availableWidth / aspect,
+        });
+      }
+    };
+
+    updateFrameSize();
+    const resizeObserver = new ResizeObserver(updateFrameSize);
+    resizeObserver.observe(fitEl);
+    return (): void => resizeObserver.disconnect();
+  }, [canvasWidth, canvasHeight]);
 
   const getPoint = useCallback((e: React.MouseEvent): Point | null => {
     if (!svgRef.current) return null;
     const rect = svgRef.current.getBoundingClientRect();
-    return screenToCanvas(e.clientX, e.clientY, rect);
-  }, []);
+    return screenToCanvas(e.clientX, e.clientY, rect, canvasWidth, canvasHeight);
+  }, [canvasWidth, canvasHeight]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -104,9 +144,14 @@ export function Canvas({
     }
   }, [isDrawing, onStrokeEnd]);
 
+  // In paint mode, completed strokes render on a raster stamp layer
+  // (painterly, matches the server renderer); the SVG overlay keeps
+  // in-progress strokes, the pen indicator, and idle animation.
+  const useStampLayer = styleConfig.type === 'paint';
+
   // Build renderer props
   const rendererProps: RendererProps = {
-    strokes,
+    strokes: useStampLayer ? [] : strokes,
     currentStroke,
     agentStroke,
     agentStrokeStyle: agentStrokeStyle ?? null,
@@ -114,8 +159,8 @@ export function Canvas({
     penDown,
     styleConfig,
     showIdleAnimation,
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
+    width: canvasWidth,
+    height: canvasHeight,
     primaryColor: styleConfig.human_stroke.color,
   };
 
@@ -136,40 +181,57 @@ export function Canvas({
   })();
 
   return (
-    <div className="canvas-wrapper">
-      <svg
-        ref={svgRef}
-        width="100%"
-        height="100%"
-        viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
-        preserveAspectRatio="xMidYMid meet"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseLeave}
-        style={{ cursor: drawingEnabled ? 'crosshair' : 'default' }}
+    <div className="canvas-fit" ref={fitRef}>
+      <div
+        className="canvas-wrapper"
+        style={{
+          width: frameSize.width || '100%',
+          height: frameSize.height || '100%',
+          aspectRatio: `${canvasWidth} / ${canvasHeight}`,
+        }}
       >
-        <Renderer {...rendererProps} />
-      </svg>
-
-      {/* Drawing mode indicator */}
-      {drawingEnabled && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 8,
-            left: 8,
-            padding: '4px 8px',
-            background: styleConfig.human_stroke.color,
-            color: '#fff',
-            borderRadius: 4,
-            fontSize: 12,
-            fontWeight: 600,
-          }}
+        {useStampLayer && (
+          <StampCanvasLayer
+            strokes={strokes}
+            styleConfig={styleConfig}
+            width={canvasWidth}
+            height={canvasHeight}
+          />
+        )}
+        <svg
+          ref={svgRef}
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
+          preserveAspectRatio="xMidYMid meet"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          style={{ cursor: drawingEnabled ? 'crosshair' : 'default' }}
         >
-          Drawing Mode
-        </div>
-      )}
+          <Renderer {...rendererProps} />
+        </svg>
+
+        {/* Drawing mode indicator */}
+        {drawingEnabled && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 8,
+              left: 8,
+              padding: '4px 8px',
+              background: styleConfig.human_stroke.color,
+              color: '#fff',
+              borderRadius: 4,
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Drawing Mode
+          </div>
+        )}
+      </div>
     </div>
   );
 }

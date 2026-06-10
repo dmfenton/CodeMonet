@@ -17,6 +17,8 @@ export interface PathData {
   color?: string;
   stroke_width?: number;
   opacity?: number;
+  fill?: string;
+  fill_opacity?: number;
 }
 
 export interface GalleryPiece {
@@ -24,6 +26,8 @@ export interface GalleryPiece {
   user_id: string;
   piece_number: number;
   stroke_count: number;
+  width?: number;
+  height?: number;
   created_at: string;
   title?: string; // Piece title (set by agent via name_piece tool)
 }
@@ -32,6 +36,8 @@ export interface PieceStrokes {
   id: string;
   strokes: PathData[];
   piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
   created_at: string;
 }
 

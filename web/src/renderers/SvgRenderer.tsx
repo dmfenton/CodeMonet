@@ -38,6 +38,11 @@ const MemoizedStroke = memo(function MemoizedStroke({
     [stroke, styleConfig]
   );
   const isPaintMode = styleConfig.type === 'paint';
+  const fill = stroke.fill ?? 'none';
+  const fillOpacity = stroke.fill
+    ? (stroke.fill_opacity ?? effectiveStyle.opacity)
+    : undefined;
+  const strokeColor = effectiveStyle.stroke_width > 0 ? effectiveStyle.color : 'none';
 
   if (stroke.type !== 'svg' && stroke.points.length === 1) {
     const pt = stroke.points[0]!;
@@ -58,12 +63,13 @@ const MemoizedStroke = memo(function MemoizedStroke({
     <path
       key={`stroke-${index}`}
       d={pathToSvgD(stroke, isPaintMode)}
-      stroke={effectiveStyle.color}
+      stroke={strokeColor}
       strokeWidth={effectiveStyle.stroke_width}
-      fill="none"
+      fill={fill}
+      fillOpacity={fillOpacity}
       strokeLinecap={effectiveStyle.stroke_linecap}
       strokeLinejoin={effectiveStyle.stroke_linejoin}
-      opacity={effectiveStyle.opacity}
+      strokeOpacity={effectiveStyle.opacity}
     />
   );
 });
@@ -157,7 +163,7 @@ export function SvgRenderer({
               ? agentStrokeStyle.color
               : styleConfig.agent_stroke.color;
           const effectiveWidth =
-            styleConfig.supports_variable_width && agentStrokeStyle?.stroke_width
+            styleConfig.supports_variable_width && typeof agentStrokeStyle?.stroke_width === 'number'
               ? agentStrokeStyle.stroke_width
               : styleConfig.agent_stroke.stroke_width;
           const effectiveOpacity =

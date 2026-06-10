@@ -13,7 +13,7 @@ import type {
   Point,
   StrokeStyle,
 } from '../types';
-import { PLOTTER_STYLE, getStyleConfig } from '../types';
+import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE, getStyleConfig } from '../types';
 import { boundedPush } from '../utils';
 
 // Max messages to keep in state to prevent memory issues
@@ -129,6 +129,8 @@ export interface CanvasHookState {
   messages: AgentMessage[];
 
   // Canvas metadata
+  canvasWidth: number;
+  canvasHeight: number;
   pieceNumber: number;
   viewingPiece: number | null; // Which gallery piece is being viewed (null = current)
   drawingEnabled: boolean;
@@ -141,6 +143,8 @@ export interface CanvasHookState {
   /** Saved canvas state before viewing a gallery piece (for restoring on exit) */
   savedCanvas: {
     strokes: Path[];
+    canvasWidth: number;
+    canvasHeight: number;
     pieceNumber: number;
     drawingStyle: DrawingStyleType;
     styleConfig: DrawingStyleConfig;
@@ -273,12 +277,15 @@ export type CanvasAction =
   | { type: 'ADD_MESSAGE'; message: AgentMessage }
   | { type: 'CLEAR_MESSAGES' }
   | { type: 'TOGGLE_DRAWING' }
+  | { type: 'SET_CANVAS_SIZE'; width: number; height: number }
   | { type: 'SET_PIECE_NUMBER'; number: number }
   | { type: 'SET_GALLERY'; canvases: GalleryEntry[] }
   | {
       type: 'LOAD_CANVAS';
       strokes: Path[];
       pieceNumber: number;
+      canvasWidth?: number;
+      canvasHeight?: number;
       drawingStyle?: DrawingStyleType;
       styleConfig?: DrawingStyleConfig;
     }
@@ -287,6 +294,8 @@ export type CanvasAction =
       strokes: Path[];
       gallery: GalleryEntry[];
       pieceNumber: number;
+      canvasWidth?: number;
+      canvasHeight?: number;
       paused: boolean;
       drawingStyle?: DrawingStyleType;
       styleConfig?: DrawingStyleConfig;
@@ -314,6 +323,8 @@ export const initialState: CanvasHookState = {
   messages: [],
 
   // Canvas metadata
+  canvasWidth: CANVAS_WIDTH,
+  canvasHeight: CANVAS_HEIGHT,
   pieceNumber: 0,
   viewingPiece: null,
   drawingEnabled: false,
@@ -398,6 +409,9 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
     case 'TOGGLE_DRAWING':
       return { ...state, drawingEnabled: !state.drawingEnabled };
 
+    case 'SET_CANVAS_SIZE':
+      return { ...state, canvasWidth: action.width, canvasHeight: action.height };
+
     case 'SET_PIECE_NUMBER':
       return { ...state, pieceNumber: action.number };
 
@@ -418,11 +432,15 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         strokes: action.strokes,
         currentStroke: [],
         viewingPiece: action.pieceNumber,
+        canvasWidth: action.canvasWidth || CANVAS_WIDTH,
+        canvasHeight: action.canvasHeight || CANVAS_HEIGHT,
         drawingStyle: loadedStyle,
         styleConfig: loadedStyleConfig,
         // Save current canvas state so we can restore when exiting gallery view
         savedCanvas: state.viewingPiece === null ? {
           strokes: state.strokes,
+          canvasWidth: state.canvasWidth,
+          canvasHeight: state.canvasHeight,
           pieceNumber: state.pieceNumber,
           drawingStyle: state.drawingStyle,
           styleConfig: state.styleConfig,
@@ -438,6 +456,8 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           ...state,
           viewingPiece: null,
           strokes: state.savedCanvas.strokes,
+          canvasWidth: state.savedCanvas.canvasWidth,
+          canvasHeight: state.savedCanvas.canvasHeight,
           pieceNumber: state.savedCanvas.pieceNumber,
           drawingStyle: state.savedCanvas.drawingStyle,
           styleConfig: state.savedCanvas.styleConfig,
@@ -458,6 +478,8 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         strokes: action.strokes,
         gallery: action.gallery,
         pieceNumber: action.pieceNumber,
+        canvasWidth: action.canvasWidth || CANVAS_WIDTH,
+        canvasHeight: action.canvasHeight || CANVAS_HEIGHT,
         paused: action.paused,
         viewingPiece: null, // Init shows current canvas
         savedCanvas: null,

@@ -25,8 +25,6 @@ import {
 
 import type { Path, Point, RendererProps, StrokeStyle, BrushName, DrawingStyleConfig } from '@code-monet/shared';
 import {
-  CANVAS_HEIGHT,
-  CANVAS_WIDTH,
   getEffectiveAgentStrokeStyle,
   getEffectiveStyle,
   getFreehandOutline,
@@ -41,6 +39,7 @@ import {
 
 import { SkiaIdleParticles } from '../components/SkiaIdleParticles';
 import { SkiaInProgressStroke } from './SkiaInProgressStroke';
+import { SkiaStampedStroke } from './SkiaStampedStroke';
 
 const DEFAULT_STROKE_COLOR = '#1a1a2e';
 
@@ -181,7 +180,7 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
 
   const points = useMemo(() => samplePathPoints(stroke), [stroke]);
 
-  // SVG-type strokes: render from raw d-string as a stroked (not filled) path
+  // SVG-type strokes: render from raw d-string, preserving filled forms.
   if (stroke.type === 'svg') {
     const d = pathToSvgD(stroke, isPaintMode);
     if (!d) return null;
@@ -191,30 +190,41 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
 
     const strokeColor = style.color || DEFAULT_STROKE_COLOR;
     const strokeOpacity = style.opacity ?? 1;
+    const fillColor = stroke.fill;
+    const fillOpacity = fillColor ? (stroke.fill_opacity ?? strokeOpacity) : undefined;
+    const shouldStroke = style.stroke_width > 0;
 
-    return isPaintMode ? (
+    return (
       <Group>
-        <BlurMask blur={1.5} style="normal" />
-        <SkiaPath
-          path={skiaPath}
-          color={strokeColor}
-          style="stroke"
-          strokeWidth={style.stroke_width}
-          strokeCap={style.stroke_linecap}
-          strokeJoin={style.stroke_linejoin}
-          opacity={strokeOpacity}
-        />
+        {fillColor && (
+          <SkiaPath path={skiaPath} color={fillColor} style="fill" opacity={fillOpacity} />
+        )}
+        {shouldStroke &&
+          (isPaintMode ? (
+            <Group>
+              <BlurMask blur={1.5} style="normal" />
+              <SkiaPath
+                path={skiaPath}
+                color={strokeColor}
+                style="stroke"
+                strokeWidth={style.stroke_width}
+                strokeCap={style.stroke_linecap}
+                strokeJoin={style.stroke_linejoin}
+                opacity={strokeOpacity}
+              />
+            </Group>
+          ) : (
+            <SkiaPath
+              path={skiaPath}
+              color={strokeColor}
+              style="stroke"
+              strokeWidth={style.stroke_width}
+              strokeCap={style.stroke_linecap}
+              strokeJoin={style.stroke_linejoin}
+              opacity={strokeOpacity}
+            />
+          ))}
       </Group>
-    ) : (
-      <SkiaPath
-        path={skiaPath}
-        color={strokeColor}
-        style="stroke"
-        strokeWidth={style.stroke_width}
-        strokeCap={style.stroke_linecap}
-        strokeJoin={style.stroke_linejoin}
-        opacity={strokeOpacity}
-      />
     );
   }
 
@@ -225,14 +235,29 @@ const MemoizedSkiaStroke = memo(function MemoizedSkiaStroke({
     return <StrokeDot point={points[0]} style={style} />;
   }
 
-  // Freehand/painterly strokes
+  const fillColor = stroke.fill;
+  const fillPath = fillColor ? Skia.Path.MakeFromSVGString(pathToSvgD(stroke, isPaintMode)) : null;
+  const fillOpacity = fillColor ? (stroke.fill_opacity ?? style.opacity ?? 1) : undefined;
+
+  if (fillColor && style.stroke_width <= 0) {
+    return fillPath ? (
+      <SkiaPath path={fillPath} color={fillColor} style="fill" opacity={fillOpacity} />
+    ) : null;
+  }
+
+  // Freehand/painterly strokes. In paint mode, completed strokes use the
+  // stamp-based painterly model (matches the server renderer).
   return (
-    <PainterlyStroke
-      points={points}
-      style={style}
-      brushName={isPaintMode ? stroke.brush : undefined}
-      blur={isPaintMode ? 1.5 : 0}
-    />
+    <Group>
+      {fillPath && fillColor && (
+        <SkiaPath path={fillPath} color={fillColor} style="fill" opacity={fillOpacity} />
+      )}
+      {isPaintMode ? (
+        <SkiaStampedStroke points={points} style={style} brushName={stroke.brush} />
+      ) : (
+        <PainterlyStroke points={points} style={style} blur={0} />
+      )}
+    </Group>
   );
 });
 
@@ -278,12 +303,10 @@ export function SkiaRenderer({
   penDown,
   styleConfig,
   showIdleAnimation,
-  width: _width,
-  height: _height,
+  width,
+  height,
   primaryColor,
 }: RendererProps): React.ReactElement {
-  void _width;
-  void _height;
   const isPaintMode = styleConfig.type === 'paint';
 
   // Track actual layout size so we can map logical canvas coords to device points.
@@ -296,10 +319,10 @@ export function SkiaRenderer({
     );
   }, []);
 
-  const src = useMemo(() => rect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT), []);
+  const src = useMemo(() => rect(0, 0, width, height), [width, height]);
   const dst = useMemo(
-    () => rect(0, 0, layoutSize.width || CANVAS_WIDTH, layoutSize.height || CANVAS_HEIGHT),
-    [layoutSize.width, layoutSize.height]
+    () => rect(0, 0, layoutSize.width || width, layoutSize.height || height),
+    [layoutSize.width, layoutSize.height, width, height]
   );
   const transform = useMemo(() => fitbox('contain', src, dst), [src, dst]);
 

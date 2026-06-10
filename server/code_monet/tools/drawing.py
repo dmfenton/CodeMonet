@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import logging
 from typing import Any
 
@@ -15,11 +14,29 @@ from .callbacks import (
     get_canvas_callback,
     get_canvas_dimensions,
     get_draw_callback,
+    image_content_from_png,
     inject_canvas_image,
 )
 from .path_parsing import parse_path_data
+from .quality_gate import (
+    finish_block_message,
+    note_drawing,
+    record_mark_piece_done_attempt,
+)
 
 logger = logging.getLogger(__name__)
+
+AUTO_CANVAS_IMAGE_PATH_LIMIT = 160
+
+VIEW_CANVAS_AUDIT_TEXT = (
+    "Inspect the actual rendered canvas. Report visible failures first, not intentions. "
+    "Check the value structure first: do the big light and dark masses read at thumbnail size? "
+    "Then verify: required subject nouns are present; the dominant silhouette reads; key "
+    "negative space is clear; the foreground is structurally active where the subject needs "
+    "ground, water, shadow, or reflection; small figures/objects are readable silhouettes with "
+    "contact; no accidental scaffolds or long closure lines are dominating. "
+    "If any item fails, revise before finishing."
+)
 
 
 async def handle_draw_paths(args: dict[str, Any]) -> dict[str, Any]:
@@ -33,6 +50,8 @@ async def handle_draw_paths(args: dict[str, Any]) -> dict[str, Any]:
     """
     paths_data = args.get("paths", [])
     done = args.get("done", False)
+    block_done_message = finish_block_message() if done else None
+    effective_done = done and block_done_message is None
 
     if not isinstance(paths_data, list):
         return {
@@ -69,11 +88,12 @@ async def handle_draw_paths(args: dict[str, Any]) -> dict[str, Any]:
     )
     if parsed_paths and _add_strokes_callback is not None:
         await _add_strokes_callback(parsed_paths)
+    note_drawing(len(parsed_paths))
 
     # Call the draw callback for animation (strokes already in state)
     logger.info(f"draw_paths: triggering animation, callback={'set' if _draw_callback else 'None'}")
     if parsed_paths and _draw_callback is not None:
-        await _draw_callback(parsed_paths, done)
+        await _draw_callback(parsed_paths, effective_done)
 
     # Build response content
     content: list[dict[str, Any]] = []
@@ -94,13 +114,19 @@ async def handle_draw_paths(args: dict[str, Any]) -> dict[str, Any]:
             {
                 "type": "text",
                 "text": f"Successfully drew {len(parsed_paths)} paths."
-                + (" Piece marked as complete." if done else ""),
+                + (" Piece marked as complete." if effective_done else ""),
             }
         )
 
-    # Inject canvas image if we drew paths
-    if parsed_paths:
+    if block_done_message is not None:
+        content[0]["text"] += f" {block_done_message}"
+
+    # Inject canvas image for small batches. Large batches can exceed SDK transport limits;
+    # the agent can call view_canvas explicitly when it needs visual inspection.
+    if 0 < len(parsed_paths) <= AUTO_CANVAS_IMAGE_PATH_LIMIT:
         inject_canvas_image(content)
+    elif parsed_paths:
+        content[0]["text"] += " Canvas image omitted for dense batch; call view_canvas to inspect."
 
     return {"content": content}
 
@@ -112,8 +138,17 @@ async def handle_mark_piece_done() -> dict[str, Any]:
         Tool result confirming the piece is done
     """
     _draw_callback = get_draw_callback()
+    block_message = finish_block_message()
+    if block_message is not None:
+        record_mark_piece_done_attempt(False)
+        return {
+            "content": [{"type": "text", "text": block_message}],
+            "is_error": True,
+        }
+
     if _draw_callback is not None:
         await _draw_callback([], True)
+    record_mark_piece_done_attempt(True)
 
     return {
         "content": [{"type": "text", "text": "Piece marked as complete."}],
@@ -135,18 +170,11 @@ async def handle_view_canvas() -> dict[str, Any]:
 
     try:
         png_bytes = _get_canvas_callback()
-        image_b64 = base64.standard_b64encode(png_bytes).decode("utf-8")
 
         return {
             "content": [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": image_b64,
-                    },
-                }
+                {"type": "text", "text": VIEW_CANVAS_AUDIT_TEXT},
+                image_content_from_png(png_bytes),
             ],
         }
     except Exception as e:
@@ -159,7 +187,13 @@ async def handle_view_canvas() -> dict[str, Any]:
 
 @tool(
     "draw_paths",
-    """Draw paths on the canvas (800x600). Coordinates must be within bounds: X 0-800, Y 0-600.
+    """Draw paths on the current canvas. Coordinates must be within the canvas bounds from the turn prompt.
+
+The paths array supports dense coherent batches. Use many paths in one call when you already know the marks,
+especially for hatching, foam, foliage, crowds, city texture, waves, and other high-detail subjects.
+
+Closed svg paths can be filled. Use fill and fill_opacity for solid grounds, silhouettes, color masses,
+water/sky planes, shadows, and poster-like shapes. Set stroke_width to 0 for a filled shape with no outline.
 
 In Paint mode, you can specify a brush preset for realistic paint effects:
 - oil_round: Classic round brush with visible bristle texture (good for blending)
@@ -179,7 +213,7 @@ In Paint mode, you can specify a brush preset for realistic paint effects:
         "properties": {
             "paths": {
                 "type": "array",
-                "description": "Array of path objects to draw",
+                "description": "Array of path objects to draw. Dense batches with dozens or hundreds of paths are supported when the marks are intentional.",
                 "items": {
                     "type": "object",
                     "properties": {
@@ -199,7 +233,7 @@ In Paint mode, you can specify a brush preset for realistic paint effects:
                         },
                         "d": {
                             "type": "string",
-                            "description": "SVG path d-string (for type=svg). Coordinates must be within canvas bounds (0-800, 0-600). Example: 'M 100 100 L 400 300 C 500 200 600 400 700 300'",
+                            "description": "SVG path d-string (for type=svg). Coordinates must be within canvas bounds. Close filled shapes with Z. Example: 'M 100 100 L 400 300 C 500 200 600 400 700 300 Z'",
                         },
                         "brush": {
                             "type": "string",
@@ -225,11 +259,19 @@ In Paint mode, you can specify a brush preset for realistic paint effects:
                         },
                         "stroke_width": {
                             "type": "number",
-                            "description": "Stroke width 0.5-30 (Paint mode only). Overrides brush default width.",
+                            "description": "Stroke width 0-30 (Paint mode only). Use 0 for filled shapes with no outline.",
                         },
                         "opacity": {
                             "type": "number",
                             "description": "Opacity 0-1 (Paint mode only). Default: 1",
+                        },
+                        "fill": {
+                            "type": "string",
+                            "description": "Hex fill color for closed paths. Example: '#f7ead0'",
+                        },
+                        "fill_opacity": {
+                            "type": "number",
+                            "description": "Fill opacity 0-1. Default follows path opacity.",
                         },
                     },
                     "required": ["type"],

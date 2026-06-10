@@ -11,7 +11,7 @@ from code_monet.canvas import render_path_to_svg_d
 from code_monet.db import User
 from code_monet.registry import workspace_registry
 from code_monet.rendering import RenderOptions, render_strokes_async, render_workspace_async
-from code_monet.types import DrawingStyleType, Path
+from code_monet.types import DrawingStyleType, Path, get_style_config
 from code_monet.workspace import WorkspaceState
 
 router = APIRouter()
@@ -89,13 +89,29 @@ async def get_canvas_svg(user: CurrentUser) -> Response:
     )
     ET.SubElement(svg, "rect", {"width": "100%", "height": "100%", "fill": "#FFFFFF"})
 
+    style_config = get_style_config(canvas.drawing_style)
     for path in canvas.strokes:
         d = render_path_to_svg_d(path)
         if d:
+            effective_style = path.get_effective_style(style_config)
+            fill = path.fill or "none"
+            fill_opacity = (
+                path.fill_opacity if path.fill_opacity is not None else effective_style.opacity
+            )
+            stroke = effective_style.color if effective_style.stroke_width > 0 else "none"
             ET.SubElement(
                 svg,
                 "path",
-                {"d": d, "stroke": "#000000", "stroke-width": "2", "fill": "none"},
+                {
+                    "d": d,
+                    "stroke": stroke,
+                    "stroke-width": str(effective_style.stroke_width),
+                    "fill": fill,
+                    "fill-opacity": str(fill_opacity),
+                    "stroke-opacity": str(effective_style.opacity),
+                    "stroke-linecap": effective_style.stroke_linecap,
+                    "stroke-linejoin": effective_style.stroke_linejoin,
+                },
             )
 
     return Response(content=ET.tostring(svg, encoding="unicode"), media_type="image/svg+xml")

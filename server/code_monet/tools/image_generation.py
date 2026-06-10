@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
 import time
+from io import BytesIO
 from pathlib import Path as FilePath
 from typing import Any
 
 from claude_agent_sdk import tool
 
-from .callbacks import get_workspace_dir_callback
+from .callbacks import get_workspace_dir_callback, image_content_from_png, set_active_reference
 
 logger = logging.getLogger(__name__)
 
 # Image generation timeout (seconds)
 IMAGE_GEN_TIMEOUT = 60
+REFERENCE_PREVIEW_MAX_SIZE = 512
 
 
 async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
@@ -61,8 +62,6 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        from io import BytesIO
-
         from google import genai
         from PIL import Image
 
@@ -144,18 +143,25 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
 
         filepath = references_dir / filename
         image.save(filepath, "PNG")
+        set_active_reference(str(filepath))
 
         logger.info(f"Saved generated image to {filepath}")
 
-        # Convert to base64 for response
-        image_b64 = base64.standard_b64encode(image_data).decode("utf-8")
+        preview = image.copy()
+        preview.thumbnail(
+            (REFERENCE_PREVIEW_MAX_SIZE, REFERENCE_PREVIEW_MAX_SIZE),
+            Image.Resampling.LANCZOS,
+        )
+        image_buffer = BytesIO()
+        preview.save(image_buffer, "PNG", optimize=True)
 
         # Build response
         content: list[dict[str, Any]] = [
             {
                 "type": "text",
-                "text": f"Generated image saved to references/{filename}. "
-                f"You can view it anytime using the Read tool.",
+                "text": f"Generated full-size image saved to references/{filename}. "
+                f"Returned a {REFERENCE_PREVIEW_MAX_SIZE}px preview; "
+                "view the saved file with Read if you need the full image.",
             }
         ]
 
@@ -164,16 +170,7 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
             content.append({"type": "text", "text": f"Model notes: {text_response}"})
 
         # Include the image in response
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": image_b64,
-                },
-            }
-        )
+        content.append(image_content_from_png(image_buffer.getvalue()))
 
         return {"content": content}
 

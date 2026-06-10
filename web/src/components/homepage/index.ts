@@ -3,6 +3,7 @@
  */
 
 export { LiveCanvas } from './LiveCanvas';
+export { HeroPainting } from './HeroPainting';
 export { ThoughtStream } from './ThoughtStream';
 export { GalleryItem } from './GalleryItem';
 export type { GalleryItemProps } from './GalleryItem';

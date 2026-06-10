@@ -30,6 +30,10 @@ _set_piece_title_callback: PieceTitleCallback | None = None
 _canvas_width: int = 800
 _canvas_height: int = 600
 
+# Latest `imagine` reference image for the active piece
+_active_reference_path: str | None = None
+_REFERENCE_PROMPT_MAX_SIZE = 512
+
 
 def set_draw_callback(callback: DrawCallback | None) -> None:
     """Set the callback function for drawing paths."""
@@ -105,22 +109,65 @@ def get_canvas_dimensions() -> tuple[int, int]:
     return _canvas_width, _canvas_height
 
 
+def set_active_reference(path: str | None) -> None:
+    """Record the latest reference image for the active piece (None to clear)."""
+    global _active_reference_path
+    _active_reference_path = path
+
+
+def get_active_reference_path() -> str | None:
+    """Path of the latest reference image, if one exists on disk."""
+    if _active_reference_path is None:
+        return None
+    from pathlib import Path as FilePath
+
+    if not FilePath(_active_reference_path).is_file():
+        return None
+    return _active_reference_path
+
+
+def get_active_reference_png() -> bytes | None:
+    """Latest reference image as a prompt-sized PNG, or None."""
+    path = get_active_reference_path()
+    if path is None:
+        return None
+    try:
+        import io
+
+        from PIL import Image
+
+        img = Image.open(path)
+        img.thumbnail((_REFERENCE_PROMPT_MAX_SIZE, _REFERENCE_PROMPT_MAX_SIZE))
+        buffer = io.BytesIO()
+        img.convert("RGB").save(buffer, "PNG", optimize=True)
+        return buffer.getvalue()
+    except Exception as e:
+        logger.warning(f"Failed to load reference image {path}: {e}")
+        return None
+
+
+def image_mime_type(data: bytes) -> str:
+    """Detect PNG vs JPEG from magic bytes (canvas images may be either)."""
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    return "image/png"
+
+
+def image_content_from_png(image_bytes: bytes) -> dict[str, Any]:
+    """Build MCP image content for a PNG or JPEG payload."""
+    return {
+        "type": "image",
+        "data": base64.standard_b64encode(image_bytes).decode("utf-8"),
+        "mimeType": image_mime_type(image_bytes),
+    }
+
+
 def inject_canvas_image(content: list[dict[str, Any]]) -> None:
     """Inject current canvas image into response content if callback is set."""
     if _get_canvas_callback is None:
         return
     try:
         png_bytes = _get_canvas_callback()
-        image_b64 = base64.standard_b64encode(png_bytes).decode("utf-8")
-        content.append(
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": image_b64,
-                },
-            }
-        )
+        content.append(image_content_from_png(png_bytes))
     except Exception as e:
         logger.warning(f"Failed to get canvas image: {e}")

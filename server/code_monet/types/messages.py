@@ -37,6 +37,8 @@ class NewCanvasMessage(BaseModel):
 
     type: Literal["new_canvas"] = "new_canvas"
     saved_id: str | None = None  # ID of saved canvas, None if was empty
+    canvas_width: int = 800
+    canvas_height: int = 600
 
 
 class GalleryUpdateMessage(BaseModel):
@@ -52,6 +54,8 @@ class LoadCanvasMessage(BaseModel):
     type: Literal["load_canvas"] = "load_canvas"
     strokes: list[Path]
     piece_number: int
+    canvas_width: int = 800
+    canvas_height: int = 600
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER
     style_config: DrawingStyleConfig | None = None
 
@@ -139,6 +143,8 @@ class ClientNewCanvasMessage(BaseModel):
     type: Literal["new_canvas"] = "new_canvas"
     direction: str | None = None  # Optional direction for the agent
     drawing_style: DrawingStyleType | None = None  # Optional style for the new canvas
+    canvas_width: int | None = None
+    canvas_height: int | None = None
 
 
 class ClientAnimationDoneMessage(BaseModel):

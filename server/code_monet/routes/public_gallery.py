@@ -24,7 +24,9 @@ _UUID_PATTERN = re.compile(
 )
 
 
-async def _load_public_piece(user_id: str, piece_id: str) -> tuple[list[Path], DrawingStyleType]:
+async def _load_public_piece(
+    user_id: str, piece_id: str
+) -> tuple[list[Path], DrawingStyleType, int, int]:
     """Load strokes and style for a public gallery piece with validation.
 
     Args:
@@ -32,7 +34,7 @@ async def _load_public_piece(user_id: str, piece_id: str) -> tuple[list[Path], D
         piece_id: Piece identifier (e.g., "piece_000001")
 
     Returns:
-        Tuple of (strokes list, drawing style)
+        Tuple of (strokes list, drawing style, width, height)
 
     Raises:
         HTTPException: For invalid input, unauthorized access, or missing pieces
@@ -70,7 +72,7 @@ async def _load_public_piece(user_id: str, piece_id: str) -> tuple[list[Path], D
             drawing_style = DrawingStyleType(style_str)
         except ValueError:
             drawing_style = DrawingStyleType.PLOTTER
-        return strokes, drawing_style
+        return strokes, drawing_style, data.get("width", 800), data.get("height", 600)
     except (json.JSONDecodeError, OSError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load piece: {e}") from e
 
@@ -113,6 +115,8 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
                     "user_id": str(user.id),
                     "piece_number": data.get("piece_number", 0),
                     "stroke_count": len(data.get("strokes", [])),
+                    "width": data.get("width", 800),
+                    "height": data.get("height", 600),
                     "created_at": data.get("created_at", ""),
                 }
                 if data.get("title"):
@@ -168,6 +172,8 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
             "id": piece_id,
             "strokes": data.get("strokes", []),
             "piece_number": data.get("piece_number", 0),
+            "canvas_width": data.get("width", 800),
+            "canvas_height": data.get("height", 600),
             "created_at": data.get("created_at", ""),
         }
     except (json.JSONDecodeError, OSError) as e:
@@ -178,12 +184,12 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
 async def get_public_piece_thumbnail(user_id: str, piece_id: str) -> Response:
     """Get thumbnail PNG for a gallery piece.
 
-    Renders gallery piece strokes to 800x600 PNG (same as authenticated thumbnails).
+    Renders gallery piece strokes to PNG using the saved canvas dimensions.
     Only returns image if user has opted into public gallery.
     """
-    strokes, drawing_style = await _load_public_piece(user_id, piece_id)
+    strokes, drawing_style, width, height = await _load_public_piece(user_id, piece_id)
 
-    options = options_for_thumbnail(drawing_style)
+    options = options_for_thumbnail(drawing_style, width, height)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 
@@ -201,9 +207,9 @@ async def get_public_piece_og_image(user_id: str, piece_id: str) -> Response:
     Renders gallery piece strokes to 1200x630 PNG (optimal OG image size).
     Only returns image if user has opted into public gallery.
     """
-    strokes, drawing_style = await _load_public_piece(user_id, piece_id)
+    strokes, drawing_style, width, height = await _load_public_piece(user_id, piece_id)
 
-    options = options_for_og_image(drawing_style)
+    options = options_for_og_image(drawing_style, width, height)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 

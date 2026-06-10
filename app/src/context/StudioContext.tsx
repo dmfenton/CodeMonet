@@ -45,6 +45,11 @@ export type StudioAction =
   | { type: 'home' }
   | { type: 'gallery' };
 
+interface CanvasDimensions {
+  canvas_width: number;
+  canvas_height: number;
+}
+
 export interface StudioContextValue {
   // Canvas state (read-only for consumers)
   canvasState: CanvasHookState;
@@ -87,7 +92,11 @@ export interface StudioContextValue {
 
     // Modal handlers
     handleNudgeSend: (text: string) => void;
-    handleNewCanvasStart: (direction?: string, style?: DrawingStyleType) => void;
+    handleNewCanvasStart: (
+      direction?: string,
+      style?: DrawingStyleType,
+      canvas?: CanvasDimensions
+    ) => void;
     handleGallerySelect: (pieceNumber: number) => void;
     handleGalleryToHome: () => void;
   };
@@ -438,12 +447,12 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   );
 
   const handleNewCanvasStart = useCallback(
-    (direction?: string, style?: DrawingStyleType) => {
+    (direction?: string, style?: DrawingStyleType, selectedCanvas?: CanvasDimensions) => {
       tracer.recordEvent('action.new_canvas', { hasDirection: !!direction, style });
       tracer.newSession();
       // Optimistic update: update UI immediately, then notify server
       canvas.setPaused(false);
-      send({ type: 'new_canvas', direction, drawing_style: style });
+      send({ type: 'new_canvas', direction, drawing_style: style, ...selectedCanvas });
       send({ type: 'resume' });
       enterStudio();
     },
@@ -462,6 +471,8 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
             type: 'LOAD_CANVAS',
             strokes: data.strokes,
             pieceNumber: data.piece_number,
+            canvasWidth: data.canvas_width,
+            canvasHeight: data.canvas_height,
             drawingStyle: data.drawing_style,
             styleConfig: data.style_config,
           });

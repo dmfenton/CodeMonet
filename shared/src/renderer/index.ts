@@ -29,3 +29,17 @@ export {
   samplePathPoints,
   getBristleOutlines,
 } from './freehand';
+
+// Stamp-based painterly stroke model (port of server painting.py)
+export type { Stamp, StampDynamics, StampStrokeStyle, SpriteAlpha, Rgb, Rng } from './stamping';
+export {
+  SPRITE_VARIANTS,
+  SPRITE_BASE_WIDTH,
+  STAMP_DYNAMICS,
+  computeStrokeStamps,
+  generateSpriteAlpha,
+  getStampDynamics,
+  hexToRgb,
+  mulberry32,
+  strokeSeed,
+} from './stamping';

@@ -8,7 +8,6 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle, Path as SvgPath } from 'react-native-svg';
 
 import {
-  CANVAS_ASPECT_RATIO,
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
   type DrawingStyleConfig,
@@ -26,6 +25,8 @@ interface ContinueCardProps {
   recentCanvas: SavedCanvas | null;
   hasCurrentWork: boolean;
   strokes: Path[];
+  canvasWidth?: number;
+  canvasHeight?: number;
   styleConfig: DrawingStyleConfig;
   onContinue: () => void;
   disabled?: boolean;
@@ -38,16 +39,20 @@ interface ContinueCardProps {
  */
 const WipPreview = React.memo(function WipPreview({
   strokes,
+  canvasWidth,
+  canvasHeight,
   styleConfig,
 }: {
   strokes: Path[];
+  canvasWidth: number;
+  canvasHeight: number;
   styleConfig: DrawingStyleConfig;
 }): React.JSX.Element {
   return (
     <Svg
       width="100%"
       height="100%"
-      viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`}
+      viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
       preserveAspectRatio="xMidYMid meet"
     >
       {strokes.map((stroke, index) => {
@@ -71,16 +76,22 @@ const WipPreview = React.memo(function WipPreview({
         }
 
         // Render strokes as paths
+        const fill = stroke.fill ?? 'none';
+        const fillOpacity = stroke.fill
+          ? (stroke.fill_opacity ?? effectiveStyle.opacity)
+          : undefined;
+        const strokeColor = effectiveStyle.stroke_width > 0 ? effectiveStyle.color : 'none';
         return (
           <SvgPath
             key={`wip-stroke-${index}`}
             d={pathToSvgD(stroke, isPaintMode)}
-            stroke={effectiveStyle.color}
+            stroke={strokeColor}
             strokeWidth={effectiveStyle.stroke_width}
-            fill="none"
+            fill={fill}
+            fillOpacity={fillOpacity}
             strokeLinecap={effectiveStyle.stroke_linecap}
             strokeLinejoin={effectiveStyle.stroke_linejoin}
-            opacity={effectiveStyle.opacity}
+            strokeOpacity={effectiveStyle.opacity}
           />
         );
       })}
@@ -93,6 +104,8 @@ export function ContinueCard({
   recentCanvas,
   hasCurrentWork,
   strokes,
+  canvasWidth = CANVAS_WIDTH,
+  canvasHeight = CANVAS_HEIGHT,
   styleConfig,
   onContinue,
   disabled = false,
@@ -100,6 +113,8 @@ export function ContinueCard({
   const { colors } = useTheme();
   const [nativeLoading, setNativeLoading] = useState(true);
   const [imageError, setImageError] = useState(false);
+  const previewWidth = hasCurrentWork ? canvasWidth : recentCanvas?.width ?? CANVAS_WIDTH;
+  const previewHeight = hasCurrentWork ? canvasHeight : recentCanvas?.height ?? CANVAS_HEIGHT;
 
   // Build thumbnail path for hook
   // Only show gallery thumbnail when there's no current work - otherwise the
@@ -131,10 +146,20 @@ export function ContinueCard({
 
   const content = (
     <>
-      <View style={[styles.preview, { backgroundColor: colors.canvasBackground }]}>
+      <View
+        style={[
+          styles.preview,
+          { aspectRatio: previewWidth / previewHeight, backgroundColor: colors.canvasBackground },
+        ]}
+      >
         {hasCurrentWork && strokes.length > 0 ? (
           // Show live WIP preview when there are strokes
-          <WipPreview strokes={strokes} styleConfig={styleConfig} />
+          <WipPreview
+            strokes={strokes}
+            canvasWidth={previewWidth}
+            canvasHeight={previewHeight}
+            styleConfig={styleConfig}
+          />
         ) : thumbnailSource && !imageError ? (
           // Show gallery thumbnail for completed work
           <>
@@ -211,7 +236,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   preview: {
-    aspectRatio: CANVAS_ASPECT_RATIO,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -12,10 +12,12 @@ export const screenToCanvas = (
   screenX: number,
   screenY: number,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
+  canvasWidth: number = CANVAS_WIDTH,
+  canvasHeight: number = CANVAS_HEIGHT
 ): Point => ({
-  x: screenX * (CANVAS_WIDTH / containerWidth),
-  y: screenY * (CANVAS_HEIGHT / containerHeight),
+  x: screenX * (canvasWidth / containerWidth),
+  y: screenY * (canvasHeight / containerHeight),
 });
 
 /**
@@ -25,10 +27,12 @@ export const canvasToScreen = (
   canvasX: number,
   canvasY: number,
   containerWidth: number,
-  containerHeight: number
+  containerHeight: number,
+  canvasWidth: number = CANVAS_WIDTH,
+  canvasHeight: number = CANVAS_HEIGHT
 ): Point => ({
-  x: canvasX * (containerWidth / CANVAS_WIDTH),
-  y: canvasY * (containerHeight / CANVAS_HEIGHT),
+  x: canvasX * (containerWidth / canvasWidth),
+  y: canvasY * (containerHeight / canvasHeight),
 });
 
 /**

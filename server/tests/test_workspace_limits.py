@@ -4,8 +4,9 @@ from pathlib import Path as FilePath
 
 import pytest
 
-from code_monet.types import Path, PathType, Point
+from code_monet.types import Path, PathType, PendingStrokeDict, Point
 from code_monet.workspace import WorkspaceState
+from code_monet.workspace.strokes import enforce_pending_limit
 
 
 @pytest.fixture
@@ -22,6 +23,36 @@ async def workspace(tmp_path: FilePath) -> WorkspaceState:
 
 class TestPendingStrokesLimit:
     """Test pending strokes queue limits."""
+
+    def test_enforce_pending_limit_keeps_queue_under_limit(self) -> None:
+        """Limit enforcement drops only the oldest overflow strokes."""
+        pending: list[PendingStrokeDict] = [
+            {"batch_id": i, "path": {}, "points": []} for i in range(5)
+        ]
+
+        result = enforce_pending_limit(
+            pending_strokes=pending,
+            new_count=3,
+            max_pending=6,
+            user_id="1",
+        )
+
+        assert [stroke["batch_id"] for stroke in result] == [2, 3, 4]
+
+    def test_enforce_pending_limit_allows_dense_single_batch(self) -> None:
+        """A large single batch can be queued when there is enough room."""
+        pending: list[PendingStrokeDict] = [
+            {"batch_id": i, "path": {}, "points": []} for i in range(3)
+        ]
+
+        result = enforce_pending_limit(
+            pending_strokes=pending,
+            new_count=4,
+            max_pending=10,
+            user_id="1",
+        )
+
+        assert result == pending
 
     @pytest.mark.asyncio
     async def test_queue_strokes_under_limit(self, workspace: WorkspaceState) -> None:

@@ -24,8 +24,28 @@ interface NewCanvasModalProps {
   visible: boolean;
   currentStyle: DrawingStyleType;
   onClose: () => void;
-  onStart: (direction?: string, style?: DrawingStyleType) => void;
+  onStart: (direction?: string, style?: DrawingStyleType, canvas?: CanvasDimensions) => void;
 }
+
+interface CanvasDimensions {
+  canvas_width: number;
+  canvas_height: number;
+}
+
+interface CanvasProfile {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+}
+
+const CANVAS_PROFILES: CanvasProfile[] = [
+  { id: 'standard', label: 'Standard', width: 800, height: 600 },
+  { id: 'masthead', label: 'Masthead', width: 1200, height: 420 },
+  { id: 'square', label: 'Square', width: 800, height: 800 },
+  { id: 'portrait', label: 'Portrait', width: 600, height: 900 },
+  { id: 'wide', label: 'Wide', width: 1200, height: 600 },
+];
 
 const DIRECTION_SUGGESTIONS = [
   'A serene landscape',
@@ -47,6 +67,13 @@ export function NewCanvasModal({
   const { colors, shadows } = useTheme();
   const [text, setText] = useState('');
   const [selectedStyle, setSelectedStyle] = useState<DrawingStyleType>(currentStyle);
+  const [selectedProfileId, setSelectedProfileId] = useState(CANVAS_PROFILES[0]!.id);
+  const selectedProfile =
+    CANVAS_PROFILES.find((profile) => profile.id === selectedProfileId) || CANVAS_PROFILES[0]!;
+  const selectedCanvas = {
+    canvas_width: selectedProfile.width,
+    canvas_height: selectedProfile.height,
+  };
 
   // Reset style when modal opens with current style
   React.useEffect(() => {
@@ -57,13 +84,13 @@ export function NewCanvasModal({
 
   const handleStart = () => {
     const direction = text.trim() || undefined;
-    onStart(direction, selectedStyle);
+    onStart(direction, selectedStyle, selectedCanvas);
     setText('');
     onClose();
   };
 
   const handleSkip = () => {
-    onStart(undefined, selectedStyle);
+    onStart(undefined, selectedStyle, selectedCanvas);
     setText('');
     onClose();
   };
@@ -135,6 +162,39 @@ export function NewCanvasModal({
               label="Style"
               testIDPrefix="new-canvas-style"
             />
+          </View>
+
+          <View style={styles.profileContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.profileContent}
+            >
+              {CANVAS_PROFILES.map((profile) => {
+                const selected = profile.id === selectedProfileId;
+                return (
+                  <Pressable
+                    key={profile.id}
+                    style={[
+                      styles.profileChip,
+                      {
+                        backgroundColor: selected ? colors.primary : colors.surfaceElevated,
+                      },
+                    ]}
+                    onPress={() => setSelectedProfileId(profile.id)}
+                  >
+                    <Text
+                      style={[
+                        styles.profileText,
+                        { color: selected ? colors.textOnPrimary : colors.textSecondary },
+                      ]}
+                    >
+                      {profile.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
 
           {/* Input */}
@@ -320,5 +380,22 @@ const styles = StyleSheet.create({
   stylePickerContainer: {
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.lg,
+  },
+  profileContainer: {
+    marginBottom: spacing.lg,
+  },
+  profileContent: {
+    paddingHorizontal: spacing.xl,
+    gap: spacing.sm,
+  },
+  profileChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: borderRadius.full,
+    marginRight: spacing.sm,
+  },
+  profileText: {
+    ...typography.caption,
+    fontWeight: '600',
   },
 });

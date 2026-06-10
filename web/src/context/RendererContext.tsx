@@ -85,10 +85,15 @@ export function RendererProvider({
  */
 export function useRendererConfig(): RendererContextValue {
   const context = useContext(RendererContext);
-  if (!context) {
-    throw new Error('useRendererConfig must be used within a RendererProvider');
-  }
-  return context;
+  return useMemo<RendererContextValue>(
+    () =>
+      context ?? {
+        config: getInitialConfig(),
+        setRenderer: () => {},
+        setConfig: () => {},
+      },
+    [context]
+  );
 }
 
 /**

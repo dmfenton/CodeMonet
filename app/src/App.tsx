@@ -121,6 +121,8 @@ function MainApp(): React.JSX.Element {
               gallery={canvasState.gallery}
               drawingStyle={canvasState.drawingStyle}
               strokes={canvasState.strokes}
+              canvasWidth={canvasState.canvasWidth}
+              canvasHeight={canvasState.canvasHeight}
               styleConfig={canvasState.styleConfig}
               onStyleChange={actions.handleStyleChange}
               onContinue={actions.handleContinue}

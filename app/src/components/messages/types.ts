@@ -30,6 +30,7 @@ export const TOOL_ICONS: Record<
   draw_paths: { name: 'brush', activeIcon: 'brush-outline' },
   generate_svg: { name: 'code-slash', activeIcon: 'code-working' },
   view_canvas: { name: 'eye', activeIcon: 'eye-outline' },
+  critique_canvas: { name: 'search', activeIcon: 'search-outline' },
   mark_piece_done: { name: 'checkmark-done', activeIcon: 'checkmark-done-outline' },
   imagine: { name: 'sparkles', activeIcon: 'sparkles-outline' },
   sign_canvas: { name: 'pencil', activeIcon: 'pencil-outline' },
@@ -46,6 +47,8 @@ export function getToolBorderColor(toolName: string, colors: ColorScheme): strin
       return '#8B5CF6'; // purple for code
     case 'view_canvas':
       return colors.textMuted;
+    case 'critique_canvas':
+      return '#0EA5E9'; // sky for visual inspection
     case 'mark_piece_done':
       return colors.success;
     case 'imagine':

@@ -121,10 +121,10 @@ describe('getEffectiveAgentStrokeStyle', () => {
       expect(style.color).toBe(PAINT_STYLE.agent_stroke.color);
     });
 
-    it('does not use 0 as stroke_width override', () => {
+    it('allows 0 as stroke_width override for fill-only shapes', () => {
       const style = getEffectiveAgentStrokeStyle(PAINT_STYLE, { stroke_width: 0 });
 
-      expect(style.stroke_width).toBe(PAINT_STYLE.agent_stroke.stroke_width);
+      expect(style.stroke_width).toBe(0);
     });
   });
 
@@ -215,6 +215,13 @@ describe('getEffectiveStyle', () => {
       const style = getEffectiveStyle(path, PAINT_STYLE);
 
       expect(style.stroke_width).toBe(20);
+    });
+
+    it('allows path-level stroke_width of 0 for fill-only shapes', () => {
+      const path = makePath({ author: 'agent', stroke_width: 0 });
+      const style = getEffectiveStyle(path, PAINT_STYLE);
+
+      expect(style.stroke_width).toBe(0);
     });
 
     it('uses path-level opacity when supports_opacity is true', () => {
