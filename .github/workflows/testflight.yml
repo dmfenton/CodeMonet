@@ -136,6 +136,15 @@ jobs:
           SENTRY_DISABLE_AUTO_UPLOAD: 'true'
         run: npx expo prebuild --platform ios --clean
 
+      - name: Remove prebuild-generated Gemfile.lock
+        working-directory: app
+        # Prebuild runs bundle install with the runner's default Bundler 4,
+        # which writes an empty CHECKSUMS entry for default gems (rake).
+        # setup-ruby then reinstalls in frozen mode and rejects it (exit 16).
+        # The lockfile is gitignored and regenerated every run, so drop it
+        # and let setup-ruby resolve fresh.
+        run: rm -f Gemfile.lock
+
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
