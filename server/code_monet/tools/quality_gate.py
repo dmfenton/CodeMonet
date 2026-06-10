@@ -21,66 +21,6 @@ class QualityGateState:
 
 
 _state = QualityGateState()
-_BREAKING_WAVE_HELPER = "breaking_wave_masses"
-_HOOKED_COUNTERFORM_HELPER = "hooked_counterform_masses"
-_SWEEPING_BODY_WALL_HELPER = "sweeping_body_wall"
-
-
-def _requires_hooked_counterform_repair(critique: str | None) -> bool:
-    """Return whether the last critique requires the hooked counterform helper."""
-    critique_lower = (critique or "").lower()
-    if not critique_lower:
-        return False
-    collapsed_shape = any(
-        word in critique_lower for word in ("dome", "cap", "mound", "ramp", "slope", "hill", "arch")
-    )
-    needs_hollow_hook = any(
-        word in critique_lower
-        for word in ("hook", "curl", "lip", "tunnel", "opening", "counter-shape")
-    )
-    return collapsed_shape and needs_hollow_hook
-
-
-def _requires_sweeping_body_wall_repair(critique: str | None) -> bool:
-    """Return whether the critique requires a curved body-wall primitive."""
-    critique_lower = (critique or "").lower()
-    if not critique_lower:
-        return False
-    wall_failure = any(
-        word in critique_lower
-        for word in (
-            "body wall",
-            "wave body",
-            "silhouette",
-            "dome",
-            "cap",
-            "mound",
-            "ramp",
-            "blocky",
-            "rectangular",
-            "straight",
-            "construction",
-        )
-    )
-    needs_hooked_subject = any(
-        word in critique_lower for word in ("wave", "hook", "curl", "lip", "opening", "tunnel")
-    )
-    return wall_failure and needs_hooked_subject
-
-
-def _requires_breaking_wave_repair(critique: str | None) -> bool:
-    """Return whether a failed critique needs the breaking-wave architecture helper."""
-    critique_lower = (critique or "").lower()
-    if not critique_lower or "wave" not in critique_lower:
-        return False
-    collapsed_shape = any(
-        word in critique_lower for word in ("dome", "cap", "mound", "ramp", "slope", "hill", "arch")
-    )
-    needs_wave_hook = any(
-        word in critique_lower
-        for word in ("hook", "curl", "lip", "tunnel", "opening", "counter-shape")
-    )
-    return collapsed_shape and needs_wave_hook
 
 
 def reset_quality_gate() -> None:
@@ -162,76 +102,12 @@ def consume_mark_piece_done_accepted() -> bool:
 
 def get_quality_gate_snapshot() -> dict[str, object]:
     """Return observable finish-gate state."""
-    required_helper = None
-    if _state.blocked_by_failure and _requires_breaking_wave_repair(_state.last_critique):
-        required_helper = _BREAKING_WAVE_HELPER
-    elif _state.blocked_by_failure and _requires_hooked_counterform_repair(_state.last_critique):
-        required_helper = _HOOKED_COUNTERFORM_HELPER
     return {
         "last_verdict": _state.last_verdict,
         "blocked_by_failure": _state.blocked_by_failure,
         "drew_after_failure": _state.drew_after_failure,
         "last_critique": _state.last_critique,
-        "required_helper": required_helper,
-        "required_helpers": required_generate_svg_helpers(),
     }
-
-
-def required_generate_svg_helpers() -> list[str]:
-    """Return helper calls required by the active failed critique."""
-    if not _state.blocked_by_failure:
-        return []
-    if _requires_breaking_wave_repair(_state.last_critique):
-        return [_BREAKING_WAVE_HELPER]
-    return [
-        helper
-        for helper in (
-            _SWEEPING_BODY_WALL_HELPER
-            if _requires_sweeping_body_wall_repair(_state.last_critique)
-            else None,
-            _HOOKED_COUNTERFORM_HELPER
-            if _requires_hooked_counterform_repair(_state.last_critique)
-            else None,
-        )
-        if helper is not None
-    ]
-
-
-def generate_svg_quality_gate_block_message(code: str) -> str | None:
-    """Return a blocking message when generate_svg violates required repair helpers."""
-    required_helpers = required_generate_svg_helpers()
-    if not required_helpers:
-        return None
-
-    helper_calls = {
-        helper: re.search(rf"\b{re.escape(helper)}\s*\(", code) for helper in required_helpers
-    }
-    missing_helpers = [helper for helper, match in helper_calls.items() if match is None]
-    if missing_helpers:
-        helper_list = ", ".join(f"`{helper}(...)`" for helper in missing_helpers)
-        required_list = ", ".join(f"`{helper}(...)`" for helper in required_helpers)
-        return (
-            "Quality gate blocked this generate_svg call before drawing. "
-            f"Missing required structural helper call(s): {helper_list}. "
-            f"The last critique requires the next generate_svg code to include: {required_list}. "
-            "Rewrite the code and call generate_svg again; the terminal helper preview should show "
-            "the required helper names."
-        )
-
-    sweeping_match = helper_calls.get(_SWEEPING_BODY_WALL_HELPER)
-    hooked_match = helper_calls.get(_HOOKED_COUNTERFORM_HELPER)
-    if (
-        sweeping_match is not None
-        and hooked_match is not None
-        and sweeping_match.start() > hooked_match.start()
-    ):
-        return (
-            "Quality gate blocked this generate_svg call before drawing. "
-            "`sweeping_body_wall(...)` must appear before `hooked_counterform_masses(...)` "
-            "so the broad wall is laid down before the hollow lip/opening is cut. "
-            "Rewrite the code in that order and call generate_svg again."
-        )
-    return None
 
 
 def is_finish_gate_blocked() -> bool:
@@ -252,63 +128,21 @@ def quality_gate_prompt_context() -> str | None:
     if critique:
         lines.append("Last critique:")
         lines.append(critique[:1600])
-        if _requires_breaking_wave_repair(critique):
-            lines.append(
-                "Breaking-wave repair requirement: the next generate_svg code must include "
-                "a direct call to `breaking_wave_masses(...)`. The terminal preview should show "
-                "`helpers=breaking_wave_masses`. Customize and texture that architecture; "
-                "do not replace it with another smooth hand-authored arch, dome, cap, or mound."
-            )
-        elif _requires_hooked_counterform_repair(critique):
-            if _requires_sweeping_body_wall_repair(critique):
-                lines.append(
-                    "Body-wall repair requirement: the next generate_svg code must include "
-                    "a direct call to `sweeping_body_wall(...)` before "
-                    "`hooked_counterform_masses(...)`. The terminal preview should show "
-                    "`helpers=hooked_counterform_masses,sweeping_body_wall` or both helper names."
-                )
-            lines.append(
-                "Structural repair requirement: the last critique says the hooked/hollow form "
-                "collapsed into a dome/cap/mound/ramp. The next generate_svg code must include "
-                "a direct call to `hooked_counterform_masses(...)` before any freehand replacement "
-                "contour for the same motif. The terminal preview should show "
-                "`helpers=hooked_counterform_masses`. Customize and add marks after that helper "
-                "mass is visible; do not skip it by hand-authoring another smooth sx/sy outline."
-            )
     lines.append(
-        "Binding next step: make a structural revision that directly fixes the critique, "
-        "then call view_canvas and critique_canvas again. Do not sign, name, or mark done "
-        "until critique_canvas returns VERDICT: PASS."
+        "Binding next step: make a structural revision that directly fixes the critique "
+        "(change shapes and values, not just surface texture), then call view_canvas and "
+        "critique_canvas again. Do not sign, name, or mark done until critique_canvas "
+        "returns VERDICT: PASS."
     )
     return "\n".join(lines)
 
 
-def critique_gate_message(verdict: Verdict, critique: str | None = None) -> str:
+def critique_gate_message(verdict: Verdict) -> str:
     """Message appended to critique output so the agent sees the binding state."""
     if verdict == "PASS":
         return "FINISH GATE: OPEN. You may sign, name, and mark done when satisfied."
-    message = (
+    return (
         "FINISH GATE: BLOCKED. Do not sign, name, or mark done. "
-        "Draw a substantive revision, view the canvas, then call critique_canvas again."
+        "Make a structural revision that addresses the critique, view the canvas, "
+        "then call critique_canvas again."
     )
-    if _requires_breaking_wave_repair(critique or _state.last_critique):
-        message += (
-            "\nSTRUCTURAL REPAIR REQUIRED: the next generate_svg code must include "
-            "`breaking_wave_masses(...)`; the terminal preview should show "
-            "`helpers=breaking_wave_masses`. Use it as the wave architecture, then customize "
-            "with lower bands, surfer, foam, contours, and texture. Do not hand-author another "
-            "smooth dome/cap/body over the helper's pale opening."
-        )
-    elif _requires_hooked_counterform_repair(critique or _state.last_critique):
-        helper_names = "`hooked_counterform_masses(...)`"
-        helper_preview = "`helpers=hooked_counterform_masses`"
-        if _requires_sweeping_body_wall_repair(critique or _state.last_critique):
-            helper_names = "`sweeping_body_wall(...)` before `hooked_counterform_masses(...)`"
-            helper_preview = "`helpers=hooked_counterform_masses,sweeping_body_wall`"
-        message += (
-            "\nSTRUCTURAL REPAIR REQUIRED: the next generate_svg code must include "
-            f"{helper_names}; the terminal preview should show {helper_preview}. "
-            "Do not hand-author broad rectangular or smooth dome body walls. Do not place a later filled dome/cap/body "
-            "over the helper's pale opening."
-        )
-    return message

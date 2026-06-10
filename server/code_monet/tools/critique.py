@@ -110,7 +110,7 @@ async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
         critique = "VERDICT: FAIL\nFINDINGS:\n- Critique model returned no text.\nREQUIRED_REVISIONS:\n- Call view_canvas and revise manually."
 
     verdict = record_critique_result(critique)
-    critique = f"{critique}\n\n{critique_gate_message(verdict, critique)}"
+    critique = f"{critique}\n\n{critique_gate_message(verdict)}"
 
     return {"content": [{"type": "text", "text": critique}]}
 

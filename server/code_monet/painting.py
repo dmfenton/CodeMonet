@@ -16,6 +16,7 @@ from __future__ import annotations
 import colorsys
 import math
 import random
+import zlib
 from dataclasses import dataclass
 
 import numpy as np
@@ -41,7 +42,7 @@ class BrushDynamics:
     sat_jitter: float = 0.10
     val_jitter: float = 0.08
     taper: float = 0.6  # end taper strength
-    width_wobble: float = 0.22  # low-frequency width variation
+    width_wobble: float = 0.15  # low-frequency width variation
     blur: float = 0.0  # post blur radius on the stroke layer
     impasto: float = 0.5  # height-map contribution
     wet_edge: float = 0.0  # watercolor-style edge darkening (0-1)
@@ -251,7 +252,8 @@ def _base_sprite(brush: str, variant: int) -> np.ndarray:
         return cached
 
     dyn = get_dynamics(brush)
-    rng = np.random.default_rng(hash((brush, variant)) & 0xFFFFFFFF)
+    # zlib.crc32 is stable across processes (hash() is salted per run).
+    rng = np.random.default_rng(zlib.crc32(f"{brush}:{variant}".encode()))
     width = _SPRITE_BASE_W
     length = max(8, int(width * dyn.aspect))
     ys = (np.linspace(-1, 1, width))[:, None]

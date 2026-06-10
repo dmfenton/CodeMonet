@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any
 
 from claude_agent_sdk import tool
@@ -17,47 +16,12 @@ from .callbacks import (
 from .python_sandbox import run_python_code
 from .quality_gate import (
     finish_block_message,
-    generate_svg_quality_gate_block_message,
     note_drawing,
-    required_generate_svg_helpers,
 )
 
 logger = logging.getLogger(__name__)
 
 AUTO_CANVAS_IMAGE_PATH_LIMIT = 160
-
-
-def _layering_audit_message(code: str) -> str | None:
-    """Warn when a later broad mass is likely to cover a hooked helper opening."""
-    helper_indexes = [
-        index
-        for index in (
-            code.find("hooked_counterform_masses"),
-            code.find("breaking_wave_masses"),
-        )
-        if index >= 0
-    ]
-    if not helper_indexes:
-        return None
-    helper_index = min(helper_indexes)
-    later_code = code[helper_index:]
-    risky_assignment = re.search(
-        r"\b(?:wave_body|body_wall|wall_mass|lip_ribbon|opening_enhance|dome|cap|oval)\s*=",
-        later_code,
-        flags=re.IGNORECASE,
-    )
-    risky_filled_call = re.search(
-        r"filled_svg_path\(\s*(?:wave_body|body|wall|lip|opening|opening_enhance)",
-        later_code,
-        flags=re.IGNORECASE,
-    )
-    if risky_assignment is None and risky_filled_call is None:
-        return None
-    return (
-        "Layering audit: a broad body/wall/opening mass appears after a structural helper. "
-        "If the hollow/opening reads weak, move broad body/lip/opening masses before the helper or "
-        "call the structural helper again last to re-cut the opening."
-    )
 
 
 async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
@@ -77,29 +41,6 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
     if not code or not isinstance(code, str):
         return {
             "content": [{"type": "text", "text": "Error: code must be a non-empty string"}],
-            "is_error": True,
-        }
-
-    quality_gate_block_message = generate_svg_quality_gate_block_message(code)
-    if quality_gate_block_message is not None:
-        return {
-            "content": [{"type": "text", "text": quality_gate_block_message}],
-            "is_error": True,
-        }
-    layering_audit = _layering_audit_message(code)
-    if required_generate_svg_helpers() and layering_audit is not None:
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "Quality gate blocked this generate_svg call before drawing. "
-                        f"{layering_audit} During structural repair, keep broad body/lip "
-                        "filled masses before hooked_counterform_masses or re-call "
-                        "hooked_counterform_masses after them."
-                    ),
-                }
-            ],
             "is_error": True,
         }
 
@@ -143,9 +84,6 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
             "Code executed but no paths were generated. "
             "Make sure to call output_paths() or output_svg_paths() at the end."
         )
-    if layering_audit is not None:
-        response_parts.append(layering_audit)
-
     # Call the draw callback for animation (strokes already in state)
     logger.info(
         f"generate_svg: triggering animation, callback={'set' if _draw_callback else 'None'}"
@@ -209,9 +147,6 @@ The code has access to:
   - contour_stack(points, offsets=None, colors=None, brushes=None, count_per_offset=16, width_range=None, length_range=None, opacity_range=None, jitter=5) -> repeated offset contours and short marks around any flowing edge, fold, current, ridge, fabric, smoke, or body plane
   - edge_fingers(points, count=18, side=-1, colors=None, brushes=None, length_range=None, width_range=None, opacity_range=None) -> tapered organic projections from an edge such as foam, flame, leaves, hair, spray, torn cloth, or bright accents
   - curved_ribbon_mass(center_points, widths, fill, fill_opacity=0.92, stroke=None, stroke_width=0, contour_color=None, contour_count=0) -> filled variable-width ribbon around a centerline for separate folded lips, overhangs, loops, smoke curls, fabric edges, limbs, branches, or bold graphic strokes
-  - hooked_counterform_masses(x=None, y=None, width=None, height=None, body_fill=None, lip_fill=None, opening_fill=None, underside_fill=None, fill_opacity=0.94, opening_opacity=0.98, contour_color=None, foam=False, foam_colors=None, **aliases) -> separate body, overhanging lip, underside, and opening masses for any hooked hollow form such as a breaking curl, smoke loop, draped cloth fold, overhanging cliff, petal, shell, or cave mouth. Use either top-left x/y or center aliases cx/cy. Use width/height or half-size aliases rx/ry. Set curl="left" to mirror the hook. Color aliases are accepted: body_color/fill, lip_color/hook_fill, opening_color/tunnel_fill/tunnel_color/cutout_fill, underside_color/shadow_fill/shadow_color. Opacity aliases are accepted: body_opacity, lip_opacity, underside_opacity.
-  - breaking_wave_masses(x=None, y=None, width=None, height=None, body_fill=None, lip_fill=None, opening_fill=None, underside_fill=None, fill_opacity=0.94, opening_opacity=0.98, curl="right", foam=True, foam_colors=None, contour_color=None, **aliases) -> reusable breaking-curl wave architecture with steep body wall, forward/down lip, dark underside, large pale tunnel opening, and chunky foam claws. Use for Japanese woodblock breaking-wave references before extra texture, surfer, or foreground bands. Accepts center aliases cx/cy and half-size aliases rx/ry.
-  - sweeping_body_wall(x=None, y=None, width=None, height=None, fill=None, fill_opacity=0.9, curl="right", stroke=None, stroke_width=0, **aliases) -> broad curved body wall or swell with no rectangular closure face; use before hooked_counterform_masses for any rising wave wall, cliff face, fold, petal, or cave body. Accepts cx/cy and rx/ry aliases.
   - crescent_mass(cx, cy, rx, ry, fill, cutout_fill, curl="right", fill_opacity=0.92, cutout_opacity=0.96, stroke=None, stroke_width=0, cutout_stroke=None, cutout_stroke_width=0) -> generic curved mass with an explicit negative-space bite for curls, moons, arches, smoke loops, cloud scrolls, or hollow forms
   - small_figure_silhouette(cx, cy, scale=1, pose="crouch", color="#0b263e", ground=False, ground_color="#734534") -> readable human-scale anchor with head, torso, limbs, and optional ground/contact mark
   - small_figure_with_prop(cx, cy, scale=1, pose="crouch", color="#0b263e", prop_color="#39405a", prop_length=78, prop_width=10, prop_angle=0, ground=False, ground_color="#734534") -> small readable figure attached to a broad prop such as a board, vehicle, instrument, tool, handle, or beam
@@ -285,27 +220,18 @@ paths.extend(background_wash(
 output_paths(paths)
 ```
 
-Example - hooked hollow structure with a clear counter-shape:
+Example - layered value masses with a clear negative space:
 ```python
 paths = []
 ground = "#eadfc7"
 body = "#2f7897"
-lip = "#123a57"
 dark = "#0d2f4c"
-opening = "#eef4ef"
+light = "#eef4ef"
 paths.append(rect_shape(0, 0, canvas_width, canvas_height, ground))
-paths.extend(breaking_wave_masses(
-    x=canvas_width * 0.12,
-    y=canvas_height * 0.04,
-    width=canvas_width * 0.72,
-    height=canvas_height * 0.84,
-    body_fill=body,
-    lip_fill=lip,
-    opening_fill=opening,
-    underside_fill=dark,
-    contour_color=opening,
-    foam=True,
-))
+mass = f"M 0 {canvas_height*0.55} C {canvas_width*0.3} {canvas_height*0.38} {canvas_width*0.7} {canvas_height*0.46} {canvas_width} {canvas_height*0.4} L {canvas_width} {canvas_height} L 0 {canvas_height} Z"
+paths.append(filled_svg_path(mass, body, fill_opacity=0.9))
+cut = f"M {canvas_width*0.55} {canvas_height*0.46} C {canvas_width*0.7} {canvas_height*0.4} {canvas_width*0.85} {canvas_height*0.44} {canvas_width*0.95} {canvas_height*0.52} C {canvas_width*0.8} {canvas_height*0.56} {canvas_width*0.62} {canvas_height*0.54} {canvas_width*0.55} {canvas_height*0.46} Z"
+paths.append(filled_svg_path(cut, light, fill_opacity=0.85))
 paths.extend(tapered_band(
     [(0, canvas_height*0.82), (canvas_width*0.35, canvas_height*0.86), (canvas_width, canvas_height*0.82)],
     [26, 46, 34],

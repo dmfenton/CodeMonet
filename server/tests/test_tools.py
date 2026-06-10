@@ -382,7 +382,7 @@ class TestHandleCritiqueCanvas:
         record_critique_result(
             "VERDICT: FAIL\n"
             "FINDINGS:\n"
-            "- Wave reads as a smooth ramp instead of a hooked form with a tunnel.\n"
+            "- Subject reads as a smooth ramp instead of a hooked form with a tunnel.\n"
             "REQUIRED_REVISIONS:\n"
             "- Rebuild body, lip, and opening."
         )
@@ -392,99 +392,15 @@ class TestHandleCritiqueCanvas:
         assert context is not None
         assert "Finish gate is blocked" in context
         assert "smooth ramp" in context
-        assert "breaking_wave_masses" in context
-        assert "helpers=breaking_wave_masses" in context
-        assert "do not replace it" in context
+        assert "structural revision" in context
         assert "Do not sign, name, or mark done" in context
-        assert get_quality_gate_snapshot()["required_helper"] == "breaking_wave_masses"
+        assert get_quality_gate_snapshot()["blocked_by_failure"] is True
 
-    def test_failed_critique_message_includes_same_turn_repair_requirement(self) -> None:
-        critique = (
-            "VERDICT: FAIL\n"
-            "FINDINGS:\n"
-            "- Wave body reads as a smooth mound instead of a curl with a tunnel."
-        )
-
-        message = critique_gate_message("FAIL", critique)
+    def test_failed_critique_message_is_binding(self) -> None:
+        message = critique_gate_message("FAIL")
 
         assert "FINISH GATE: BLOCKED" in message
-        assert "STRUCTURAL REPAIR REQUIRED" in message
-        assert "breaking_wave_masses" in message
-        assert "helpers=breaking_wave_masses" in message
-
-    @pytest.mark.asyncio
-    async def test_generate_svg_blocks_missing_required_repair_helper(self) -> None:
-        record_critique_result(
-            "VERDICT: FAIL\n"
-            "FINDINGS:\n"
-            "- The wave body reads as a smooth ramp rather than a hooked curl with an opening."
-        )
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(hooked_counterform_masses(cx=760, cy=180, rx=300, ry=150))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert result["is_error"] is True
-        text = result["content"][0]["text"]
-        assert "Quality gate blocked" in text
-        assert "breaking_wave_masses" in text
-
-    @pytest.mark.asyncio
-    async def test_generate_svg_blocks_required_repair_helpers_in_wrong_order(self) -> None:
-        record_critique_result(
-            "VERDICT: FAIL\n"
-            "FINDINGS:\n"
-            "- The folded cloth body reads as a smooth ramp rather than a hooked curl with an opening."
-        )
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(hooked_counterform_masses(cx=760, cy=180, rx=300, ry=150))
-paths.extend(sweeping_body_wall(cx=700, cy=260, rx=360, ry=150, fill="#2d5f7f"))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert result["is_error"] is True
-        text = result["content"][0]["text"]
-        assert (
-            "`sweeping_body_wall(...)` must appear before `hooked_counterform_masses(...)`" in text
-        )
-
-    @pytest.mark.asyncio
-    async def test_draw_paths_blocks_structural_repair_bypass(self) -> None:
-        record_critique_result(
-            "VERDICT: FAIL\n"
-            "FINDINGS:\n"
-            "- The wave body reads as a smooth ramp rather than a hooked curl with an opening."
-        )
-
-        result = await handle_draw_paths(
-            {
-                "paths": [
-                    {
-                        "type": "svg",
-                        "d": "M 0 0 L 1200 0 L 1200 420 L 0 420 Z",
-                        "fill": "#ffffff",
-                    }
-                ]
-            }
-        )
-
-        assert result["is_error"] is True
-        text = result["content"][0]["text"]
-        assert "Quality gate blocked draw_paths" in text
-        assert "generate_svg" in text
-        assert "breaking_wave_masses" in text
+        assert "structural revision" in message
 
 
 class TestInjectCanvasImage:
@@ -711,18 +627,6 @@ paths.extend(curved_ribbon_mass(
     contour_color="#f7efd9",
     contour_count=3,
 ))
-paths.extend(hooked_counterform_masses(
-    600,
-    80,
-    340,
-    220,
-    body_color="#2f7897",
-    lip_color="#123a57",
-    tunnel_fill="#efe4cb",
-    shadow_fill="#0d2f4c",
-    contour_color="#f7efd9",
-    foam=True,
-))
 paths.extend(crescent_mass(
     760,
     190,
@@ -758,179 +662,7 @@ output_paths(paths)
         )
         assert sum(1 for path in collected_strokes if path.type == PathType.LINE) >= 4
         assert any(path.type == PathType.CUBIC for path in collected_strokes)
-        assert sum(1 for path in collected_strokes if path.type == PathType.SVG and path.fill) >= 12
-
-    @pytest.mark.asyncio
-    async def test_sweeping_body_wall_outputs_curved_filled_mass(self) -> None:
-        collected_strokes: list[Path] = []
-
-        async def add_strokes(paths: list[Path]) -> None:
-            collected_strokes.extend(paths)
-
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(sweeping_body_wall(
-    cx=700,
-    cy=260,
-    rx=360,
-    ry=150,
-    curl="right",
-    fill="#2d5f7f",
-    fill_opacity=0.9,
-))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert "is_error" not in result
-        assert len(collected_strokes) == 1
-        wall = collected_strokes[0]
-        assert wall.type == PathType.SVG
-        assert wall.fill == "#2d5f7f"
-        assert wall.d is not None
-        assert " C " in wall.d
-
-    @pytest.mark.asyncio
-    async def test_hooked_counterform_accepts_center_and_curl_aliases(self) -> None:
-        collected_strokes: list[Path] = []
-
-        async def add_strokes(paths: list[Path]) -> None:
-            collected_strokes.extend(paths)
-
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(hooked_counterform_masses(
-    cx=780,
-    cy=240,
-    rx=240,
-    ry=140,
-    curl="left",
-    body_fill="#2d5a7b",
-    lip_fill="#1a3a52",
-    opening_fill="#8aacbd",
-    underside_fill="#0f2433",
-    body_opacity=0.88,
-    lip_opacity=0.92,
-    opening_opacity=0.75,
-    underside_opacity=0.82,
-    foam=True,
-))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert "is_error" not in result
-        assert len(collected_strokes) >= 20
-        assert sum(1 for path in collected_strokes if path.type == PathType.SVG and path.fill) >= 4
-
-    @pytest.mark.asyncio
-    async def test_breaking_wave_masses_outputs_wave_architecture(self) -> None:
-        collected_strokes: list[Path] = []
-
-        async def add_strokes(paths: list[Path]) -> None:
-            collected_strokes.extend(paths)
-
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(breaking_wave_masses(
-    cx=680,
-    cy=180,
-    rx=430,
-    ry=170,
-    body_fill="#2d5a7b",
-    lip_fill="#123a57",
-    opening_fill="#e8f2f7",
-    underside_fill="#0f2433",
-    contour_color="#f7efd9",
-    foam=True,
-))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert "is_error" not in result
-        assert len(collected_strokes) >= 20
-        filled = [path for path in collected_strokes if path.type == PathType.SVG and path.fill]
-        assert len(filled) >= 9
-        assert any(path.fill == "#e8f2f7" for path in filled)
-        assert any(path.fill == "#0f2433" for path in filled)
-
-    @pytest.mark.asyncio
-    async def test_generate_svg_warns_when_broad_body_mass_follows_hooked_helper(self) -> None:
-        set_add_strokes_callback(None)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(hooked_counterform_masses(cx=760, cy=180, rx=300, ry=150))
-wave_body = "M 0 420 C 300 260 600 180 1000 220 L 1200 420 Z"
-paths.append(filled_svg_path(wave_body, "#3b82f6", fill_opacity=0.8, stroke_width=0))
-output_paths(paths)
-"""
-            }
-        )
-
-        text = result["content"][0]["text"]
-        assert "Layering audit" in text
-        assert "call the structural helper again last" in text
-
-    @pytest.mark.asyncio
-    async def test_generate_svg_blocks_late_lip_ribbon_during_structural_repair(self) -> None:
-        record_critique_result(
-            "VERDICT: FAIL\n"
-            "FINDINGS:\n"
-            "- Wave silhouette reads as smooth dome/mound rather than asymmetric hook with opening."
-        )
-        set_add_strokes_callback(None)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
-
-        result = await handle_generate_svg(
-            {
-                "code": """
-paths = []
-paths.extend(breaking_wave_masses(cx=660, cy=190, rx=380, ry=160))
-lip_ribbon_path = "M 100 100 C 300 20 500 20 700 100 L 700 180 Z"
-paths.append(filled_svg_path(lip_ribbon_path, "#123a57", fill_opacity=0.8, stroke_width=0))
-output_paths(paths)
-"""
-            }
-        )
-
-        assert result["is_error"] is True
-        text = result["content"][0]["text"]
-        assert "Quality gate blocked" in text
-        assert "Layering audit" in text
-        assert "body/lip" in text
+        assert sum(1 for path in collected_strokes if path.type == PathType.SVG and path.fill) >= 5
 
 
 class TestTransformSvgPath:

@@ -95,12 +95,11 @@ def format_event(msg: dict) -> str:
                 if code_text:
                     helper_flags = []
                     for helper_name in (
-                        "breaking_wave_masses",
-                        "hooked_counterform_masses",
-                        "sweeping_body_wall",
                         "curved_ribbon_mass",
                         "crescent_mass",
                         "small_figure_with_prop",
+                        "background_wash",
+                        "mass_field",
                     ):
                         if helper_name in code_text:
                             helper_flags.append(helper_name)

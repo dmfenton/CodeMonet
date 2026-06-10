@@ -22,7 +22,6 @@ from .quality_gate import (
     finish_block_message,
     note_drawing,
     record_mark_piece_done_attempt,
-    required_generate_svg_helpers,
 )
 
 logger = logging.getLogger(__name__)
@@ -31,11 +30,12 @@ AUTO_CANVAS_IMAGE_PATH_LIMIT = 160
 
 VIEW_CANVAS_AUDIT_TEXT = (
     "Inspect the actual rendered canvas. Report visible failures first, not intentions. "
-    "Before signing or naming, verify: required subject nouns are present; dominant silhouette "
-    "reads at thumbnail size; key counter-shape is clear; lower/foreground sectors are not empty "
-    "when the reference needs structure; small figures/objects are readable silhouettes with "
-    "contact; no accidental scaffolds, long closure lines, flat caps, or generic helper shapes "
-    "are dominating. If any item fails, revise before finishing."
+    "Check the value structure first: do the big light and dark masses read at thumbnail size? "
+    "Then verify: required subject nouns are present; the dominant silhouette reads; key "
+    "negative space is clear; the foreground is structurally active where the subject needs "
+    "ground, water, shadow, or reflection; small figures/objects are readable silhouettes with "
+    "contact; no accidental scaffolds or long closure lines are dominating. "
+    "If any item fails, revise before finishing."
 )
 
 
@@ -56,23 +56,6 @@ async def handle_draw_paths(args: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(paths_data, list):
         return {
             "content": [{"type": "text", "text": "Error: paths must be an array"}],
-            "is_error": True,
-        }
-
-    required_helpers = required_generate_svg_helpers()
-    if paths_data and required_helpers:
-        helper_list = ", ".join(f"`{helper}(...)`" for helper in required_helpers)
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": (
-                        "Quality gate blocked draw_paths before drawing. "
-                        "The last critique requires a structural helper-based repair; "
-                        f"use generate_svg with {helper_list} instead."
-                    ),
-                }
-            ],
             "is_error": True,
         }
 

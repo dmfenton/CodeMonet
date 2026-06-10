@@ -73,27 +73,19 @@ class TestBuildSystemPrompt:
         assert "contour_stack" in prompt
         assert "edge_fingers" in prompt
         assert "curved_ribbon_mass" in prompt
-        assert "hooked_counterform_masses" in prompt
-        assert "breaking_wave_masses" in prompt
-        assert "sweeping_body_wall" in prompt
         assert "crescent_mass" in prompt
         assert "small_figure_silhouette" in prompt
         assert "small_figure_with_prop" in prompt
         assert "First-pass contract" in prompt
         assert "not as a full-composition template" in prompt
         assert "Do not call the piece perfect" in prompt
-        assert "If a helper-created shape makes the image generic" in prompt
         assert "critique_canvas" in prompt
         assert "Do not sign or mark done after a failing critique" in prompt
-        assert "separate body mass" in prompt
-        assert "Japanese woodblock breaking-wave references" in prompt
-        assert "do not read as a smooth blue hill" in prompt
-        assert "solid irregular white lobes" in prompt
-        assert "first large pass" in prompt
-        assert "helpers=breaking_wave_masses" in prompt
-        assert "not a hardcoded masthead" in prompt
-        assert "rx, ry" in prompt
-        assert "Preserve the helper's hollow" in prompt
+        assert "separate filled masses" in prompt
+        # No subject-specific recipes: the prompt teaches operations, not templates.
+        assert "breaking_wave_masses" not in prompt
+        assert "hooked_counterform_masses" not in prompt
+        assert "Japanese woodblock" not in prompt
 
     def test_prompt_includes_tool_error_recovery_guidance(self) -> None:
         """Prompt tells the agent to simplify tool calls instead of giving up."""
