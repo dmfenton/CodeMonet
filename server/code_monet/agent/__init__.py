@@ -382,6 +382,12 @@ class DrawingAgent:
             f"Existing strokes: {len(state.canvas.strokes)}\n"
             f"Piece number: {state.piece_number + 1}"
         )
+        if len(state.canvas.strokes) > 3000:
+            parts.append(
+                "Warning: this canvas is heavily overworked. Do not add more texture "
+                "marks. If the image does not read, repaint failed regions with a few "
+                "opaque filled masses (fill_opacity=1.0) and rebuild simply."
+            )
 
         # Notes
         notes = state.notes

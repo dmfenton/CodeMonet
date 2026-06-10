@@ -18,9 +18,23 @@ class QualityGateState:
     blocked_by_failure: bool = False
     drew_after_failure: bool = False
     mark_piece_done_accepted: bool = False
+    consecutive_failures: int = 0
 
 
 _state = QualityGateState()
+
+# After this many consecutive FAILs, additive revision has demonstrably
+# stopped working — the gate switches to "repaint, don't accrete" orders.
+OVERWORK_FAILURE_THRESHOLD = 3
+
+REPAINT_DIRECTIVE = (
+    "OVERWORK ALERT: multiple consecutive critiques have failed. Adding more "
+    "marks is making the painting worse, not better. You cannot scrape paint "
+    "off, but you CAN repaint: cover the failed region (or the whole canvas) "
+    "with opaque filled masses (fill_opacity=1.0) that restate the 2-4 big "
+    "value shapes cleanly, then add ONE restrained pass of marks. Simplify the "
+    "composition if needed. Do not add texture to mud."
+)
 
 
 def reset_quality_gate() -> None:
@@ -30,6 +44,7 @@ def reset_quality_gate() -> None:
     _state.blocked_by_failure = False
     _state.drew_after_failure = False
     _state.mark_piece_done_accepted = False
+    _state.consecutive_failures = 0
 
 
 def note_drawing(paths_count: int) -> None:
@@ -60,9 +75,11 @@ def record_critique_result(text: str) -> Verdict:
     if verdict == "FAIL":
         _state.blocked_by_failure = True
         _state.drew_after_failure = False
+        _state.consecutive_failures += 1
         return "FAIL"
     _state.blocked_by_failure = False
     _state.drew_after_failure = False
+    _state.consecutive_failures = 0
     return "PASS"
 
 
@@ -107,6 +124,7 @@ def get_quality_gate_snapshot() -> dict[str, object]:
         "blocked_by_failure": _state.blocked_by_failure,
         "drew_after_failure": _state.drew_after_failure,
         "last_critique": _state.last_critique,
+        "consecutive_failures": _state.consecutive_failures,
     }
 
 
@@ -128,6 +146,8 @@ def quality_gate_prompt_context() -> str | None:
     if critique:
         lines.append("Last critique:")
         lines.append(critique[:1600])
+    if _state.consecutive_failures >= OVERWORK_FAILURE_THRESHOLD:
+        lines.append(REPAINT_DIRECTIVE)
     lines.append(
         "Binding next step: make a structural revision that directly fixes the critique "
         "(change shapes and values, not just surface texture), then call view_canvas and "
@@ -141,8 +161,11 @@ def critique_gate_message(verdict: Verdict) -> str:
     """Message appended to critique output so the agent sees the binding state."""
     if verdict == "PASS":
         return "FINISH GATE: OPEN. You may sign, name, and mark done when satisfied."
-    return (
+    message = (
         "FINISH GATE: BLOCKED. Do not sign, name, or mark done. "
         "Make a structural revision that addresses the critique, view the canvas, "
         "then call critique_canvas again."
     )
+    if _state.consecutive_failures >= OVERWORK_FAILURE_THRESHOLD:
+        message += f"\n{REPAINT_DIRECTIVE}"
+    return message

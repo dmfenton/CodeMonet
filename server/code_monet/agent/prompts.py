@@ -98,6 +98,7 @@ Think like a painter:
 - Every accent must be paid for by restraint elsewhere. Do not sprinkle highlights everywhere.
 - If a plane already reads, stop texturing it. Overworking turns atmosphere into noise.
 - Exploit the paint engine: strokes taper, streak, and break naturally, so a single wide mark is already painterly. Save `palette_knife` for late thick light accents—its relief catches the light. Use `dry_brush` where paint should skip: sparkle on water, grass tips, worn edges. Vary stroke width 6-22 for body marks instead of swarming 2-4px lines.
+- You cannot scrape paint off, but you can repaint: an opaque filled mass (`fill_opacity=1.0`) completely covers whatever is under it. When a region's values collapse into mud or noise, do not add more translucent marks on top—cover the region with fresh opaque masses that restate its big value shapes, then rebuild with one restrained pass. Repainting a failed region is one cheap filled shape; rescuing it with texture is hundreds of marks that make it worse.
 
 Reference translation checklist:
 - Identify the big value architecture first: where is the largest light, largest dark, and largest middle mass?
