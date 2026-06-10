@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-06-10
+
 ### Added
 
 - Stamp-based painterly stroke renderer: variable width with taper, bristle texture, dry-brush breakup over canvas tooth, per-stamp broken color, watercolor wet edges, impasto lighting, and canvas grain (server `painting.py`, ported to web canvas and Skia Atlas via `shared/renderer/stamping.ts`)
@@ -1139,7 +1141,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.37.3...HEAD
+[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.38.0...HEAD
+[1.38.0]: https://github.com/dmfenton/sketchpad/compare/v1.37.7...v1.38.0
 [1.37.3]: https://github.com/dmfenton/sketchpad/compare/v1.37.2...v1.37.3
 [1.37.2]: https://github.com/dmfenton/sketchpad/compare/v1.37.1...v1.37.2
 [1.37.1]: https://github.com/dmfenton/sketchpad/compare/v1.37.0...v1.37.1
