@@ -184,6 +184,7 @@ export function Canvas({
     <div className="canvas-fit" ref={fitRef}>
       <div
         className="canvas-wrapper"
+        data-testid="canvas-view"
         style={{
           width: frameSize.width || '100%',
           height: frameSize.height || '100%',

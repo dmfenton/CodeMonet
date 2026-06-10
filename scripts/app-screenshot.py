@@ -18,10 +18,12 @@ Options:
     --auth              Inject dev token for authenticated screens
     --wait N            Wait N seconds before screenshot (for animations/loading)
     --selector S        Wait for CSS selector before capture
-    --path P            URL path to navigate to (default: /)
+    --path P            URL path (default: /, or /studio for 5173 with --auth)
     --viewport WxH      Custom viewport (default: 390x844 iPhone 14 Pro)
-    --expo-port PORT    Expo web server port (default: 8081)
+    --expo-port PORT    App port (8081 Expo mobile, 5173 Vite web; default: 8081)
     --backend-port PORT Backend server port for auth (default: 8000)
+    --canvas-only       Capture only the canvas element (the painting itself)
+    --out FILE          Output file path (default: screenshots/app-{timestamp}.png)
 
 Prerequisites:
     - Expo web server running: cd app && npx expo start --web
@@ -131,6 +133,8 @@ def screenshot_app(
     expo_port: int = DEFAULT_EXPO_PORT,
     backend_port: int = DEFAULT_BACKEND_PORT,
     start_prompt: str | None = None,
+    canvas_only: bool = False,
+    out: str | None = None,
 ) -> str | None:
     """Take a screenshot of the Expo web app.
 
@@ -160,9 +164,13 @@ def screenshot_app(
     # Ensure screenshot directory exists
     SCREENSHOT_DIR.mkdir(exist_ok=True)
 
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    filename = SCREENSHOT_DIR / f"app-{timestamp}.png"
+    # Generate filename with timestamp (or use explicit --out)
+    if out:
+        filename = Path(out)
+        filename.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        filename = SCREENSHOT_DIR / f"app-{timestamp}.png"
 
     # Get auth token if needed
     token = None
@@ -254,8 +262,18 @@ def screenshot_app(
             page.wait_for_timeout(int(wait * 1000))
 
         # Take screenshot
-        print_status("Taking screenshot...")
-        page.screenshot(path=str(filename), full_page=False)
+        if canvas_only:
+            canvas_selector = '[data-testid="canvas-view"]'
+            print_status("Capturing canvas element only...")
+            try:
+                page.wait_for_selector(canvas_selector, timeout=10000)
+                page.locator(canvas_selector).screenshot(path=str(filename))
+            except Exception as e:
+                print_error(f"Canvas element not found, capturing viewport: {e}")
+                page.screenshot(path=str(filename), full_page=False)
+        else:
+            print_status("Taking screenshot...")
+            page.screenshot(path=str(filename), full_page=False)
 
         browser.close()
 
@@ -283,8 +301,8 @@ Prerequisites:
 
     parser.add_argument(
         "--path",
-        default="/",
-        help="URL path to navigate to (default: /)",
+        default=None,
+        help="URL path to navigate to (default: /, or /studio for 5173 with --auth)",
     )
     parser.add_argument(
         "--auth",
@@ -324,6 +342,16 @@ Prerequisites:
         metavar="PROMPT",
         help="Enter this prompt via HomePanel to start drawing and enter studio mode",
     )
+    parser.add_argument(
+        "--canvas-only",
+        action="store_true",
+        help="Capture only the canvas element ([data-testid='canvas-view'])",
+    )
+    parser.add_argument(
+        "--out",
+        metavar="FILE",
+        help="Output file path (default: screenshots/app-{timestamp}.png)",
+    )
 
     args = parser.parse_args()
 
@@ -334,8 +362,14 @@ Prerequisites:
 
     viewport = parse_viewport(args.viewport)
 
+    # The Vite web studio lives at /studio; default there when authenticated
+    if args.path is None:
+        path = "/studio" if (args.expo_port == 5173 and args.auth) else "/"
+    else:
+        path = args.path
+
     result = screenshot_app(
-        path=args.path,
+        path=path,
         auth=args.auth,
         wait=args.wait,
         selector=args.selector,
@@ -343,6 +377,8 @@ Prerequisites:
         expo_port=args.expo_port,
         backend_port=args.backend_port,
         start_prompt=args.start_prompt,
+        canvas_only=args.canvas_only,
+        out=args.out,
     )
 
     if result is None:

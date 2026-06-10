@@ -11,6 +11,7 @@ import { Homepage } from './components/Homepage';
 import { AuthScreen } from './components/AuthScreen';
 import { GalleryPage } from './pages/GalleryPage';
 import { GalleryPiecePage } from './pages/GalleryPiecePage';
+import { ReplayPage } from './pages/ReplayPage';
 import type { SSRData } from './entry-server';
 
 interface AppRoutesProps {
@@ -33,6 +34,9 @@ export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
       {/* Auth routes */}
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/studio" element={<StudioRoute />} />
+
+      {/* Dev-only client-render harness (render-study.py --compare) */}
+      {import.meta.env.DEV && <Route path="/replay" element={<ReplayPage />} />}
 
       {/* Fallback */}
       <Route path="*" element={<Navigate to="/" replace />} />

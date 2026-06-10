@@ -170,7 +170,7 @@ export function ActionBar({
 
         <div className="action-bar-center">
           {paused ? (
-            <button className="primary start-btn" onClick={handleStartClick}>
+            <button className="primary start-btn" data-testid="start-button" onClick={handleStartClick}>
               ▶ Start
             </button>
           ) : (
@@ -178,14 +178,15 @@ export function ActionBar({
               <input
                 type="text"
                 placeholder="Nudge the artist..."
+                data-testid="nudge-input"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
               />
-              <button className="primary" onClick={handleNudge} disabled={!inputText.trim()}>
+              <button className="primary" data-testid="nudge-send" onClick={handleNudge} disabled={!inputText.trim()}>
                 Send
               </button>
-              <button className="secondary pause-btn" onClick={handlePause}>
+              <button className="secondary pause-btn" data-testid="pause-button" onClick={handlePause}>
                 ⏸
               </button>
             </>
@@ -211,6 +212,7 @@ export function ActionBar({
               ref={modalInputRef}
               type="text"
               placeholder="e.g., Draw a peaceful landscape..."
+              data-testid="start-modal-input"
               value={modalDirection}
               onChange={(e) => setModalDirection(e.target.value)}
               onKeyDown={handleModalKeyDown}
@@ -219,7 +221,7 @@ export function ActionBar({
               <button className="secondary" onClick={handleModalCancel}>
                 Cancel
               </button>
-              <button className="primary" onClick={handleModalStart}>
+              <button className="primary" data-testid="start-modal-submit" onClick={handleModalStart}>
                 Start
               </button>
             </div>

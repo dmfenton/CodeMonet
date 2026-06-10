@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Visual flow test: Time-lapse screenshot capture during agent execution.
+"""Visual flow test: observe the agent painting end-to-end and produce
+artifacts that are actually judgeable.
 
-Captures screenshots at regular intervals to verify rendering flow:
-- Progressive text reveal (words appear 3 at a time)
-- Strokes waiting until thinking animation completes
-- Smooth transitions between states
+Captures:
+- Interval screenshots (timelapse) PLUS event-triggered screenshots at the
+  moments that matter (state changes, stroke batches, critique results)
+- Canvas-only crops per stroke batch and a final settled frame
+- A client/server parity image (stamping.ts canvas vs painting.py render)
+- report.md: event timeline with thinking text, tool calls, and critique
+  verdicts aligned to the screenshots
+- contact-sheet.png: one-glance grid of the whole run
+- events.json (compacted) and timelapse.mp4
 
 Usage:
     uv run python scripts/visual-flow-test.py [prompt] [options]
@@ -18,9 +24,9 @@ Options:
     --interval N      Screenshot interval in seconds (default: 1.0)
     --timeout N       Max test duration in seconds (default: 120)
     --output DIR      Output directory (default: screenshots/flow-{timestamp}/)
-    --expo-port N     Expo port (default: 8081 for mobile, 5173 for web)
-    --renderer TYPE   Renderer to use: svg or freehand (default: svg)
-    --no-headless     Show browser window for debugging
+    --expo-port N     App port (8081 Expo mobile, 5173 Vite web; default: 8081)
+    --viewport WxH    Viewport (default: 390x844 mobile, 1280x900 web)
+    --renderer TYPE   Mobile renderer to select: svg or freehand (default: svg)
     --no-clear        Skip clearing canvas before test
     --no-teardown     Skip killing stale processes and clearing state
     --no-video        Skip creating and opening timelapse video
@@ -36,6 +42,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 
 import httpx
@@ -46,7 +53,13 @@ BASE_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
 WS_MAX_SIZE = 16 * 1024 * 1024
 DEFAULT_EXPO_PORT = 8081
-DEFAULT_VIEWPORT = (390, 844)  # iPhone 14 Pro
+MOBILE_VIEWPORT = (390, 844)  # iPhone 14 Pro
+WEB_VIEWPORT = (1280, 900)  # Desktop studio layout
+CANVAS_SELECTOR = '[data-testid="canvas-view"]'
+SETTLE_SECONDS = 2.5  # let reveal/stroke animations finish before final frames
+
+# Message types whose payloads are too bulky to keep verbatim in events.json
+BULKY_TYPES = {"canvas_state", "paths", "init"}
 
 # ANSI colors
 CYAN = "\033[96m"
@@ -78,12 +91,12 @@ async def get_token() -> str:
         return resp.json()["access_token"]
 
 
-async def full_teardown(token: str) -> None:
+async def full_teardown(token: str, clear_canvas: bool) -> None:
     """Clean slate before test - kill stale processes and clear agent state."""
     import os
+
     my_pid = os.getpid()
     print(f"{CYAN}[TEARDOWN] Killing stale test processes (excluding pid {my_pid})...{RESET}")
-    # Find other visual-flow-test processes and kill them (not ourselves)
     result = subprocess.run(
         ["pgrep", "-f", "visual-flow-test"],
         capture_output=True,
@@ -100,10 +113,9 @@ async def full_teardown(token: str) -> None:
                     except ProcessLookupError:
                         pass
 
-    print(f"{CYAN}[TEARDOWN] Clearing agent state...{RESET}")
+    print(f"{CYAN}[TEARDOWN] Pausing agent...{RESET}")
     try:
         async with websockets.connect(f"{WS_URL}?token={token}", max_size=WS_MAX_SIZE) as ws:
-            # Wait for init
             init_timeout = 5.0
             start = time.monotonic()
             while time.monotonic() - start < init_timeout:
@@ -116,14 +128,27 @@ async def full_teardown(token: str) -> None:
                 except TimeoutError:
                     continue
 
-            # Pause and clear
             await ws.send(json.dumps({"type": "pause"}))
             await asyncio.sleep(0.3)
-            await ws.send(json.dumps({"type": "clear"}))
-            await asyncio.sleep(0.5)
-            print(f"{GREEN}[TEARDOWN] Agent paused and canvas cleared{RESET}")
+            if clear_canvas:
+                await ws.send(json.dumps({"type": "clear"}))
+                await asyncio.sleep(0.5)
+                print(f"{GREEN}[TEARDOWN] Agent paused and canvas cleared{RESET}")
+            else:
+                print(f"{GREEN}[TEARDOWN] Agent paused (canvas kept){RESET}")
     except Exception as e:
         print(f"{YELLOW}[TEARDOWN] Warning: {e}{RESET}")
+
+
+def extract_critique_summary(stdout: str) -> str:
+    """Pull the verdict/gate/findings lines out of critique_canvas output."""
+    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+    verdict = next((line for line in lines if line.startswith("VERDICT:")), "")
+    gate = next((line for line in lines if line.startswith("FINISH GATE:")), "")
+    repair = next((line for line in lines if line.startswith("STRUCTURAL REPAIR")), "")
+    findings = [line for line in lines if line.startswith("- ")][:4]
+    parts = [part for part in [verdict, gate, repair, *findings] if part]
+    return " | ".join(parts)
 
 
 class VisualFlowTest:
@@ -136,16 +161,21 @@ class VisualFlowTest:
         timeout: int = 120,
         output_dir: Path | None = None,
         expo_port: int = DEFAULT_EXPO_PORT,
+        viewport: tuple[int, int] | None = None,
         headless: bool = True,
         clear_canvas: bool = True,
         do_teardown: bool = True,
         create_video: bool = True,
         renderer: str = "svg",
+        web: bool | None = None,
     ):
         self.prompt = prompt
         self.interval = interval
         self.timeout = timeout
         self.expo_port = expo_port
+        # Vite web app vs Expo mobile app (different auth keys, routes, UI)
+        self.is_web = web if web is not None else (expo_port == 5173)
+        self.viewport = viewport or (WEB_VIEWPORT if self.is_web else MOBILE_VIEWPORT)
         self.headless = headless
         self.clear_canvas = clear_canvas
         self.do_teardown = do_teardown
@@ -164,16 +194,24 @@ class VisualFlowTest:
         self.token: str | None = None
         self.events: list[dict] = []
         self.screenshot_count = 0
+        self.canvas_capture_count = 0
         self.start_time: float = 0
         self.agent_active = False
         self.agent_idle = False
         self.stroke_count = 0
+        self.batch_count = 0
         self.thinking_count = 0
+        self.thinking_chars = 0
+        self.critiques: list[str] = []
         self.current_state = "idle"
+        self.parity_diff: float | None = None
+        self.client_state: dict | None = None
 
         # WebSocket readiness
         self.init_received = False
         self.ws_monitor_task: asyncio.Task | None = None
+        self._pending_captures: set[asyncio.Task] = set()
+        self._shot_lock = asyncio.Lock()
 
         # Playwright objects (set in run)
         self.browser = None
@@ -183,6 +221,31 @@ class VisualFlowTest:
         """Log a message with timestamp."""
         print(f"{color}[{ts()}] {msg}{RESET}")
 
+    def elapsed_ms(self) -> int:
+        return int((time.monotonic() - self.start_time) * 1000)
+
+    def _compact_msg(self, msg: dict) -> dict:
+        """Trim bulky payloads so events.json stays readable."""
+        msg_type = msg.get("type")
+        if msg_type in BULKY_TYPES:
+            out = {"type": msg_type}
+            if isinstance(msg.get("paths"), list):
+                out["path_count"] = len(msg["paths"])
+            return out
+        if msg_type == "code_execution":
+            out = dict(msg)
+            for key in ("stdout", "stderr"):
+                value = out.get(key)
+                if isinstance(value, str) and len(value) > 2000:
+                    out[key] = value[:2000] + "…"
+            tool_input = out.get("tool_input")
+            if isinstance(tool_input, dict):
+                code = tool_input.get("code")
+                if isinstance(code, str) and len(code) > 1500:
+                    out["tool_input"] = {**tool_input, "code": code[:1500] + "…"}
+            return out
+        return msg
+
     def record_event(self, event_type: str, data: dict | None = None) -> None:
         """Record an event for the log."""
         event = {
@@ -191,7 +254,7 @@ class VisualFlowTest:
             "wall_time": datetime.now().isoformat(),
         }
         if data:
-            event["data"] = data
+            event["data"] = self._compact_msg(data)
         self.events.append(event)
 
     def transition_state(self, new_state: str) -> None:
@@ -210,12 +273,12 @@ class VisualFlowTest:
             print("Run: cd server && uv sync --extra dev && uv run playwright install chromium")
             sys.exit(1)
 
-        self.log("Launching browser...", CYAN)
+        self.log(f"Launching browser ({self.viewport[0]}x{self.viewport[1]})...", CYAN)
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=self.headless)
 
         context = await self.browser.new_context(
-            viewport={"width": DEFAULT_VIEWPORT[0], "height": DEFAULT_VIEWPORT[1]},
+            viewport={"width": self.viewport[0], "height": self.viewport[1]},
             device_scale_factor=2,
         )
 
@@ -225,25 +288,20 @@ class VisualFlowTest:
         self.page.on("console", lambda msg: self.log(f"CONSOLE: {msg.text}", DIM))
         self.page.on("pageerror", lambda err: self.log(f"PAGE ERROR: {err}", RED))
 
-        # Navigate to blank page first to set up localStorage before app loads
-        # This prevents creating multiple WebSocket connections
         url = f"http://localhost:{self.expo_port}/"
         self.log(f"Setting up auth for {url}...", CYAN)
 
-        # Navigate to about:blank first (same origin not required for localStorage)
-        # Actually, we need to be on the same origin to set localStorage
-        # So we navigate to the app URL but intercept before it fully loads
+        # Navigate to set origin so localStorage can be written pre-init
         try:
-            # Quick navigate to set origin for localStorage
             await self.page.goto(url, wait_until="commit", timeout=10000)
         except Exception as e:
             print(f"{RED}Error: Failed to load {url}: {e}{RESET}")
-            print(f"Is Expo running? Port: {self.expo_port}")
+            print(f"Is the app running? Port: {self.expo_port}")
             sys.exit(1)
 
         # Inject auth token into localStorage BEFORE app fully initializes
         token_js = json.dumps(self.token)
-        if self.expo_port == 5173:
+        if self.is_web:
             await self.page.evaluate(f"""
                 localStorage.setItem('auth_access_token', {token_js});
                 localStorage.setItem('auth_refresh_token', {token_js});
@@ -255,44 +313,84 @@ class VisualFlowTest:
             """)
         self.log("Injected auth token", GREEN)
 
-        # Now navigate properly (or wait for networkidle)
-        if self.expo_port == 5173:
-            await self.page.goto(f"http://localhost:{self.expo_port}/studio", wait_until="networkidle")
+        if self.is_web:
+            await self.page.goto(
+                f"http://localhost:{self.expo_port}/studio", wait_until="networkidle"
+            )
             self.log("Navigated to /studio", GREEN)
         else:
-            # Wait for the page to fully load with auth in place
             await self.page.wait_for_load_state("networkidle")
         self.log("Browser ready", GREEN)
 
         # Wait for WebSocket to connect
         await asyncio.sleep(2)
 
-    async def take_screenshot(self) -> str:
-        """Take a screenshot and return the filename."""
-        self.screenshot_count += 1
-        elapsed_ms = int((time.monotonic() - self.start_time) * 1000)
-        filename = f"{self.screenshot_count:03d}-{elapsed_ms:05d}ms.png"
-        filepath = self.output_dir / filename
-
-        await self.page.screenshot(path=str(filepath), full_page=False)
-        self.record_event("screenshot", {"filename": filename, "elapsed_ms": elapsed_ms})
+    async def take_screenshot(self, label: str | None = None) -> str | None:
+        """Take a full-viewport screenshot. Returns the filename."""
+        if not self.page:
+            return None
+        async with self._shot_lock:
+            self.screenshot_count += 1
+            elapsed = self.elapsed_ms()
+            suffix = f"-{label}" if label else ""
+            filename = f"{self.screenshot_count:03d}-{elapsed:06d}ms{suffix}.png"
+            filepath = self.output_dir / filename
+            try:
+                await self.page.screenshot(path=str(filepath), full_page=False)
+            except Exception as e:
+                self.log(f"Screenshot failed: {e}", RED)
+                return None
+        self.record_event("screenshot", {"filename": filename, "elapsed_ms": elapsed})
         self.log(f"Screenshot: {filename}", MAGENTA)
         return filename
 
-    async def screenshot_loop(self, stop_event: asyncio.Event) -> None:
-        """Take screenshots at regular intervals until stopped."""
-        while not stop_event.is_set():
-            await self.take_screenshot()
+    async def capture_canvas(self, tag: str) -> str | None:
+        """Screenshot just the canvas element (what the painting looks like)."""
+        if not self.page:
+            return None
+        async with self._shot_lock:
+            self.canvas_capture_count += 1
+            elapsed = self.elapsed_ms()
+            filename = f"canvas-{self.canvas_capture_count:03d}-{elapsed:06d}ms-{tag}.png"
+            filepath = self.output_dir / filename
             try:
-                await asyncio.wait_for(stop_event.wait(), timeout=self.interval)
-                break  # stop_event was set
-            except TimeoutError:
-                pass  # Continue taking screenshots
+                await self.page.locator(CANVAS_SELECTOR).screenshot(
+                    path=str(filepath), timeout=5000
+                )
+            except Exception as e:
+                self.log(f"Canvas capture failed ({tag}): {e}", YELLOW)
+                return None
+        self.record_event("canvas_capture", {"filename": filename, "tag": tag})
+        self.log(f"Canvas capture: {filename}", MAGENTA)
+        return filename
+
+    async def sample_client_state(self) -> dict | None:
+        """Read the web app's dev-state hook (painted strokes, queue depth)."""
+        if not self.page:
+            return None
+        try:
+            state = await self.page.evaluate("window.__CM_DEV_STATE__ || null")
+        except Exception:
+            return None
+        if state:
+            self.client_state = state
+            self.record_event("client_state", state)
+        return state
+
+    def _schedule_canvas_capture(self, delay: float, tag: str) -> None:
+        """Capture the canvas after a delay (e.g. mid/post stroke animation)."""
+
+        async def delayed() -> None:
+            await asyncio.sleep(delay)
+            await self.capture_canvas(tag)
+
+        task = asyncio.create_task(delayed())
+        self._pending_captures.add(task)
+        task.add_done_callback(self._pending_captures.discard)
 
     async def enter_studio_via_ui(self) -> None:
         """Enter studio mode by typing prompt and submitting via UI."""
-        # Different flow for web app (port 5173) vs mobile app
-        if self.expo_port == 5173:
+        if self.is_web:
             await self._enter_studio_web()
         else:
             await self._enter_studio_mobile()
@@ -300,7 +398,7 @@ class VisualFlowTest:
     async def _enter_studio_web(self) -> None:
         """Web app flow: click Start button, enter direction in modal."""
         self.log("Waiting for Start button...", CYAN)
-        start_btn_selector = "button.start-btn"
+        start_btn_selector = '[data-testid="start-button"]'
 
         try:
             await self.page.wait_for_selector(start_btn_selector, timeout=10000)
@@ -308,12 +406,10 @@ class VisualFlowTest:
             self.log("Start button not found - agent may already be running", YELLOW)
             return
 
-        # Click Start button to open modal
         await self.page.click(start_btn_selector)
         await asyncio.sleep(0.3)
 
-        # Type in modal input
-        modal_input_selector = ".modal input[type='text']"
+        modal_input_selector = '[data-testid="start-modal-input"]'
         try:
             await self.page.wait_for_selector(modal_input_selector, timeout=5000)
             if not await self.wait_for_input_enabled(modal_input_selector, timeout=10.0):
@@ -321,8 +417,7 @@ class VisualFlowTest:
             await self.page.fill(modal_input_selector, self.prompt)
             self.record_event("prompt_entered", {"prompt": self.prompt})
 
-            # Click modal Start button
-            await self.page.click(".modal button.primary")
+            await self.page.click('[data-testid="start-modal-submit"]')
             self.log("Started agent with direction", GREEN)
             self.record_event("prompt_submitted")
         except Exception as e:
@@ -357,47 +452,44 @@ class VisualFlowTest:
         except Exception:
             self.log(f"[UI] Renderer button not found: {renderer_btn}", YELLOW)
 
-        # Type the prompt
         await self.page.fill(input_selector, self.prompt)
         self.record_event("prompt_entered", {"prompt": self.prompt})
 
-        # Click submit
         await self.page.click(submit_selector)
         self.log("Submitted prompt", GREEN)
         self.record_event("prompt_submitted")
 
-        # Wait for studio view to appear (canvas)
         await asyncio.sleep(1)
 
     async def websocket_monitor(self, stop_event: asyncio.Event) -> None:
-        """Monitor WebSocket events and track state."""
+        """Monitor WebSocket events, track state, and trigger event screenshots."""
         async with websockets.connect(f"{WS_URL}?token={self.token}", max_size=WS_MAX_SIZE) as ws:
             self.log("[WS] Connected", GREEN)
 
-            # Monitor events
             while not stop_event.is_set():
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=1.0)
                     msg = json.loads(raw)
                     msg_type = msg.get("type", "unknown")
 
-                    # Record all events
                     self.record_event(f"ws:{msg_type}", msg)
 
-                    # Track init for readiness
                     if msg_type == "init":
                         self.init_received = True
                         self.log("[WS] Init received - ready", GREEN)
                         continue
 
-                    # Track state transitions
                     if msg_type == "agent_state":
                         status = msg.get("status", "")
                         if status in ("thinking", "running"):
-                            self.transition_state("thinking")
+                            if self.current_state != "thinking":
+                                self.transition_state("thinking")
+                                await self.take_screenshot("state-thinking")
                             self.agent_active = True
                         elif status == "drawing":
-                            self.transition_state("drawing")
+                            if self.current_state != "drawing":
+                                self.transition_state("drawing")
+                                await self.take_screenshot("state-drawing")
                             self.agent_active = True
                         elif status == "idle" and self.agent_active:
                             self.transition_state("idle")
@@ -406,16 +498,17 @@ class VisualFlowTest:
                             stop_event.set()
 
                     elif msg_type == "thinking_delta":
-                        text_len = len(msg.get("text", ""))
-                        self.log(f"[WS] thinking_delta (len={text_len})", DIM)
+                        text = msg.get("text", "")
                         self.thinking_count += 1
+                        self.thinking_chars += len(text)
                         self.transition_state("thinking")
                         self.agent_active = True
 
                     elif msg_type == "thinking":
-                        text = msg.get("thinking", "")[:60]
-                        self.log(f"[WS] thinking: {text}...", CYAN)
+                        text = msg.get("thinking", "")
                         self.thinking_count += 1
+                        self.thinking_chars += len(text)
+                        self.log(f"[WS] thinking: {text[:100]}...", CYAN)
                         self.transition_state("thinking")
                         self.agent_active = True
 
@@ -426,17 +519,28 @@ class VisualFlowTest:
                         self.agent_active = True
 
                     elif msg_type == "code_execution":
-                        name = msg.get("name", "")
+                        tool = msg.get("tool_name") or msg.get("name") or "unknown"
                         status = msg.get("status", "")
-                        self.log(f"[WS] code_execution: {name} {status}", BLUE)
                         self.agent_active = True
+                        if status == "completed" and tool == "critique_canvas":
+                            summary = extract_critique_summary(msg.get("stdout") or "")
+                            if summary:
+                                self.critiques.append(summary)
+                                self.log(f"[WS] critique: {summary[:300]}", BLUE)
+                            await self.take_screenshot("critique")
+                        else:
+                            self.log(f"[WS] code_execution: {tool} {status}", BLUE)
 
                     elif msg_type == "agent_strokes_ready":
                         count = msg.get("count", 0)
                         self.stroke_count += count
+                        self.batch_count += 1
                         self.log(f"[WS] agent_strokes_ready: count={count}", MAGENTA)
                         self.transition_state("drawing")
                         self.agent_active = True
+                        await self.take_screenshot(f"strokes-batch{self.batch_count}")
+                        # Catch the painting mid/post animation for this batch
+                        self._schedule_canvas_capture(2.0, f"batch{self.batch_count}")
 
                     elif msg_type == "animation_done":
                         self.log("[WS] animation_done", MAGENTA)
@@ -444,9 +548,9 @@ class VisualFlowTest:
                     elif msg_type == "error":
                         error = msg.get("error", str(msg))
                         self.log(f"[WS] Error: {error}", RED)
+                        await self.take_screenshot("error")
 
                 except TimeoutError:
-                    # Check if we've exceeded timeout
                     if time.monotonic() - self.start_time > self.timeout:
                         self.log("Timeout reached", YELLOW)
                         stop_event.set()
@@ -482,41 +586,270 @@ class VisualFlowTest:
         except Exception:
             return False
 
+    async def finalize_captures(self) -> None:
+        """After the run: settled final frames and client/server parity image."""
+        self.log(f"Settling {SETTLE_SECONDS}s before final frames...", CYAN)
+        await asyncio.sleep(SETTLE_SECONDS)
+
+        await self.sample_client_state()
+        await self.take_screenshot("final")
+
+        client_png_path = self.output_dir / "final-canvas.png"
+        try:
+            await self.page.locator(CANVAS_SELECTOR).screenshot(
+                path=str(client_png_path), timeout=5000
+            )
+            self.log(f"Final canvas: {client_png_path.name}", MAGENTA)
+        except Exception as e:
+            self.log(f"Final canvas capture failed: {e}", YELLOW)
+            client_png_path = None
+
+        # Server-side render of the same canvas state
+        server_png_path = self.output_dir / "server-render.png"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.get(
+                    f"{BASE_URL}/canvas.png",
+                    headers={"Authorization": f"Bearer {self.token}"},
+                )
+                if resp.status_code == 200:
+                    server_png_path.write_bytes(resp.content)
+                    self.log(f"Server render: {server_png_path.name}", MAGENTA)
+                else:
+                    self.log(f"Server render failed: HTTP {resp.status_code}", YELLOW)
+                    server_png_path = None
+        except Exception as e:
+            self.log(f"Server render failed: {e}", YELLOW)
+            server_png_path = None
+
+        if client_png_path and server_png_path:
+            try:
+                self.parity_diff = self._compose_parity(
+                    server_png_path.read_bytes(),
+                    client_png_path.read_bytes(),
+                    self.output_dir / "parity.png",
+                )
+                self.log(
+                    f"Parity: mean diff {self.parity_diff:.2f}/255 → parity.png", GREEN
+                )
+            except Exception as e:
+                self.log(f"Parity compose failed: {e}", YELLOW)
+
+    @staticmethod
+    def _compose_parity(server_png: bytes, client_png: bytes, out: Path) -> float:
+        """Side-by-side server vs client render with a diff heatmap."""
+        from PIL import Image, ImageChops, ImageDraw, ImageStat
+
+        server = Image.open(BytesIO(server_png)).convert("RGB")
+        client = Image.open(BytesIO(client_png)).convert("RGB")
+        if client.size != server.size:
+            client = client.resize(server.size)
+
+        diff = ImageChops.difference(server, client)
+        mean_diff = sum(ImageStat.Stat(diff).mean) / 3
+        heat = diff.point(lambda v: min(255, v * 4))
+
+        w, h = server.size
+        label_h, gutter = 22, 8
+        sheet = Image.new("RGB", (w * 3 + gutter * 2, h + label_h), "#222222")
+        draw = ImageDraw.Draw(sheet)
+        panels = [
+            (server, "server (painting.py)"),
+            (client, "client (stamping.ts)"),
+            (heat, f"diff x4 (mean {mean_diff:.2f})"),
+        ]
+        for i, (img, label) in enumerate(panels):
+            x = i * (w + gutter)
+            draw.text((x + 6, 5), label, fill="#ffffff")
+            sheet.paste(img, (x, label_h))
+        sheet.save(out)
+        return mean_diff
+
+    def create_contact_sheet(self, max_frames: int = 48) -> Path | None:
+        """Grid of captured frames with timestamps, for one-glance review."""
+        try:
+            from PIL import Image, ImageDraw
+        except ImportError:
+            return None
+
+        frames = sorted(self.output_dir.glob("[0-9]*.png"))
+        if not frames:
+            return None
+        if len(frames) > max_frames:
+            step = len(frames) / max_frames
+            frames = [frames[int(i * step)] for i in range(max_frames)]
+
+        cell_w = 240
+        cols = min(6, len(frames))
+        rows = (len(frames) + cols - 1) // cols
+        caption_h = 16
+
+        first = Image.open(frames[0])
+        cell_h = int(first.height * cell_w / first.width) + caption_h
+
+        sheet = Image.new("RGB", (cols * cell_w, rows * cell_h), "#1a1a1a")
+        draw = ImageDraw.Draw(sheet)
+        for i, frame in enumerate(frames):
+            img = Image.open(frame).convert("RGB")
+            thumb_h = int(img.height * cell_w / img.width)
+            img = img.resize((cell_w, thumb_h))
+            x = (i % cols) * cell_w
+            y = (i // cols) * cell_h
+            sheet.paste(img, (x, y))
+            draw.text((x + 4, y + thumb_h + 2), frame.stem, fill="#dddddd")
+
+        out = self.output_dir / "contact-sheet.png"
+        sheet.save(out)
+        self.log(f"Contact sheet: {out.name}", GREEN)
+        return out
+
+    def write_report(self) -> Path:
+        """Write report.md: event timeline aligned with screenshots."""
+        duration = time.monotonic() - self.start_time
+        lines = [
+            f'# Visual Flow Test — "{self.prompt}"',
+            "",
+            f"- Date: {datetime.now().isoformat(timespec='seconds')}",
+            f"- App: {'Vite web' if self.is_web else 'Expo mobile'} (port {self.expo_port})",
+            f"- Viewport: {self.viewport[0]}x{self.viewport[1]} @2x",
+            f"- Duration: {duration:.1f}s",
+            f"- Agent finished: {'yes' if self.agent_idle else 'NO (timeout)'}",
+            f"- Stroke batches: {self.batch_count} ({self.stroke_count} strokes)",
+            f"- Thinking: {self.thinking_count} messages, {self.thinking_chars} chars",
+        ]
+        if self.parity_diff is not None:
+            lines.append(
+                f"- Client/server parity: mean diff {self.parity_diff:.2f}/255 (see parity.png)"
+            )
+        if self.client_state:
+            cs = self.client_state
+            painted = cs.get("strokesPainted", "?")
+            lines.append(
+                f"- Client state at end: {painted} strokes painted "
+                f"(server sent {self.stroke_count}), {cs.get('bufferLength', '?')} items queued, "
+                f"{cs.get('revealedChars', '?')} monologue chars revealed"
+            )
+            if isinstance(painted, int) and painted < self.stroke_count:
+                lines.append(
+                    "  - WARNING: client performance lagged behind the server; parity.png "
+                    "compares an incomplete client canvas against the full server render"
+                )
+        if self.critiques:
+            lines.append("")
+            lines.append("## Critique verdicts")
+            for i, critique in enumerate(self.critiques, 1):
+                lines.append(f"{i}. {critique}")
+
+        lines += [
+            "",
+            "## Final result",
+            "",
+            "![final canvas](final-canvas.png)",
+            "",
+            "![parity](parity.png)",
+            "",
+            "## Timeline",
+            "",
+        ]
+
+        # Aggregate thinking text between other events so the timeline reads
+        # as: thought → action → screenshot.
+        pending_thinking: list[str] = []
+
+        def flush_thinking() -> None:
+            if pending_thinking:
+                text = " ".join(pending_thinking)
+                if len(text) > 600:
+                    text = text[:600] + "…"
+                lines.append(f"> {text}")
+                lines.append("")
+                pending_thinking.clear()
+
+        for event in self.events:
+            t = event["timestamp"]
+            etype = event["type"]
+            data = event.get("data", {})
+
+            if etype in ("ws:thinking", "ws:thinking_delta"):
+                text = data.get("thinking") or data.get("text") or ""
+                if text:
+                    pending_thinking.append(text)
+                continue
+
+            if etype == "screenshot":
+                flush_thinking()
+                name = data.get("filename", "")
+                lines.append(f"`{t:6.1f}s` ![{name}]({name})")
+                lines.append("")
+            elif etype == "canvas_capture":
+                flush_thinking()
+                name = data.get("filename", "")
+                lines.append(f"`{t:6.1f}s` canvas ![{name}]({name})")
+                lines.append("")
+            elif etype == "state_transition":
+                flush_thinking()
+                lines.append(f"`{t:6.1f}s` **state** {data.get('from')} → {data.get('to')}")
+            elif etype == "ws:agent_strokes_ready":
+                flush_thinking()
+                lines.append(f"`{t:6.1f}s` **strokes ready** count={data.get('count', '?')}")
+            elif etype == "ws:tool_use":
+                if data.get("status") == "completed":
+                    flush_thinking()
+                    lines.append(f"`{t:6.1f}s` **tool** {data.get('name', '?')}")
+            elif etype == "ws:code_execution":
+                if data.get("status") == "completed":
+                    flush_thinking()
+                    tool = data.get("tool_name") or data.get("name") or "?"
+                    if tool == "critique_canvas":
+                        summary = extract_critique_summary(data.get("stdout") or "")
+                        lines.append(f"`{t:6.1f}s` **critique** {summary[:500]}")
+                    else:
+                        rc = data.get("return_code")
+                        lines.append(f"`{t:6.1f}s` **exec** {tool} rc={rc}")
+            elif etype == "ws:error":
+                flush_thinking()
+                lines.append(f"`{t:6.1f}s` **ERROR** {str(data)[:300]}")
+            elif etype in ("prompt_entered", "prompt_submitted"):
+                lines.append(f"`{t:6.1f}s` **{etype}** {data.get('prompt', '')}")
+
+        flush_thinking()
+
+        report_path = self.output_dir / "report.md"
+        report_path.write_text("\n".join(lines))
+        return report_path
+
     def write_summary(self) -> None:
         """Write test summary to file."""
         duration = time.monotonic() - self.start_time
 
-        # Save events log
         events_path = self.output_dir / "events.json"
         with open(events_path, "w") as f:
             json.dump(self.events, f, indent=2)
 
-        # Write summary
         summary = [
             "Visual Flow Test Summary",
             "========================",
             "",
             f"Prompt: {self.prompt}",
-            f"Renderer: {self.renderer}",
             f"Duration: {duration:.1f}s",
-            f"Screenshots: {self.screenshot_count}",
-            f"Strokes: {self.stroke_count}",
+            f"Screenshots: {self.screenshot_count} (+{self.canvas_capture_count} canvas crops)",
+            f"Stroke batches: {self.batch_count} ({self.stroke_count} strokes)",
             f"Thinking messages: {self.thinking_count}",
-            f"Interval: {self.interval}s",
+            f"Critiques: {len(self.critiques)}",
             f"Agent finished: {'Yes' if self.agent_idle else 'No (timeout)'}",
+        ]
+        if self.parity_diff is not None:
+            summary.append(f"Client/server parity mean diff: {self.parity_diff:.2f}/255")
+        summary += [
             "",
             f"Output directory: {self.output_dir}",
-            "Events log: events.json",
-            "",
-            "To create time-lapse:",
-            f"  ffmpeg -framerate 4 -pattern_type glob -i '{self.output_dir}/*.png' -vf scale=600:-1 -c:v libx264 -pix_fmt yuv420p timelapse.mp4",
+            "Start with report.md, contact-sheet.png, and parity.png",
         ]
 
         summary_path = self.output_dir / "summary.txt"
         with open(summary_path, "w") as f:
             f.write("\n".join(summary))
 
-        # Print summary
         print(f"\n{GREEN}{'=' * 50}{RESET}")
         for line in summary:
             print(line)
@@ -524,7 +857,6 @@ class VisualFlowTest:
 
     def create_and_open_video(self) -> Path | None:
         """Create timelapse video and open in default viewer."""
-        # Check for ffmpeg
         if not shutil.which("ffmpeg"):
             self.log("ffmpeg not found, skipping video creation", YELLOW)
             return None
@@ -532,13 +864,12 @@ class VisualFlowTest:
         output_video = self.output_dir / "timelapse.mp4"
         self.log("[VIDEO] Creating timelapse...", CYAN)
 
-        # Build ffmpeg command
         cmd = [
             "ffmpeg", "-y",
             "-framerate", "4",
             "-pattern_type", "glob",
-            "-i", f"{self.output_dir}/*.png",
-            "-vf", "scale=600:-1",
+            "-i", f"{self.output_dir}/[0-9]*.png",
+            "-vf", "scale=600:-2",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             str(output_video),
@@ -551,7 +882,6 @@ class VisualFlowTest:
 
         self.log(f"[VIDEO] Created: {output_video}", GREEN)
 
-        # Open video on macOS
         if sys.platform == "darwin":
             subprocess.run(["open", str(output_video)])
             self.log("[VIDEO] Opened in default player", GREEN)
@@ -565,82 +895,91 @@ class VisualFlowTest:
         print(f"Interval: {self.interval}s, Timeout: {self.timeout}s")
         print(f"Output: {self.output_dir}\n")
 
-        # Get auth token
         self.log("Getting auth token...", CYAN)
         self.token = await get_token()
 
-        # Full teardown before test
         if self.do_teardown:
-            await full_teardown(self.token)
+            await full_teardown(self.token, self.clear_canvas)
 
-        # Setup browser
         await self.setup_browser()
 
-        # Start tracking
         self.start_time = time.monotonic()
         stop_event = asyncio.Event()
 
-        # Start WebSocket monitor in background
         self.ws_monitor_task = asyncio.create_task(self.websocket_monitor(stop_event))
 
-        # Wait for WebSocket to be ready
         self.log("Waiting for WebSocket init...", CYAN)
         if not await self.wait_for_ws_ready(timeout=10.0):
             self.log("WebSocket init timeout - continuing anyway", YELLOW)
 
         try:
-            # Take initial screenshot (home panel)
-            await self.take_screenshot()
+            # Initial screenshot (home panel / studio)
+            await self.take_screenshot("initial")
 
-            # Enter studio via UI (type prompt and submit)
-            self.log(f"[UI] Entering prompt: \"{self.prompt}\"", CYAN)
+            self.log(f'[UI] Entering prompt: "{self.prompt}"', CYAN)
             await self.enter_studio_via_ui()
             self.log("[UI] Submitted", GREEN)
 
-            # Take screenshot after entering studio
-            await self.take_screenshot()
+            await self.take_screenshot("submitted")
 
-            # Take screenshots at interval until stopped or timeout
+            # Interval screenshots until stopped or timeout
             end_time = self.start_time + self.timeout
             while not stop_event.is_set() and time.monotonic() < end_time:
-                await asyncio.sleep(self.interval)
-                await self.take_screenshot()
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=self.interval)
+                except TimeoutError:
+                    await self.take_screenshot()
+                    await self.sample_client_state()
 
             if not stop_event.is_set():
                 self.log("Timeout reached", YELLOW)
 
+            # Final settled frames + parity while the browser is still up
+            await self.finalize_captures()
+
         finally:
-            # Stop WebSocket monitor
             stop_event.set()
+            for task in list(self._pending_captures):
+                task.cancel()
             if self.ws_monitor_task:
                 try:
                     await asyncio.wait_for(self.ws_monitor_task, timeout=2.0)
-                except TimeoutError:
+                except (TimeoutError, asyncio.CancelledError):
                     self.ws_monitor_task.cancel()
 
-            # Cleanup browser
             if self.browser:
                 await self.browser.close()
             if hasattr(self, "playwright"):
                 await self.playwright.stop()
 
-        # Log completion stats
-        self.log(f"[COMPLETE] Strokes: {self.stroke_count}, Thinking: {self.thinking_count}, Screenshots: {self.screenshot_count}", GREEN)
+        self.log(
+            f"[COMPLETE] Batches: {self.batch_count}, Strokes: {self.stroke_count}, "
+            f"Thinking: {self.thinking_count}, Screenshots: {self.screenshot_count}",
+            GREEN,
+        )
 
-        # Write summary
+        report = self.write_report()
+        self.log(f"Report: {report}", GREEN)
+        self.create_contact_sheet()
         self.write_summary()
 
-        # Create and open video
         if self.create_video and self.screenshot_count > 0:
             self.create_and_open_video()
 
         return self.agent_idle
 
 
+def parse_viewport(viewport_str: str) -> tuple[int, int]:
+    parts = viewport_str.lower().split("x")
+    if len(parts) != 2:
+        raise argparse.ArgumentTypeError(f"Invalid viewport: {viewport_str} (use WxH)")
+    return int(parts[0]), int(parts[1])
+
+
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Visual flow test: Time-lapse screenshot capture during agent execution.",
+        description="Visual flow test: observe the agent painting end-to-end.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -681,14 +1020,24 @@ Prerequisites:
         "--expo-port",
         type=int,
         default=DEFAULT_EXPO_PORT,
-        help=f"Expo port (default: {DEFAULT_EXPO_PORT})",
+        help=f"App port (default: {DEFAULT_EXPO_PORT}; 5173 for Vite web)",
+    )
+    parser.add_argument(
+        "--viewport",
+        type=parse_viewport,
+        help="Viewport WxH (default: 390x844 mobile, 1280x900 web)",
     )
     parser.add_argument(
         "--renderer",
         type=str,
         choices=["svg", "freehand"],
         default="svg",
-        help="Renderer to use: svg or freehand (default: svg)",
+        help="Mobile renderer to select: svg or freehand (default: svg)",
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Treat the app as the Vite web studio (auto-detected for port 5173)",
     )
     parser.add_argument(
         "--no-headless",
@@ -713,7 +1062,6 @@ Prerequisites:
 
     args = parser.parse_args()
 
-    # Validate
     if args.interval <= 0:
         print(f"{RED}Error: --interval must be positive{RESET}")
         sys.exit(1)
@@ -726,11 +1074,13 @@ Prerequisites:
         timeout=args.timeout,
         output_dir=output_dir,
         expo_port=args.expo_port,
+        viewport=args.viewport,
         headless=not args.no_headless,
         clear_canvas=not args.no_clear,
         do_teardown=not args.no_teardown,
         create_video=not args.no_video,
         renderer=args.renderer,
+        web=True if args.web else None,
     )
 
     try:
