@@ -14,19 +14,19 @@ import type { Stamp } from '@code-monet/shared';
 
 import { drawStampsToContext } from '../../renderers/stampSprites';
 
-const HERO_PIECE_URL = '/hero/the-great-wave.json';
-const HERO_TITLE = 'The Great Wave, After Hokusai';
+const HERO_PIECE_URL = '/hero/poplars-at-dusk.json';
+const HERO_TITLE = 'Poplars at Dusk';
 
-/** Painting phases: caption + tempo, keyed to fraction of strokes done. */
+/** Painting phases: caption + tempo, keyed to fraction of strokes done.
+ * Boundaries measured from the piece's recorded stroke order. */
 const PHASES: { at: number; label: string; speed: number }[] = [
-  { at: 0.0, label: 'priming a warm cream sky…', speed: 1.7 },
-  { at: 0.3, label: 'raising the wave wall in one sweep…', speed: 0.85 },
-  { at: 0.4, label: 'the lip hooks forward and down…', speed: 0.55 },
-  { at: 0.46, label: 'cutting the pale hollow under the curl…', speed: 0.6 },
-  { at: 0.52, label: 'foam claws — quick, broken marks…', speed: 0.9 },
-  { at: 0.64, label: 'striations climb the body of the wave…', speed: 1.15 },
-  { at: 0.76, label: 'layered chop through the foreground…', speed: 1.5 },
-  { at: 0.9, label: 'a boat for scale; Fuji watches from the trough…', speed: 0.6 },
+  { at: 0.0, label: 'flooding the canvas with dusk…', speed: 1.7 },
+  { at: 0.05, label: 'a low sun, barely holding…', speed: 0.9 },
+  { at: 0.13, label: 'the far bank settles in…', speed: 1.2 },
+  { at: 0.22, label: 'four poplars rise against the light…', speed: 0.8 },
+  { at: 0.53, label: "the water takes the sky's color…", speed: 1.6 },
+  { at: 0.84, label: 'the trees fall into the river…', speed: 0.95 },
+  { at: 0.96, label: 'last sparks on the water…', speed: 0.5 },
 ];
 
 const BASE_STAMPS_PER_FRAME = 7;
@@ -213,19 +213,32 @@ export function HeroPainting(): React.ReactElement {
             progress = 0;
           }
         } else {
-          const budget = Math.max(1, Math.round(BASE_STAMPS_PER_FRAME * phase.speed));
-          progress = Math.min(element.stamps.length, progress + budget);
-          drawStampsToContext(visible, element.stamps, element.brush, progress);
-          const tip = element.stamps[Math.max(0, progress - 1)]!;
-          penPosition = { x: tip.x, y: tip.y, color: element.color };
-          if (progress >= element.stamps.length) {
-            drawStampsToContext(committed, element.stamps, element.brush, element.stamps.length);
-            stampsDone += element.stamps.length;
+          // The stamp budget flows across consecutive small strokes so dab
+          // fields stay brisk; it stops at fills and scheduled pauses.
+          let budget = Math.max(1, Math.round(BASE_STAMPS_PER_FRAME * phase.speed));
+          while (budget > 0 && elementIndex < plan.length) {
+            const current = plan[elementIndex]!;
+            if (current.kind !== 'stroke') break;
+            const step = Math.min(budget, current.stamps.length - progress);
+            progress += step;
+            budget -= step;
+            if (progress < current.stamps.length) {
+              drawStampsToContext(visible, current.stamps, current.brush, progress);
+              const tip = current.stamps[Math.max(0, progress - 1)]!;
+              penPosition = { x: tip.x, y: tip.y, color: current.color };
+              break;
+            }
+            drawStampsToContext(committed, current.stamps, current.brush, current.stamps.length);
+            stampsDone += current.stamps.length;
+            const tip = current.stamps[current.stamps.length - 1]!;
+            penPosition = { x: tip.x, y: tip.y, color: current.color };
             elementIndex++;
             progress = 0;
-            // Breathe between strokes; occasionally step back and look.
-            if (rng() < 0.06) pauseFrames = 14 + Math.floor(rng() * 22);
-            else if (rng() < 0.3) pauseFrames = 2;
+            // Occasionally step back and look at the whole.
+            if (rng() < 0.02) {
+              pauseFrames = 14 + Math.floor(rng() * 22);
+              break;
+            }
           }
         }
 
