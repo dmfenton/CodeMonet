@@ -320,6 +320,11 @@ jobs:
               \"docker-compose -f docker-compose.prod.yml up -d --no-deps --force-recreate drawing-agent web-ssr nginx\",
               \"echo 'Waiting for containers to be healthy...'\",
               \"sleep 10\",
+              \"docker ps --format '{{.Names}}' | grep -qx drawing-agent || docker start drawing-agent\",
+              \"docker ps --format '{{.Names}}' | grep -qx web-ssr || docker start web-ssr\",
+              \"sleep 5\",
+              \"docker ps --format '{{.Names}}' | grep -qx drawing-agent\",
+              \"docker ps --format '{{.Names}}' | grep -qx web-ssr\",
               \"docker ps | grep -E 'drawing-agent|web-ssr'\"
             ]" \
             --query "Command.CommandId" \
@@ -368,8 +373,9 @@ jobs:
         run: |
           echo "Verifying v$VERSION is running..."
 
-          # Wait up to 1 minute for both backend and SSR to be healthy
-          for i in {1..12}; do
+          # Wait up to 3 minutes for both backend and SSR to be healthy
+          # (drawing-agent takes ~60-90s to come up after a recreate)
+          for i in {1..36}; do
             sleep 5
 
             # Check backend version
@@ -386,10 +392,10 @@ jobs:
               exit 0
             fi
 
-            echo "Attempt $i/12: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), SSR='${SSR_STATUS:-unknown}' (want 'healthy')"
+            echo "Attempt $i/36: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), SSR='${SSR_STATUS:-unknown}' (want 'healthy')"
           done
 
-          echo "❌ Deployment verification failed after 1 minute"
+          echo "❌ Deployment verification failed after 3 minutes"
           echo "Expected backend: $VERSION, got: $DEPLOYED_VERSION"
           echo "Expected SSR: healthy, got: $SSR_STATUS"
           exit 1
