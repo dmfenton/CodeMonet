@@ -5,7 +5,7 @@
 
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { LiveCanvas, ThoughtStream } from './homepage/index';
+import { HeroPainting } from './homepage/index';
 import { SHOWCASE_PIECES } from './homepage/showcase';
 
 interface HomepageProps {
@@ -54,14 +54,7 @@ export function Homepage({ onEnter }: HomepageProps): React.ReactElement {
           </div>
 
           <div className="hero-canvas">
-            <div className="canvas-easel">
-              <div className="canvas-frame">
-                <div className="canvas-body">
-                  <LiveCanvas />
-                </div>
-              </div>
-            </div>
-            <ThoughtStream />
+            <HeroPainting />
           </div>
         </div>
       </section>

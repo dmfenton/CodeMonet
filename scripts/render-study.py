@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 import time
 from pathlib import Path as FilePath
@@ -28,6 +29,7 @@ async def main() -> int:
     parser = argparse.ArgumentParser(description="Render a sandbox study to PNG")
     parser.add_argument("study", help="Python file with generate_svg-style code")
     parser.add_argument("-o", "--output", help="Output PNG path")
+    parser.add_argument("--json", help="Also export paths as JSON (for stroke replay)")
     parser.add_argument("--width", type=int, default=800)
     parser.add_argument("--height", type=int, default=600)
     args = parser.parse_args()
@@ -62,6 +64,26 @@ async def main() -> int:
     )
     assert isinstance(png, bytes)
     out.write_bytes(png)
+
+    if args.json:
+        def compact(value: object) -> object:
+            if isinstance(value, float):
+                return round(value, 1)
+            if isinstance(value, list):
+                return [compact(v) for v in value]
+            if isinstance(value, dict):
+                return {k: compact(v) for k, v in value.items()}
+            return value
+
+        data = {
+            "width": args.width,
+            "height": args.height,
+            "paths": [compact(p.model_dump(exclude_none=True)) for p in paths],
+        }
+        json_out = FilePath(args.json)
+        json_out.write_text(json.dumps(data, separators=(",", ":")))
+        print(f"exported {len(paths)} paths to {json_out}")
+
     print(f"{len(paths)} paths | exec {t_exec:.1f}s | render {t_render:.1f}s | {out}")
     return 0
 
