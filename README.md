@@ -1,5 +1,7 @@
 # Code Monet
 
+Built by [Daniel Fenton](https://dmfenton.net). More on the project at [dmfenton.net/sketch/code-monet](https://dmfenton.net/sketch/code-monet/).
+
 An autonomous AI artist powered by Claude that creates drawings, observes its work, and iterates—with humans as creative collaborators.
 
 ![Demo](demo.gif) <!-- TODO: Add demo GIF -->
