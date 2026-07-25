@@ -1,12 +1,12 @@
 """Drawing style definitions."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel
 
 
-class DrawingStyleType(str, Enum):
+class DrawingStyleType(StrEnum):
     """Drawing style modes."""
 
     PLOTTER = "plotter"  # Monochrome pen plotter style (black lines)

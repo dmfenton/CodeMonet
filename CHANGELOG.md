@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Replace `python-jose` with PyJWT, pin container bases, run production services as non-root, and remove npm from the Node runtime image.
+- Remove obsolete nested lockfiles from the pre-workspaces package layout and update CI runtimes and actions to Node 24-compatible releases.
+
 ## [1.38.0] - 2026-06-10
 
 ### Added

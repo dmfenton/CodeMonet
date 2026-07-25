@@ -3,7 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 
 from code_monet.config import settings
 
@@ -57,7 +58,7 @@ def decode_token(token: str) -> dict[str, Any]:
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
         return payload
-    except JWTError as e:
+    except InvalidTokenError as e:
         raise TokenError(f"Invalid token: {e}") from e
 
 

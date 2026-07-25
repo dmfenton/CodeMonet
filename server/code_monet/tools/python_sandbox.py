@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sys
 import tempfile
 from pathlib import Path as FilePath
 from typing import Any
@@ -1372,7 +1373,7 @@ def output_svg_paths(svg_d_strings: list):
 
     try:
         proc = await asyncio.create_subprocess_exec(
-            "python3",
+            sys.executable,
             str(temp_path),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,

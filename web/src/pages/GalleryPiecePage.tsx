@@ -3,7 +3,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router';
 import { pathToSvgDScaled, type Path } from '@code-monet/shared';
 import { getApiUrl } from '../config';
 import type { GalleryPiece, PieceStrokes } from '../components/homepage/types';

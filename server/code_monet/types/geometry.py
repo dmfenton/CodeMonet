@@ -1,6 +1,6 @@
 """Core geometry types."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any, TypedDict
 
 from pydantic import BaseModel
@@ -28,7 +28,7 @@ class Point(BaseModel):
     y: float
 
 
-class PathType(str, Enum):
+class PathType(StrEnum):
     """Types of drawable paths."""
 
     LINE = "line"
