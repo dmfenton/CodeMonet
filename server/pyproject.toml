@@ -68,6 +68,7 @@ packages = ["code_monet"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [
