@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { HeroPainting } from './homepage/index';
 import { SHOWCASE_PIECES } from './homepage/showcase';
 

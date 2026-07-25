@@ -24,7 +24,7 @@ dependencies = [
     # Async file I/O
     "aiofiles>=24.1.0",
     # Authentication
-    "python-jose[cryptography]>=3.3.0",
+    "pyjwt[crypto]>=2.13.0",
     "passlib[bcrypt]>=1.7.4",
     "email-validator>=2.3.0",
     # AWS
@@ -68,6 +68,7 @@ packages = ["code_monet"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = [
@@ -118,5 +119,4 @@ dev = [
     "pytest-timeout>=2.4.0",
     "types-aiofiles>=25.1.0.20251011",
     "types-pillow>=10.2.0.20240822",
-    "types-python-jose>=3.5.0.20250531",
 ]

@@ -76,7 +76,7 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
                 asyncio.to_thread(
                     client.models.generate_content,
                     model="gemini-2.5-flash-image",
-                    contents=[prompt],
+                    contents=prompt,
                 ),
                 timeout=IMAGE_GEN_TIMEOUT,
             )

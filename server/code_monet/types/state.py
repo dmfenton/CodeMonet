@@ -1,6 +1,6 @@
 """Application state models."""
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
@@ -8,7 +8,7 @@ from code_monet.types.paths import Path
 from code_monet.types.styles import DrawingStyleType
 
 
-class AgentStatus(str, Enum):
+class AgentStatus(StrEnum):
     """Agent status values."""
 
     IDLE = "idle"
@@ -19,7 +19,7 @@ class AgentStatus(str, Enum):
     ERROR = "error"
 
 
-class PauseReason(str, Enum):
+class PauseReason(StrEnum):
     """Reason why the agent is paused.
 
     Used to determine whether to auto-resume on reconnect:

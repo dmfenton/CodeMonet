@@ -5,7 +5,7 @@
 
 import { StrictMode } from 'react';
 import { renderToString } from 'react-dom/server';
-import { StaticRouter } from 'react-router-dom/server';
+import { StaticRouter } from 'react-router';
 import { HelmetProvider, HelmetServerState } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { RendererProvider } from './context/RendererContext';
