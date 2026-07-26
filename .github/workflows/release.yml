@@ -172,6 +172,7 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters "commands=[
+              \"unset AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN\",
               \"echo 'Pulling new image...'\",
               \"docker pull $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION\",
               \"echo 'Running migrations...'\",
@@ -301,6 +302,7 @@ jobs:
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --parameters "commands=[
+              \"unset AWS_SHARED_CREDENTIALS_FILE AWS_CONFIG_FILE AWS_PROFILE AWS_DEFAULT_PROFILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN\",
               \"cd /home/ec2-user\",
               \"echo 'Syncing deploy config from S3...'\",
               \"aws s3 sync s3://${CONFIG_BUCKET}/deploy/ . --exclude 'web/*' --exclude 'data/*'\",
