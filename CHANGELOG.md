@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.2] - 2026-07-25
+
+### Security
+
+- Remove the unused system pip with its fixable advisories and add a backend image health probe so standalone deployments retain the same liveness signal as Compose.
+
+## [1.38.1] - 2026-07-25
+
 ### Security
 
 - Replace `python-jose` with PyJWT, pin container bases, run production services as non-root, and remove npm from the Node runtime image.
 - Remove obsolete nested lockfiles from the pre-workspaces package layout and update CI runtimes and actions to Node 24-compatible releases.
-- Remove the unused system pip with its fixable advisories and add a backend image health probe so standalone deployments retain the same liveness signal as Compose.
 
 ## [1.38.0] - 2026-06-10
 
