@@ -37,8 +37,9 @@ COPY --from=build /app/.venv ./.venv
 # Create logs directory for structured logging
 RUN mkdir -p /app/data/logs
 
-# Create non-root user for security (reduces blast radius of container escape)
-RUN /bin/busybox adduser -D -u 1000 appuser \
+# Remove the unused system package installer, then create the non-root runtime user.
+RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* /usr/local/bin/pip* \
+    && /bin/busybox adduser -D -u 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -51,6 +52,10 @@ ENV APP_VERSION=${APP_VERSION}
 ENV APP_COMMIT=${APP_COMMIT}
 ENV APP_BUILD_TIME=${APP_BUILD_TIME}
 ENV PATH="/app/.venv/bin:${PATH}"
+
+# Keep the image independently health-aware when it runs outside Compose.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
 # Run uvicorn directly (no reload in production)
 CMD ["uv", "run", "uvicorn", "code_monet.main:app", "--host", "0.0.0.0", "--port", "8000"]
