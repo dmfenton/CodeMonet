@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Keep automated dependency updates reviewable as individual PRs and run JavaScript audits without requiring the private Python platform checkout.
+- Keep automated dependency updates reviewable as individual PRs, bound native updates to Expo SDK compatibility, and run JavaScript audits without requiring the private Python platform checkout.
 
 ## [1.39.0] - 2026-08-23
 
