@@ -64,7 +64,7 @@ jobs:
           ref: ${{ steps.platform.outputs.sha }}
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/fenton-platform
-      - uses: astral-sh/setup-uv@v8.1.0
+      - uses: astral-sh/setup-uv@v10.0.1
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev
         working-directory: server
