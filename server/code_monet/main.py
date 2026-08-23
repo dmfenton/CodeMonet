@@ -12,6 +12,7 @@ from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from code_monet.anthropic_wif import anthropic_wif_configuration
 from code_monet.auth import auth_router
 from code_monet.auth.jwt import TokenError, get_user_id_from_token
 from code_monet.config import settings
@@ -61,10 +62,14 @@ async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
     logger.info("=== Server startup initiated ===")
 
     # Validate required settings
-    if not settings.jwt_secret:
+    if settings.dev_mode and not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET environment variable must be set")
-    if len(settings.jwt_secret) < 32:
+    if settings.dev_mode and len(settings.jwt_secret) < 32:
         raise RuntimeError("JWT_SECRET must be at least 32 characters")
+    if not settings.dev_mode:
+        anthropic_wif = anthropic_wif_configuration()
+        if anthropic_wif is None or not anthropic_wif.identity_token_available():
+            raise RuntimeError("Anthropic workload identity token is unavailable")
 
     # Run database migrations
     await run_migrations()

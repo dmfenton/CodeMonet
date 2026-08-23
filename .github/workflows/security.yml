@@ -1,0 +1,61 @@
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 9 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Resolve platform pin
+        id: platform
+        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v6
+        with:
+          repository: dmfenton/fenton-platform
+          ref: ${{ steps.platform.outputs.sha }}
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          path: vendor/fenton-platform
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm audit --audit-level=low
+      - uses: astral-sh/setup-uv@v8.1.0
+      - run: uv python install 3.12
+      - run: uv sync --frozen --extra dev
+        working-directory: server
+      - run: bash scripts/audit-python-dependencies.sh
+
+  repository:
+    name: Repository and secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Scan repository
+        env:
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+        run: |
+          mkdir -p .trivy-cache
+          docker run --rm \
+            --volume "$PWD:/workspace:ro" \
+            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            "$TRIVY_IMAGE" fs \
+            --exit-code 1 \
+            --no-progress \
+            --scanners vuln,secret,misconfig \
+            --severity HIGH,CRITICAL \
+            --skip-dirs /workspace/.git \
+            --skip-dirs /workspace/.trivy-cache \
+            /workspace

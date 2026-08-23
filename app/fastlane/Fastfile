@@ -32,6 +32,7 @@ platform :ios do
       output_directory: "./build",
       output_name: "CodeMonet.ipa",
       clean: true,
+      xcargs: "OTHER_CODE_SIGN_FLAGS='--keychain #{ENV.fetch('KEYCHAIN_PATH')}'",
       export_options: {
         provisioningProfiles: {
           "net.dmfenton.sketchpad" => ENV["PROVISIONING_PROFILE_NAME"]

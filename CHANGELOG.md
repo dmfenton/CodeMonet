@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add npm, Python, repository, secret, configuration, and runtime-container security scanning with weekly Dependabot updates.
+
+### Changed
+
+- Move CodeMonet sign-in to shared Fenton Identity OAuth with PKCE, RS256 API verification, and rotating platform refresh tokens.
+- Replace the static Anthropic API key with short-lived AWS workload identity federation, including the independent visual critique runtime.
+- Upgrade Expo to SDK 57, React Native to 0.86, Python to 3.12, and refresh locked JavaScript and Python dependencies.
+
+### Security
+
+- Disable app-local password, refresh, and magic-link endpoints in production and remove higher-precedence Anthropic credential sources from Claude subprocesses.
+
 ## [1.38.2] - 2026-07-25
 
 ### Security

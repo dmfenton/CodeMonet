@@ -34,6 +34,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve platform pin
+        id: platform
+        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          repository: dmfenton/fenton-platform
+          ref: ${{ steps.platform.outputs.sha }}
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          path: vendor/fenton-platform
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -60,24 +71,21 @@ jobs:
             echo "tag=v$VERSION"
           } >> "$GITHUB_OUTPUT"
 
-      # Run E2E SDK tests before deploying to catch breaking changes
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: 'latest'
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.12
 
       - name: Install server dependencies
         working-directory: server
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
 
-      - name: Run E2E SDK tests
+      - name: Run server tests
         working-directory: server
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run pytest -m e2e tests/test_e2e_sdk.py -v
+        run: uv run pytest -q
 
       - name: Build web frontend
         env:
@@ -118,8 +126,15 @@ jobs:
             --build-arg APP_COMMIT="$COMMIT_SHA" \
             --build-arg APP_BUILD_TIME="$BUILD_TIME" \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION \
-            ./server
+            -f server/Dockerfile \
+            .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
+            --exit-code 1 --no-progress --scanners vuln,secret --severity HIGH,CRITICAL \
+            $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
@@ -140,6 +155,12 @@ jobs:
             -f web/Dockerfile \
             .
           docker tag $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION $ECR_REGISTRY/$ECR_SSR_REPOSITORY:latest
+
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
+            --exit-code 1 --no-progress --scanners vuln,secret --severity HIGH,CRITICAL \
+            $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION

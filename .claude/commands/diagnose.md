@@ -90,7 +90,7 @@ Shows full trace details including:
 ### Endpoint Traces
 
 ```bash
-uv run python scripts/diagnose.py path /auth/verify --md
+uv run python scripts/diagnose.py path /auth/callback --md
 ```
 
 Shows traces for a specific API endpoint.

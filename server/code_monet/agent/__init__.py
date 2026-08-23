@@ -30,6 +30,7 @@ from code_monet.agent.processor import (
 from code_monet.agent.processor import process_turn_messages as _process_turn_messages
 from code_monet.agent.prompts import SYSTEM_PROMPT, build_system_prompt
 from code_monet.agent.renderer import image_to_base64
+from code_monet.anthropic_wif import anthropic_claude_environment
 from code_monet.config import settings
 from code_monet.rendering import image_to_jpeg_bytes, options_for_agent_view, render_strokes
 from code_monet.tools import create_drawing_server
@@ -167,7 +168,7 @@ class DrawingAgent:
             # Painterly canvas images are large; default 1MB buffer is too small.
             "max_buffer_size": 16 * 1024 * 1024,
             "hooks": {"PostToolUse": [HookMatcher(hooks=[self._post_tool_use_hook])]},
-            "env": {"ANTHROPIC_API_KEY": settings.anthropic_api_key},
+            "env": anthropic_claude_environment(),
         }
 
     def _build_options(

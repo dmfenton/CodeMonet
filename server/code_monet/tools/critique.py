@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections.abc import AsyncGenerator
 from typing import Any
 
-from anthropic import AsyncAnthropic
-from claude_agent_sdk import tool
+from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query, tool
 
+from code_monet.anthropic_wif import anthropic_claude_environment
 from code_monet.config import settings
 
 from .callbacks import get_active_reference_png, get_canvas_callback
@@ -68,6 +69,50 @@ def _image_block(image_bytes: bytes) -> dict[str, Any]:
     }
 
 
+async def _critique_prompt(
+    brief: str, canvas: bytes, reference: bytes | None
+) -> AsyncGenerator[dict[str, Any], None]:
+    content = [
+        {"type": "text", "text": f"{CRITIQUE_PROMPT}\n\nBRIEF:\n{brief}"},
+        _image_block(canvas),
+    ]
+    if reference is not None:
+        content.extend(
+            [
+                {"type": "text", "text": REFERENCE_COMPARISON_NOTE},
+                _image_block(reference),
+            ]
+        )
+    yield {
+        "type": "user",
+        "message": {"role": "user", "content": content},
+        "parent_tool_use_id": None,
+    }
+
+
+async def _run_critique(brief: str, canvas: bytes, reference: bytes | None) -> str:
+    options = ClaudeAgentOptions(
+        tools=[],
+        allowed_tools=[],
+        disallowed_tools=["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "WebSearch", "Write"],
+        permission_mode="dontAsk",
+        model=settings.agent_model if settings.dev_mode else settings.agent_model_prod,
+        env=anthropic_claude_environment(),
+        max_turns=1,
+        setting_sources=[],
+        skills=[],
+    )
+    text_parts: list[str] = []
+    async for message in query(prompt=_critique_prompt(brief, canvas, reference), options=options):
+        if isinstance(message, AssistantMessage):
+            text_parts.extend(
+                block.text
+                for block in message.content
+                if isinstance(block, TextBlock) and block.text
+            )
+    return "\n".join(text_parts).strip()
+
+
 async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
     """Critique the current canvas against a visual brief (and reference, if any)."""
     brief = args.get("brief", "")
@@ -93,31 +138,8 @@ async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    client = AsyncAnthropic(api_key=settings.anthropic_api_key)
-    model = settings.agent_model if settings.dev_mode else settings.agent_model_prod
-
-    content: list[Any] = [
-        {"type": "text", "text": f"{CRITIQUE_PROMPT}\n\nBRIEF:\n{brief.strip()}"},
-        _image_block(png_bytes),
-    ]
     reference_png = get_active_reference_png()
-    if reference_png is not None:
-        content.append({"type": "text", "text": REFERENCE_COMPARISON_NOTE})
-        content.append(_image_block(reference_png))
-
-    response = await client.messages.create(
-        model=model,
-        max_tokens=900,
-        temperature=0,
-        messages=[{"role": "user", "content": content}],
-    )
-
-    text_parts = []
-    for block in response.content:
-        text = getattr(block, "text", None)
-        if isinstance(text, str):
-            text_parts.append(text)
-    critique = "\n".join(text_parts).strip()
+    critique = await _run_critique(brief.strip(), png_bytes, reference_png)
     if not critique:
         critique = "VERDICT: FAIL\nFINDINGS:\n- Critique model returned no text.\nREQUIRED_REVISIONS:\n- Call view_canvas and revise manually."
 

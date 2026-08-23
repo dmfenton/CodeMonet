@@ -1,57 +1,40 @@
 # Authentication
 
-## Sign-in Methods
+Production authentication is owned by Fenton Identity at `https://identity.dmfenton.net`.
+CodeMonet is an OAuth public client (`net.dmfenton.codemonet`) using authorization code flow with
+PKCE. The API accepts only RS256 platform access tokens for audience `codemonet-api` and the
+`fenton` household.
 
-**Magic Link (default):**
+## Sign-in flow
 
-1. User enters email in app
-2. Server sends email with sign-in link via SES
-3. User taps link -> iOS Universal Link opens app
-4. App exchanges token for JWT -> user authenticated
+1. The client creates a random PKCE verifier and stores it only on that device.
+2. The client sends the email, SHA-256 challenge, client ID, and fixed callback URL to Fenton
+   Identity.
+3. Shared communications delivers the one-time link.
+4. `/auth/callback?code=...` exchanges the code and verifier for rotating platform tokens.
+5. CodeMonet verifies the access token against the shared JWKS and maps the stable platform owner
+   subject to exactly one existing active CodeMonet user.
 
-**Password (legacy):**
+The platform access token intentionally omits email. `/auth/me` returns the app-owned user record
+after the resource-server boundary succeeds. WebSocket authentication uses the same access token.
 
-1. Admin creates invite code via CLI
-2. User signs up with invite code + password
-3. User signs in with email/password
+## Production boundaries
 
-## JWT Tokens
+- Password, local magic-link, local code-verification, and app-local refresh endpoints return 404.
+- The local HS256 token implementation remains development-only for fixtures and explicit dev
+  tokens.
+- The platform pin in `fenton-platform.lock` is checked out at the exact commit for CI and image
+  builds.
+- The iOS universal link path is `/auth/callback*` for bundle `net.dmfenton.sketchpad`.
 
-- Access token (1 day) for API calls
-- Refresh token (1 year) to get new access token
-- WebSocket auth via `?token=<jwt>` query param
+## Configuration
 
-## Magic Link API
+Public defaults live in `code_monet.config.Settings`:
 
-```bash
-# Request magic link (sends email)
-curl -X POST https://monet.dmfenton.net/auth/magic-link \
-  -H "Content-Type: application/json" \
-  -d '{"email": "user@example.com"}'
+- `IDENTITY_ISSUER=https://identity.dmfenton.net`
+- `IDENTITY_JWKS_URL=https://identity.dmfenton.net/.well-known/jwks.json`
+- `IDENTITY_AUDIENCE=codemonet-api`
+- `IDENTITY_CLIENT_ID=net.dmfenton.codemonet`
+- `IDENTITY_HOUSEHOLD_ID=fenton`
 
-# Verify magic link token (returns JWT)
-curl -X POST https://monet.dmfenton.net/auth/magic-link/verify \
-  -H "Content-Type: application/json" \
-  -d '{"token": "abc123..."}'
-```
-
-## iOS Universal Links
-
-The app uses Universal Links so magic link emails open directly in the app:
-
-- **AASA endpoint:** `https://monet.dmfenton.net/.well-known/apple-app-site-association`
-- **Path handled:** `/auth/verify?token=...`
-- **Bundle ID:** `net.dmfenton.sketchpad`
-- **Team ID:** Set via `APPLE_TEAM_ID` env var on server
-
-The AASA file is served dynamically by the FastAPI server (see `main.py`).
-
-## Environment Variables
-
-```bash
-# Required for auth
-JWT_SECRET=<generate with: python -c "import secrets; print(secrets.token_hex(32))">
-
-# Required for iOS Universal Links
-APPLE_TEAM_ID=PG5D259899
-```
+`JWT_SECRET` is required only for development-only legacy tokens.

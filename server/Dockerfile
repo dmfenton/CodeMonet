@@ -1,14 +1,15 @@
 FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df AS build
 
-WORKDIR /app
+WORKDIR /app/server
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 
 RUN apk add --no-cache build-base
 
-COPY pyproject.toml uv.lock alembic.ini ./
-COPY code_monet/ code_monet/
-COPY alembic/ alembic/
+COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
+COPY server/code_monet/ code_monet/
+COPY server/alembic/ alembic/
+COPY vendor/fenton-platform/python /app/vendor/fenton-platform/python
 
 RUN uv sync --frozen --no-dev --no-cache
 
@@ -26,16 +27,17 @@ LABEL org.opencontainers.image.created="${APP_BUILD_TIME}"
 LABEL org.opencontainers.image.title="code-monet"
 LABEL org.opencontainers.image.description="Code Monet - Autonomous AI artist"
 
-WORKDIR /app
+WORKDIR /app/server
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
-COPY pyproject.toml uv.lock alembic.ini ./
-COPY code_monet/ code_monet/
-COPY alembic/ alembic/
-COPY --from=build /app/.venv ./.venv
+COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
+COPY server/code_monet/ code_monet/
+COPY server/alembic/ alembic/
+COPY vendor/fenton-platform/python /app/vendor/fenton-platform/python
+COPY --from=build /app/server/.venv ./.venv
 
 # Create logs directory for structured logging
-RUN mkdir -p /app/data/logs
+RUN mkdir -p /app/server/data/logs
 
 # Remove the unused system package installer, then create the non-root runtime user.
 RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* /usr/local/bin/pip* \

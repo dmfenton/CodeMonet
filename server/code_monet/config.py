@@ -53,8 +53,12 @@ class Settings(BaseSettings):
         env_file=("../.env", ".env"), env_file_encoding="utf-8", extra="ignore"
     )
 
-    # Required for the default Anthropic backend (from SSM or env)
-    anthropic_api_key: str = _ssm("anthropic_api_key")
+    # Anthropic Workload Identity Federation. Static API keys are unsupported.
+    anthropic_federation_rule_id: str = _ssm("anthropic_federation_rule_id")
+    anthropic_organization_id: str = _ssm("anthropic_organization_id")
+    anthropic_service_account_id: str = _ssm("anthropic_service_account_id")
+    anthropic_workspace_id: str = _ssm("anthropic_workspace_id")
+    anthropic_identity_token_file: str = "/run/secrets/anthropic/aws-identity-token"
 
     # Optional OpenAI backend. Set AGENT_PROVIDER=openai and OPENAI_API_KEY to use it.
     openai_api_key: str = _ssm("openai_api_key")
@@ -71,6 +75,13 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 24  # 1 day
     jwt_refresh_token_expire_days: int = 365  # 1 year
+
+    # Shared Fenton identity resource-server contract
+    identity_issuer: str = "https://identity.dmfenton.net"
+    identity_jwks_url: str = "https://identity.dmfenton.net/.well-known/jwks.json"
+    identity_audience: str = "codemonet-api"
+    identity_client_id: str = "net.dmfenton.codemonet"
+    identity_household_id: str = "fenton"
 
     # Email (SES)
     ses_sender_email: str = "noreply@dmfenton.net"

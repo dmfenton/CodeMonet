@@ -6,6 +6,7 @@
 
 // Types
 export * from './types';
+export * from './auth/platform';
 
 // Canvas state management
 export * from './canvas';

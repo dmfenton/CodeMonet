@@ -34,7 +34,7 @@ uv run python scripts/diagnose.py ws 120
 uv run python scripts/diagnose.py slow 1 180
 
 # Traces for specific endpoint
-uv run python scripts/diagnose.py path /auth/verify 60
+uv run python scripts/diagnose.py path /auth/callback 60
 
 # Full trace details (including stack traces)
 uv run python scripts/diagnose.py trace <trace_id>

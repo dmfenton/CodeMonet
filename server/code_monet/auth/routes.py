@@ -4,7 +4,7 @@ import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse
 
 from code_monet.auth.dependencies import CurrentUser
@@ -40,7 +40,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+def require_legacy_auth() -> None:
+    """Keep password and app-local magic-link endpoints development-only."""
+    if not settings.dev_mode:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+
+@router.post(
+    "/signup",
+    response_model=TokenResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_legacy_auth)],
+)
 async def signup(request: SignupRequest) -> TokenResponse:
     """Create a new user account with an invite code.
 
@@ -85,7 +96,7 @@ async def signup(request: SignupRequest) -> TokenResponse:
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-@router.post("/signin", response_model=TokenResponse)
+@router.post("/signin", response_model=TokenResponse, dependencies=[Depends(require_legacy_auth)])
 async def signin(request: SigninRequest) -> TokenResponse:
     """Sign in with email and password.
 
@@ -120,7 +131,7 @@ async def signin(request: SigninRequest) -> TokenResponse:
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse, dependencies=[Depends(require_legacy_auth)])
 async def refresh(request: RefreshRequest) -> TokenResponse:
     """Refresh access token using a refresh token.
 
@@ -172,7 +183,11 @@ async def logout(user: CurrentUser) -> MessageResponse:
     return MessageResponse(message="Logged out successfully")
 
 
-@router.post("/magic-link", response_model=MessageResponse)
+@router.post(
+    "/magic-link",
+    response_model=MessageResponse,
+    dependencies=[Depends(require_legacy_auth)],
+)
 async def request_magic_link(request: MagicLinkRequest, http_request: Request) -> MessageResponse:
     """Request a magic link for passwordless signin.
 
@@ -241,7 +256,7 @@ async def request_magic_link(request: MagicLinkRequest, http_request: Request) -
     return MessageResponse(message="If an account exists, a magic link has been sent to your email")
 
 
-@router.get("/verify", response_class=HTMLResponse)
+@router.get("/verify", response_class=HTMLResponse, dependencies=[Depends(require_legacy_auth)])
 async def verify_magic_link_web(token: str = Query(...)) -> HTMLResponse:
     """Web handler for magic link verification.
 
@@ -389,7 +404,11 @@ async def verify_magic_link_web(token: str = Query(...)) -> HTMLResponse:
     )
 
 
-@router.post("/magic-link/verify", response_model=TokenResponse)
+@router.post(
+    "/magic-link/verify",
+    response_model=TokenResponse,
+    dependencies=[Depends(require_legacy_auth)],
+)
 async def verify_magic_link(request: MagicLinkVerifyRequest) -> TokenResponse:
     """Verify a magic link token and return JWT tokens.
 
@@ -427,7 +446,11 @@ async def verify_magic_link(request: MagicLinkVerifyRequest) -> TokenResponse:
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
-@router.post("/magic-link/verify-code", response_model=TokenResponse)
+@router.post(
+    "/magic-link/verify-code",
+    response_model=TokenResponse,
+    dependencies=[Depends(require_legacy_auth)],
+)
 async def verify_magic_link_code(request: MagicLinkCodeVerifyRequest) -> TokenResponse:
     """Verify a magic link using email and 6-digit code.
 

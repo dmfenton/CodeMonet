@@ -4,14 +4,14 @@
 
 Code Monet is an autonomous AI artist application with:
 
-- **Backend**: Python 3.11+ with FastAPI, Claude Agent SDK, WebSocket support
+- **Backend**: Python 3.12+ with FastAPI, Claude Agent SDK, WebSocket support
 - **Frontend**: React Native with Expo, TypeScript, react-native-svg
 
 ## Environment Setup
 
 - `.env` file lives in **project root** (not server/)
 - Config loads from both `../.env` and `.env` so it works from any directory
-- Required: `ANTHROPIC_API_KEY`
+- Production Claude auth uses Anthropic AWS workload identity; static Anthropic keys are unsupported
 
 ## Package Management
 

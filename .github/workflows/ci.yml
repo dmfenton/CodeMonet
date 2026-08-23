@@ -21,6 +21,7 @@ jobs:
           filters: |
             server:
               - 'server/**'
+              - 'fenton-platform.lock'
             frontend:
               - 'app/**'
               - 'web/**'
@@ -37,17 +38,28 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Resolve platform pin
+        id: platform
+        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          repository: dmfenton/fenton-platform
+          ref: ${{ steps.platform.outputs.sha }}
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          path: vendor/fenton-platform
+
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: 'latest'
 
       - name: Set up Python
-        run: uv python install 3.11
+        run: uv python install 3.12
 
       - name: Install dependencies
         working-directory: server
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
 
       - name: Lint with Ruff
         working-directory: server
@@ -90,7 +102,7 @@ jobs:
         continue-on-error: true
 
   app:
-    name: App (React Native)
+    name: Frontend
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
@@ -117,6 +129,18 @@ jobs:
 
       - name: Run tests
         run: npm test -w app
+
+      - name: Lint web
+        run: npm run lint -w web
+
+      - name: Type check web
+        run: npm run typecheck -w web
+
+      - name: Test web
+        run: npm run test -w web
+
+      - name: Build web
+        run: npm run build -w web
 
   # Replay tests validate app reducer handles real server messages
   # Uses pre-recorded fixtures - no API key needed, fast
@@ -152,19 +176,45 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Resolve platform pin
+        id: platform
+        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        with:
+          repository: dmfenton/fenton-platform
+          ref: ${{ steps.platform.outputs.sha }}
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          path: vendor/fenton-platform
+
       - name: Build Docker image
-        run: docker build -t code-monet-server ./server
+        run: docker build -t code-monet-server:ci -f server/Dockerfile .
+
+      - name: Scan Docker image
+        env:
+          TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
+        run: |
+          mkdir -p .trivy-cache
+          docker run --rm \
+            --volume /var/run/docker.sock:/var/run/docker.sock \
+            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            "$TRIVY_IMAGE" image \
+            --exit-code 1 \
+            --no-progress \
+            --scanners vuln,secret \
+            --severity HIGH,CRITICAL \
+            code-monet-server:ci
 
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [server, app, replay]
+    needs: [server, app, replay, docker]
     if: always()
     steps:
       - name: Check job results
         run: |
-          if [[ "${{ needs.server.result }}" == "failure" || "${{ needs.app.result }}" == "failure" || "${{ needs.replay.result }}" == "failure" ]]; then
+          if [[ "${{ needs.server.result }}" == "failure" || "${{ needs.app.result }}" == "failure" || "${{ needs.replay.result }}" == "failure" || "${{ needs.docker.result }}" == "failure" ]]; then
             echo "One or more jobs failed"
             exit 1
           fi

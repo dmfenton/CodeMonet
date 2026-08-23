@@ -6,6 +6,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from code_monet.auth.jwt import TokenError, get_user_id_from_token
+from code_monet.auth.platform import user_for_platform_token
+from code_monet.config import settings
 from code_monet.db import User, get_session, repository
 
 # HTTP Bearer token security scheme
@@ -21,17 +23,7 @@ async def get_current_user(
     Raises:
         HTTPException: 401 if token is invalid or user not found
     """
-    try:
-        user_id = get_user_id_from_token(credentials.credentials, expected_type="access")
-    except TokenError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from e
-
-    async with get_session() as session:
-        user = await repository.get_user_by_id(session, user_id)
+    user = await _authenticated_user(credentials.credentials)
 
     if user is None:
         raise HTTPException(
@@ -60,18 +52,23 @@ async def get_optional_user(
     if credentials is None:
         return None
 
-    try:
-        user_id = get_user_id_from_token(credentials.credentials, expected_type="access")
-    except TokenError:
-        return None
-
-    async with get_session() as session:
-        user = await repository.get_user_by_id(session, user_id)
+    user = await _authenticated_user(credentials.credentials)
 
     if user is None or not user.is_active:
         return None
 
     return user
+
+
+async def _authenticated_user(token: str) -> User | None:
+    if not settings.dev_mode:
+        return await user_for_platform_token(token)
+    try:
+        user_id = get_user_id_from_token(token, expected_type="access")
+    except TokenError:
+        return None
+    async with get_session() as session:
+        return await repository.get_user_by_id(session, user_id)
 
 
 # Type aliases for dependency injection
