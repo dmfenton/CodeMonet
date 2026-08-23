@@ -181,6 +181,17 @@ jobs:
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
+          security list-keychains -d user \
+            | sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' \
+            > "$RUNNER_TEMP/original-keychains.txt"
+          CI_KEYCHAINS=("$KEYCHAIN_PATH")
+          while IFS= read -r EXISTING_KEYCHAIN; do
+            if [[ -n "$EXISTING_KEYCHAIN" ]]; then
+              CI_KEYCHAINS+=("$EXISTING_KEYCHAIN")
+            fi
+          done < "$RUNNER_TEMP/original-keychains.txt"
+          security list-keychains -d user -s "${CI_KEYCHAINS[@]}"
+
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
 
       - name: Install certificate
@@ -258,7 +269,18 @@ jobs:
       - name: Clean up keychain
         if: always()
         run: |
-          security delete-keychain $KEYCHAIN_PATH || true
+          if [[ -f "$RUNNER_TEMP/original-keychains.txt" ]]; then
+            ORIGINAL_KEYCHAINS=()
+            while IFS= read -r EXISTING_KEYCHAIN; do
+              if [[ -n "$EXISTING_KEYCHAIN" ]]; then
+                ORIGINAL_KEYCHAINS+=("$EXISTING_KEYCHAIN")
+              fi
+            done < "$RUNNER_TEMP/original-keychains.txt"
+            security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" || true
+          fi
+          if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
 
   skip-report:
     name: Report Skipped Build
