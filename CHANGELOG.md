@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.3] - 2026-08-23
+
+### Fixed
+
+- Temporarily add the isolated signing keychain to Xcode's user search list during TestFlight archives, then restore the runner's original search list before deleting the CI keychain.
+
 ## [1.39.2] - 2026-08-23
 
 ### Fixed
