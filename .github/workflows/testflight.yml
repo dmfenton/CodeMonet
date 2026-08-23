@@ -206,6 +206,15 @@ jobs:
             -k "$KEYCHAIN_PASSWORD" \
             $KEYCHAIN_PATH
 
+          SIGNING_IDENTITY_SHA1=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | awk -F '"' '/Apple Distribution|iPhone Distribution/ { print $1 }' \
+            | awk '{ print $2; exit }')
+          if ! [[ "$SIGNING_IDENTITY_SHA1" =~ ^[0-9A-F]{40}$ ]]; then
+            echo "::error::Could not resolve the imported Apple Distribution identity"
+            exit 1
+          fi
+          echo "IOS_SIGNING_IDENTITY_SHA1=$SIGNING_IDENTITY_SHA1" >> "$GITHUB_ENV"
+
       - name: Install provisioning profile
         env:
           IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
