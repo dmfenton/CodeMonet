@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.1] - 2026-08-23
+
 ### Changed
 
-- Keep automated dependency updates reviewable as individual PRs, enforce Expo SDK compatibility in CI, and run JavaScript audits without requiring the private Python platform checkout.
+- Upgrade the supported JavaScript toolchain to ESLint 10, Vite 8, TypeScript 6, Vitest 4, jsdom 30, and current compatible type packages.
+- Consolidate TypeScript linting on one flat ESLint configuration and explicitly approve only the pinned lifecycle scripts required by Sentry, Skia, esbuild, and macOS file watching.
+- Update the uv GitHub Action and keep WebSockets on the newest 16.x release required by `google-genai`.
+- Keep automated dependency updates reviewable as individual PRs and run JavaScript audits without requiring the private Python platform checkout.
+
+### Fixed
+
+- Restore Expo SDK 57's exact native compatibility set, including `react-native-svg` 15.15.4, and enforce it in CI.
 
 ## [1.39.0] - 2026-08-23
 
