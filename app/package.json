@@ -30,7 +30,7 @@
     "expo-status-bar": "~57.0.1",
     "invariant": "^2.2.4",
     "memoize-one": "^6.0.0",
-    "react": "19.2.3",
+    "react": "19.2.8",
     "react-dom": "19.2.3",
     "react-native": "0.86.2",
     "react-native-gesture-handler": "~2.32.0",
