@@ -5,12 +5,40 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
+      # Expo upgrades own these native compatibility sets. Patch updates remain
+      # visible; minor/major updates move with a validated Expo SDK migration.
+      - dependency-name: 'expo*'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
+      - dependency-name: '@expo/*'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
+      - dependency-name: 'react-native*'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
+      - dependency-name: '@react-native*'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
+      - dependency-name: '@shopify/react-native-skia'
+        update-types:
+          - 'version-update:semver-major'
+          - 'version-update:semver-minor'
 
   - package-ecosystem: uv
     directory: /server
