@@ -24,6 +24,9 @@ platform :ios do
       code_sign_identity: "iPhone Distribution"
     )
 
+    keychain = ENV.fetch("KEYCHAIN_PATH")
+    signing_identity_sha1 = ENV.fetch("IOS_SIGNING_IDENTITY_SHA1")
+
     # Build the app
     build_app(
       workspace: "ios/CodeMonet.xcworkspace",
@@ -32,8 +35,12 @@ platform :ios do
       output_directory: "./build",
       output_name: "CodeMonet.ipa",
       clean: true,
-      xcargs: "OTHER_CODE_SIGN_FLAGS='--keychain #{ENV.fetch('KEYCHAIN_PATH')}'",
+      xcargs: "CODE_SIGN_IDENTITY='#{signing_identity_sha1}' CODE_SIGN_KEYCHAIN='#{keychain}' OTHER_CODE_SIGN_FLAGS='--keychain #{keychain}'",
+      export_xcargs: "CODE_SIGN_KEYCHAIN='#{keychain}' OTHER_CODE_SIGN_FLAGS='--keychain #{keychain}'",
       export_options: {
+        signingStyle: "manual",
+        signingCertificate: signing_identity_sha1,
+        teamID: ENV["TEAM_ID"],
         provisioningProfiles: {
           "net.dmfenton.sketchpad" => ENV["PROVISIONING_PROFILE_NAME"]
         }

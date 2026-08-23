@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.39.2] - 2026-08-23
+
+### Fixed
+
+- Resolve the imported Apple Distribution identity explicitly from the isolated CI keychain and pass that identity and keychain to Xcode during archive and export.
+
 ## [1.39.1] - 2026-08-23
 
 ### Changed
