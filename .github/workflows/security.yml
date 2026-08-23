@@ -11,9 +11,48 @@ permissions:
   contents: read
 
 jobs:
-  dependencies:
-    name: Dependency audit
+  changes:
+    name: Detect dependency changes
     runs-on: ubuntu-latest
+    outputs:
+      javascript: ${{ steps.filter.outputs.javascript }}
+      python: ${{ steps.filter.outputs.python }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            javascript:
+              - 'package.json'
+              - 'package-lock.json'
+              - 'app/package.json'
+              - 'shared/package.json'
+              - 'web/package.json'
+            python:
+              - 'server/pyproject.toml'
+              - 'server/uv.lock'
+              - 'scripts/audit-python-dependencies.sh'
+              - 'fenton-platform.lock'
+
+  javascript-dependencies:
+    name: JavaScript dependency audit
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.javascript == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: npm audit --audit-level=low
+
+  python-dependencies:
+    name: Python dependency audit
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.python == 'true'
     steps:
       - uses: actions/checkout@v6
       - name: Resolve platform pin
@@ -25,11 +64,6 @@ jobs:
           ref: ${{ steps.platform.outputs.sha }}
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/fenton-platform
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - run: npm ci
-      - run: npm audit --audit-level=low
       - uses: astral-sh/setup-uv@v8.1.0
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev
