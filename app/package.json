@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@babel/runtime": "^7.28.4",
+    "@babel/runtime": "^8.0.0",
     "@code-monet/shared": "*",
     "@expo/metro-runtime": "~57.0.12",
     "@expo/vector-icons": "^15.0.3",
