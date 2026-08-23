@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, TypeAlias, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -39,7 +39,7 @@ class PostToolUseHookDict(TypedDict, total=False):
 
 
 # Union of possible input types for hooks (dict at runtime, typed for static analysis)
-HookInputOrDict: TypeAlias = HookInput | PostToolUseHookDict | dict[str, Any]
+type HookInputOrDict = HookInput | PostToolUseHookDict | dict[str, Any]
 
 
 def extract_tool_name(input_data: HookInputOrDict) -> str:

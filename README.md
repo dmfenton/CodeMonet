@@ -33,7 +33,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 - Event-driven orchestration with `asyncio.Event` (no polling)
 - Per-user isolated workspaces with thread-safe multi-user support
 - Graceful reconnection with full state recovery
-- JWT authentication with distributed tracing correlation
+- Shared Fenton Identity OAuth with PKCE and distributed tracing correlation
 
 **Path interpolation engine**:
 
@@ -49,7 +49,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 | ---------- | ---------------------------------------------------- |
 | EC2 + EBS  | Compute with persistent storage, automated snapshots |
 | ECR        | Container registry with lifecycle policies           |
-| SES        | Magic link auth with DKIM, SPF, DMARC                |
+| Fenton Platform | Shared identity, PKCE magic links, RS256 tokens |
 | Route 53   | DNS management                                       |
 | X-Ray      | Distributed tracing with client span correlation     |
 | CloudWatch | Alarms and monitoring                                |
@@ -114,10 +114,10 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 | Layer          | Technologies                                            |
 | -------------- | ------------------------------------------------------- |
 | AI             | Claude Agent SDK or OpenAI Responses API, in-process tools, subprocess exec |
-| Backend        | Python 3.11+, FastAPI, SQLAlchemy async, Pydantic       |
+| Backend        | Python 3.12+, FastAPI, SQLAlchemy async, Pydantic       |
 | Frontend       | React Native, Expo, TypeScript, react-native-svg        |
 | Shared         | TypeScript monorepo with npm workspaces                 |
-| Infrastructure | Terraform, AWS (EC2, ECR, SES, Route 53, X-Ray)         |
+| Infrastructure | Fenton Platform, Terraform, AWS (EC2, ECR, Route 53, X-Ray) |
 | CI/CD          | GitHub Actions, Fastlane, Watchtower                    |
 | Observability  | OpenTelemetry, AWS X-Ray, structured logging            |
 
@@ -129,8 +129,9 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 # Clone and setup
 cd CodeMonet
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
-# Or set AGENT_PROVIDER=openai and OPENAI_API_KEY for the OpenAI backend
+# Claude development uses your isolated Claude subscription session. Production
+# uses short-lived Anthropic AWS workload identity; static Anthropic keys are unsupported.
+# Or set AGENT_PROVIDER=openai and OPENAI_API_KEY for the OpenAI backend.
 
 # Install and run
 make install

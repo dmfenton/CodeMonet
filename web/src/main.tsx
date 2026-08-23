@@ -1,4 +1,4 @@
-import React, { StrictMode, useState, useEffect } from 'react';
+import React, { StrictMode, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { Homepage } from './components/Homepage';
@@ -12,7 +12,8 @@ import './components/AuthScreen.css';
 function Router(): React.ReactElement {
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   const [callbackError, setCallbackError] = useState<string | null>(null);
-  const { isLoading, isAuthenticated, setTokensFromCallback } = useAuth();
+  const callbackHandled = useRef(false);
+  const { isLoading, isAuthenticated, exchangeAuthorizationCode } = useAuth();
 
   // Handle browser back/forward navigation
   useEffect(() => {
@@ -23,28 +24,24 @@ function Router(): React.ReactElement {
     return (): void => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Handle magic link callback - extract tokens from URL fragment
+  // Handle platform authorization callback.
   useEffect(() => {
     if (currentPath === '/auth/callback') {
-      const hash = window.location.hash.substring(1); // Remove leading #
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-
-      if (accessToken && refreshToken) {
-        const result = setTokensFromCallback(accessToken, refreshToken);
+      if (callbackHandled.current) return;
+      callbackHandled.current = true;
+      const code = new URLSearchParams(window.location.search).get('code');
+      if (!code) {
+        setCallbackError('Invalid callback URL - missing authorization code');
+        return;
+      }
+      void exchangeAuthorizationCode(code).then((result) => {
         if (result.success) {
-          // Clear the hash and redirect to studio
           window.history.replaceState({}, '', '/studio');
           setCurrentPath('/studio');
-        } else {
-          setCallbackError(result.error || 'Authentication failed');
-        }
-      } else {
-        setCallbackError('Invalid callback URL - missing tokens');
-      }
+        } else setCallbackError(result.error || 'Authentication failed');
+      });
     }
-  }, [currentPath, setTokensFromCallback]);
+  }, [currentPath, exchangeAuthorizationCode]);
 
   const navigateTo = (path: string): void => {
     window.history.pushState({}, '', path);

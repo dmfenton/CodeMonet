@@ -41,8 +41,8 @@ function mockRequestAnimationFrame(callback: FrameCallback): number {
   return id;
 }
 
-function mockCancelAnimationFrame(id: number): void {
-  rafCallbackMap.delete(id);
+function mockCancelAnimationFrame(id: number | null | undefined): void {
+  if (id !== null && id !== undefined) rafCallbackMap.delete(id);
 }
 
 /**

@@ -18,8 +18,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../context';
 import { borderRadius, spacing, useTheme } from '../theme';
 
-type AuthMode = 'signin' | 'signup' | 'magic-link';
-
 interface AuthScreenProps {
   magicLinkError?: string | null;
   onClearError?: () => void;
@@ -27,14 +25,9 @@ interface AuthScreenProps {
 
 export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): React.JSX.Element {
   const { colors } = useTheme();
-  const { signIn, signUp, requestMagicLink, verifyMagicLinkCode } = useAuth();
+  const { requestMagicLink } = useAuth();
 
-  const [mode, setMode] = useState<AuthMode>('magic-link');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
-  const [code, setCode] = useState('');
-  const [showCodeInput, setShowCodeInput] = useState(false);
   const [error, setError] = useState<string | null>(magicLinkError ?? null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -52,40 +45,13 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
 
     void (async () => {
       try {
-        let result;
-        if (mode === 'magic-link') {
-          if (!email.trim()) {
-            setError('Email is required');
-            setLoading(false);
-            return;
-          }
-
-          // If showing code input, verify the code
-          if (showCodeInput) {
-            if (code.length !== 6) {
-              setError('Please enter the 6-digit code');
-              setLoading(false);
-              return;
-            }
-            result = await verifyMagicLinkCode(email, code);
-          } else {
-            // Request a new magic link
-            result = await requestMagicLink(email);
-            if (result.success) {
-              setSuccess('Check your email for a sign-in link or enter the code below');
-              setShowCodeInput(true);
-            }
-          }
-        } else if (mode === 'signin') {
-          result = await signIn(email, password);
-        } else {
-          if (!inviteCode.trim()) {
-            setError('Invite code is required');
-            setLoading(false);
-            return;
-          }
-          result = await signUp(email, password, inviteCode);
+        if (!email.trim()) {
+          setError('Email is required');
+          setLoading(false);
+          return;
         }
+        const result = await requestMagicLink(email);
+        if (result.success) setSuccess('Check your email for a sign-in link');
 
         if (!result.success) {
           setError(result.error ?? 'Authentication failed');
@@ -99,20 +65,6 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
     })();
   };
 
-  const toggleMode = () => {
-    if (mode === 'magic-link') {
-      setMode('signin');
-    } else if (mode === 'signin') {
-      setMode('signup');
-    } else {
-      setMode('magic-link');
-    }
-    clearError();
-    setSuccess(null);
-    setShowCodeInput(false);
-    setCode('');
-  };
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <KeyboardAvoidingView
@@ -124,11 +76,7 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.textPrimary }]}>Code Monet</Text>
             <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
-              {mode === 'magic-link'
-                ? 'Sign in with email'
-                : mode === 'signin'
-                  ? 'Welcome back'
-                  : 'Create your account'}
+              Sign in with email
             </Text>
           </View>
 
@@ -148,11 +96,7 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
               value={email}
               onChangeText={(text) => {
                 setEmail(text);
-                // Reset code input if email changes
-                if (showCodeInput) {
-                  setShowCodeInput(false);
-                  setCode('');
-                }
+                setSuccess(null);
               }}
               autoCapitalize="none"
               autoCorrect={false}
@@ -163,71 +107,6 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
               testID="email-input"
               editable={!loading}
             />
-
-            {mode === 'magic-link' && showCodeInput && (
-              <TextInput
-                style={[
-                  styles.input,
-                  styles.codeInput,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.textPrimary,
-                    borderColor: colors.border,
-                  },
-                ]}
-                placeholder="000000"
-                placeholderTextColor={colors.textSecondary}
-                value={code}
-                onChangeText={(text) => setCode(text.replace(/[^0-9]/g, '').slice(0, 6))}
-                keyboardType="number-pad"
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                accessibilityLabel="6-digit verification code"
-                testID="code-input"
-                maxLength={6}
-                editable={!loading}
-                autoFocus
-              />
-            )}
-
-            {mode !== 'magic-link' && (
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.textPrimary,
-                    borderColor: colors.border,
-                  },
-                ]}
-                placeholder="Password"
-                placeholderTextColor={colors.textSecondary}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!loading}
-              />
-            )}
-
-            {mode === 'signup' && (
-              <TextInput
-                style={[
-                  styles.input,
-                  {
-                    backgroundColor: colors.surface,
-                    color: colors.textPrimary,
-                    borderColor: colors.border,
-                  },
-                ]}
-                placeholder="Invite Code"
-                placeholderTextColor={colors.textSecondary}
-                value={inviteCode}
-                onChangeText={setInviteCode}
-                autoCapitalize="characters"
-                autoCorrect={false}
-                editable={!loading}
-              />
-            )}
 
             {error && (
               <View style={[styles.errorBox, { backgroundColor: colors.error + '20' }]}>
@@ -255,31 +134,12 @@ export function AuthScreen({ magicLinkError, onClearError }: AuthScreenProps): R
                 <ActivityIndicator color={colors.background} />
               ) : (
                 <Text style={[styles.buttonText, { color: colors.background }]}>
-                  {mode === 'magic-link'
-                    ? showCodeInput
-                      ? 'Verify Code'
-                      : 'Send Magic Link'
-                    : mode === 'signin'
-                      ? 'Sign In'
-                      : 'Sign Up'}
+                  Send Magic Link
                 </Text>
               )}
             </Pressable>
           </View>
 
-          {/* Toggle */}
-          <Pressable style={styles.toggle} onPress={toggleMode} disabled={loading}>
-            <Text style={[styles.toggleText, { color: colors.textSecondary }]}>
-              {mode === 'magic-link'
-                ? 'Use password instead? '
-                : mode === 'signin'
-                  ? "Don't have an account? "
-                  : 'Sign in with '}
-              <Text style={{ color: colors.primary }}>
-                {mode === 'magic-link' ? 'Sign In' : mode === 'signin' ? 'Sign Up' : 'Magic Link'}
-              </Text>
-            </Text>
-          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

@@ -43,7 +43,6 @@ function RootLayout() {
       <AuthProvider>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
-          <Stack.Screen name="auth/verify" />
           <Stack.Screen name="auth/callback" />
         </Stack>
       </AuthProvider>

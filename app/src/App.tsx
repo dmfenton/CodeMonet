@@ -157,12 +157,11 @@ function MainApp(): React.JSX.Element {
  */
 function AppContent(): React.JSX.Element {
   const { colors } = useTheme();
-  const { isLoading, isAuthenticated, verifyMagicLink, setTokensFromCallback } = useAuth();
+  const { isLoading, isAuthenticated, exchangeAuthorizationCode } = useAuth();
 
   // Handle deep links for magic link authentication
   const { verifyingMagicLink, magicLinkError, clearError } = useDeepLinks({
-    verifyMagicLink,
-    setTokensFromCallback,
+    exchangeAuthorizationCode,
   });
 
   // Show loading screen while checking auth or verifying magic link

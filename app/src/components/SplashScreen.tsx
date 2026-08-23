@@ -151,13 +151,15 @@ export function SplashScreen({ onFinish }: SplashScreenProps): React.JSX.Element
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    inset: 0,
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 100,
   },
   orbContainer: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    inset: 0,
   },
   svg: {
     position: 'absolute',

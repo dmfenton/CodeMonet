@@ -234,26 +234,23 @@ function GalleryPieceRoute({ initialData }: { initialData?: SSRData }): React.Re
 function AuthCallback(): React.ReactElement {
   const navigate = useNavigate();
   const location = useLocation();
-  const { setTokensFromCallback } = useAuth();
+  const { exchangeAuthorizationCode } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
+  const handled = React.useRef(false);
 
   React.useEffect(() => {
-    const hash = location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-    const refreshToken = params.get('refresh_token');
-
-    if (accessToken && refreshToken) {
-      const result = setTokensFromCallback(accessToken, refreshToken);
-      if (result.success) {
-        navigate('/studio', { replace: true });
-      } else {
-        setError(result.error ?? 'Authentication failed');
-      }
-    } else {
-      setError('Invalid callback URL - missing tokens');
+    if (handled.current) return;
+    handled.current = true;
+    const code = new URLSearchParams(location.search).get('code');
+    if (!code) {
+      setError('Invalid callback URL - missing authorization code');
+      return;
     }
-  }, [location.hash, navigate, setTokensFromCallback]);
+    void exchangeAuthorizationCode(code).then((result) => {
+      if (result.success) navigate('/studio', { replace: true });
+      else setError(result.error ?? 'Authentication failed');
+    });
+  }, [location.search, navigate, exchangeAuthorizationCode]);
 
   const handleBack = (): void => {
     navigate('/');

@@ -29,7 +29,7 @@ async def apple_app_site_association() -> JSONResponse:
             "details": [
                 {
                     "appID": app_id,
-                    "paths": ["/auth/verify*"],
+                    "paths": ["/auth/callback*"],
                 }
             ],
         },

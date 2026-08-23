@@ -11,11 +11,9 @@ interface AuthScreenProps {
 }
 
 export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
-  const { requestMagicLink, verifyMagicLinkCode } = useAuth();
+  const { requestMagicLink } = useAuth();
 
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [showCodeInput, setShowCodeInput] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,24 +35,11 @@ export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
         return;
       }
 
-      if (showCodeInput) {
-        if (code.length !== 6) {
-          setError('Please enter the 6-digit code');
-          setLoading(false);
-          return;
-        }
-        const result = await verifyMagicLinkCode(email, code);
-        if (!result.success) {
-          setError(result.error ?? 'Invalid or expired code');
-        }
+      const result = await requestMagicLink(email);
+      if (result.success) {
+        setSuccess('Check your email for a sign-in link');
       } else {
-        const result = await requestMagicLink(email);
-        if (result.success) {
-          setSuccess('Check your email for a sign-in link, or enter the code below');
-          setShowCodeInput(true);
-        } else {
-          setError(result.error ?? 'Failed to send magic link');
-        }
+        setError(result.error ?? 'Failed to send magic link');
       }
     } catch {
       setError('An unexpected error occurred');
@@ -65,11 +50,7 @@ export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
 
   const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     setEmail(e.target.value);
-    if (showCodeInput) {
-      setShowCodeInput(false);
-      setCode('');
-      clearMessages();
-    }
+    clearMessages();
   };
 
   return (
@@ -116,32 +97,12 @@ export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
             />
           </div>
 
-          {showCodeInput && (
-            <div className="auth-field">
-              <label htmlFor="code">Verification Code</label>
-              <input
-                id="code"
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                placeholder="000000"
-                maxLength={6}
-                autoComplete="one-time-code"
-                disabled={loading}
-                className="auth-code-input"
-                autoFocus
-              />
-            </div>
-          )}
-
           {error && <div className="auth-error">{error}</div>}
           {success && <div className="auth-success">{success}</div>}
 
           <button type="submit" className="auth-submit" disabled={loading}>
             {loading ? (
               <span className="auth-spinner" />
-            ) : showCodeInput ? (
-              'Verify Code'
             ) : (
               'Send Magic Link'
             )}
@@ -150,7 +111,7 @@ export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
 
         <div className="auth-footer">
           <p className="auth-note">
-            New users will be automatically registered when signing in with a valid invite.
+            Sign-in is provided by the private Fenton identity service.
           </p>
         </div>
       </div>

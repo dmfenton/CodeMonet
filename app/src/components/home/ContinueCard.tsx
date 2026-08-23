@@ -244,7 +244,8 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    inset: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },

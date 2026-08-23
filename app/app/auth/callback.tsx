@@ -1,23 +1,41 @@
 /**
  * Auth callback route for deep links.
- * Handles: codemonet://auth/callback?access_token=...&refresh_token=...
- *
- * This route receives tokens from the web fallback page and passes them
- * to the main app for authentication.
+ * Handles the Fenton Identity OAuth callback.
  */
 
 import { Redirect, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function AuthCallback() {
-  const { access_token, refresh_token } = useLocalSearchParams<{
-    access_token: string;
-    refresh_token: string;
-  }>();
+  const { code } = useLocalSearchParams<{ code: string }>();
+  const { exchangeAuthorizationCode } = useAuth();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handled = useRef(false);
 
-  // Redirect to main app with tokens - App.tsx will handle via getInitialURL
-  if (access_token && refresh_token) {
-    return <Redirect href={`/?access_token=${access_token}&refresh_token=${refresh_token}`} />;
+  useEffect(() => {
+    if (handled.current) return;
+    handled.current = true;
+    if (!code) {
+      setError('Missing authorization code');
+      setDone(true);
+      return;
+    }
+    void exchangeAuthorizationCode(code).then((result) => {
+      setError(result.success ? null : (result.error ?? 'Authentication failed'));
+      setDone(true);
+    });
+  }, [code, exchangeAuthorizationCode]);
+
+  if (!done) {
+    return (
+      <View>
+        <ActivityIndicator />
+        <Text>Signing you in…</Text>
+      </View>
+    );
   }
-
-  return <Redirect href="/" />;
+  return <Redirect href={error ? `/?auth_error=${encodeURIComponent(error)}` : '/'} />;
 }

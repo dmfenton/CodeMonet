@@ -250,12 +250,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    inset: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },
   errorOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    inset: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },

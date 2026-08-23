@@ -2,12 +2,12 @@
 name = "code-monet"
 version = "0.1.0"
 description = "Autonomous AI artist that creates ink drawings"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 dependencies = [
+    "fenton-platform",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "websockets>=13.0",
-    "anthropic>=0.40.0",
     "claude-agent-sdk>=0.2.87",
     "openai>=2.0.0",
     "pillow>=11.0.0",
@@ -53,6 +53,7 @@ dev = [
     "types-aiofiles>=24.1.0",
     "pre-commit>=3.0.0",
     "playwright>=1.40.0",
+    "pip-audit>=2.9.0",
 ]
 
 [project.scripts]
@@ -65,8 +66,11 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["code_monet"]
 
+[tool.uv.sources]
+fenton-platform = { path = "../vendor/fenton-platform/python" }
+
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 extend-exclude = ["*.md"]
 
@@ -91,7 +95,7 @@ ignore = [
 known-first-party = ["code_monet"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 # Relaxed strict mode - enable key checks without blocking on third-party libs
 warn_return_any = false
 warn_unused_ignores = true
