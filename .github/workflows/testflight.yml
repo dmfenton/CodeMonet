@@ -171,52 +171,17 @@ jobs:
         working-directory: app/ios
         run: pod install
 
-      - name: Set up keychain
-        env:
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+      - name: Import signing certificate
+        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+        with:
+          keychain: signing_temp
+          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
+          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+          p12-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+
+      - name: Resolve signing identity
         run: |
-          # Create a temporary keychain
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-
-          security list-keychains -d user \
-            | sed -E 's/^[[:space:]]*"//; s/"[[:space:]]*$//' \
-            > "$RUNNER_TEMP/original-keychains.txt"
-          CI_KEYCHAINS=("$KEYCHAIN_PATH")
-          while IFS= read -r EXISTING_KEYCHAIN; do
-            if [[ -n "$EXISTING_KEYCHAIN" ]]; then
-              CI_KEYCHAINS+=("$EXISTING_KEYCHAIN")
-            fi
-          done < "$RUNNER_TEMP/original-keychains.txt"
-          security list-keychains -d user -s "${CI_KEYCHAINS[@]}"
-
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-
-      - name: Install certificate
-        env:
-          IOS_DISTRIBUTION_CERT_P12: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
-          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          # Decode and import certificate
-          CERT_PATH=$RUNNER_TEMP/certificate.p12
-          echo -n "$IOS_DISTRIBUTION_CERT_P12" | base64 --decode > $CERT_PATH
-
-          security import $CERT_PATH \
-            -P "$IOS_DISTRIBUTION_CERT_PASSWORD" \
-            -A \
-            -t cert \
-            -f pkcs12 \
-            -k $KEYCHAIN_PATH
-
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: \
-            -s \
-            -k "$KEYCHAIN_PASSWORD" \
-            $KEYCHAIN_PATH
-
+          KEYCHAIN_PATH=signing_temp.keychain
           SIGNING_IDENTITY_SHA1=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
             | awk -F '"' '/Apple Distribution|iPhone Distribution/ { print $1 }' \
             | awk '{ print $2; exit }')
@@ -224,6 +189,7 @@ jobs:
             echo "::error::Could not resolve the imported Apple Distribution identity"
             exit 1
           fi
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
           echo "IOS_SIGNING_IDENTITY_SHA1=$SIGNING_IDENTITY_SHA1" >> "$GITHUB_ENV"
 
       - name: Install provisioning profile
@@ -265,22 +231,6 @@ jobs:
           name: CodeMonet-${{ steps.version.outputs.version }}.ipa
           path: app/build/CodeMonet.ipa
           retention-days: 30
-
-      - name: Clean up keychain
-        if: always()
-        run: |
-          if [[ -f "$RUNNER_TEMP/original-keychains.txt" ]]; then
-            ORIGINAL_KEYCHAINS=()
-            while IFS= read -r EXISTING_KEYCHAIN; do
-              if [[ -n "$EXISTING_KEYCHAIN" ]]; then
-                ORIGINAL_KEYCHAINS+=("$EXISTING_KEYCHAIN")
-              fi
-            done < "$RUNNER_TEMP/original-keychains.txt"
-            security list-keychains -d user -s "${ORIGINAL_KEYCHAINS[@]}" || true
-          fi
-          if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
-            security delete-keychain "$KEYCHAIN_PATH" || true
-          fi
 
   skip-report:
     name: Report Skipped Build
