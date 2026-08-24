@@ -31,20 +31,51 @@ fi
 
 platform_source="$(dirname "$main")/fenton-platform"
 platform_target="$root/vendor/fenton-platform"
+platform_pin="$(tr -d '[:space:]' <"$root/fenton-platform.lock")"
+platform_cache="$main/.worktrees/fenton-platform-${platform_pin:0:12}"
 
-if [[ ! -d "$platform_source/python" ]]; then
+if [[ ! "$platform_pin" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "worktree-bootstrap: invalid fenton-platform.lock" >&2
+  exit 1
+fi
+
+if [[ ! -e "$platform_source/.git" ]]; then
   echo "worktree-bootstrap: missing sibling fenton-platform checkout at $platform_source" >&2
   exit 1
 fi
 
-if [[ ! -e "$platform_target" && ! -L "$platform_target" ]]; then
-  mkdir -p "$root/vendor"
-  ln -s "$platform_source" "$platform_target"
-  echo "worktree-bootstrap: linked vendor/fenton-platform"
+if ! git -C "$platform_source" cat-file -e "${platform_pin}^{commit}" 2>/dev/null; then
+  git -C "$platform_source" fetch origin "$platform_pin"
+fi
+
+if [[ ! -e "$platform_cache" ]]; then
+  mkdir -p "$(dirname "$platform_cache")"
+  git -C "$platform_source" worktree add --detach "$platform_cache" "$platform_pin"
+fi
+
+if [[ "$(git -C "$platform_cache" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
+  echo "worktree-bootstrap: invalid platform cache at $platform_cache" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$platform_target")"
+if [[ -L "$platform_target" ]]; then
+  if [[ "$(readlink "$platform_target")" != "$platform_cache" ]]; then
+    ln -sfn "$platform_cache" "$platform_target"
+    echo "worktree-bootstrap: relinked vendor/fenton-platform -> ${platform_pin:0:12}"
+  fi
+elif [[ -e "$platform_target" ]]; then
+  if [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
+    echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
+    exit 1
+  fi
+else
+  ln -s "$platform_cache" "$platform_target"
+  echo "worktree-bootstrap: linked vendor/fenton-platform -> ${platform_pin:0:12}"
 fi
 
 if [[ ! -d "$platform_target/python" ]]; then
-  echo "worktree-bootstrap: $platform_target does not provide the expected checkout" >&2
+  echo "worktree-bootstrap: locked platform checkout does not provide python/" >&2
   exit 1
 fi
 
