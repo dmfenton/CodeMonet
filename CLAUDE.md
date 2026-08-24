@@ -111,6 +111,7 @@ The `main` branch is protected with these rules:
 | --------------------------------- | ------------------------- |
 | Required status checks            | CI Success, Codex review gate |
 | Require branches to be up to date | Yes                       |
+| Require conversation resolution   | Yes                       |
 | Enforce for admins                | No (can bypass if needed) |
 | Force pushes                      | Blocked                   |
 

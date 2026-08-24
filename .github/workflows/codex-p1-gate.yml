@@ -2,7 +2,7 @@ name: Codex review gate
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
@@ -92,14 +92,27 @@ jobs:
             exit 1
           }
 
-          reviewed_sha="$(gh api --paginate \
+          base_changed_at="$(gh api --paginate \
             -H 'Accept: application/vnd.github+json' \
-            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
-            --jq '.[]
-              | select((.user.login // "") == "chatgpt-codex-connector[bot]")
-              | select(.body | test("Codex Review: Didn.t find any major issues"; "i"))
-              | (.body | try capture("Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})").sha catch empty)' \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/events?per_page=100" \
+            --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
             | tail -n 1)"
+          base_changed_at="${base_changed_at:-0000-01-01T00:00:00Z}"
+          comments_data="$(gh api --paginate --slurp \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+          reviewed_sha="$(jq -r --arg cutoff "$base_changed_at" '
+            add
+            | map(select(
+                (.user.login // "") == "chatgpt-codex-connector[bot]"
+                and (.created_at // "") > $cutoff
+                and (.body | test("Codex Review: Didn.t find any major issues"; "i"))
+              ))
+            | last
+            | (.body | try capture(
+                "Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})"
+              ).sha catch empty)
+          ' <<<"$comments_data")"
 
           reviewed_full_sha=""
           if [[ -n "$reviewed_sha" ]]; then
