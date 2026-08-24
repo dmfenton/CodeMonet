@@ -48,6 +48,28 @@ if ! git -C "$platform_source" cat-file -e "${platform_pin}^{commit}" 2>/dev/nul
 fi
 
 mkdir -p "$(dirname "$platform_target")"
+platform_lock="$root/vendor/.fenton-platform-bootstrap.lock"
+for ((_attempt = 0; _attempt < 100; _attempt++)); do
+  if mkdir "$platform_lock" 2>/dev/null; then
+    printf '%s\n' "$$" >"$platform_lock/owner"
+    break
+  fi
+  platform_lock_owner="$(cat "$platform_lock/owner" 2>/dev/null || true)"
+  if [[ "$platform_lock_owner" =~ ^[0-9]+$ ]] && ! kill -0 "$platform_lock_owner" 2>/dev/null; then
+    unlink "$platform_lock/owner" 2>/dev/null || true
+    rmdir "$platform_lock" 2>/dev/null || true
+  fi
+  sleep 0.1
+done
+if [[ ! -f "$platform_lock/owner" || "$(cat "$platform_lock/owner")" != "$$" ]]; then
+  echo "worktree-bootstrap: timed out waiting for platform checkout lock" >&2
+  exit 1
+fi
+release_platform_lock() {
+  unlink "$platform_lock/owner" 2>/dev/null || true
+  rmdir "$platform_lock" 2>/dev/null || true
+}
+trap release_platform_lock EXIT
 if [[ -L "$platform_target" ]]; then
   if ! unlink "$platform_target" && [[ -L "$platform_target" ]]; then
     echo "worktree-bootstrap: failed to replace legacy platform symlink" >&2
@@ -61,7 +83,8 @@ if [[ ! -e "$platform_target" ]]; then
 fi
 for ((_attempt = 0; _attempt < 50; _attempt++)); do
   # A concurrent bootstrap may still be cloning.
-  git -C "$platform_target" rev-parse --git-dir >/dev/null 2>&1 && break
+  platform_actual="$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)"
+  [[ -n "$platform_actual" ]] && break
   sleep 0.1
 done
 
@@ -90,6 +113,8 @@ if [[ "$platform_actual" != "$platform_pin" ]]; then
   exit 1
 fi
 echo "worktree-bootstrap: ready vendor/fenton-platform at ${platform_pin:0:12}"
+release_platform_lock
+trap - EXIT
 
 if [[ ! -d "$platform_target/python" ]]; then
   echo "worktree-bootstrap: locked platform checkout does not provide python/" >&2
