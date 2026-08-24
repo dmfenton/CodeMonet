@@ -52,3 +52,6 @@ def test_tenant_manifest_publisher_adds_immutable_source() -> None:
         "commit": "c" * 40,
         "sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
     }
+    publisher = (ROOT / "scripts/publish-tenant-manifest.sh").read_text(encoding="utf-8")
+    assert 'gh api "repos/${repository}/commits/main"' in publisher
+    assert '--parameters "AppId=${app_id},Commit=${commit},Digest=${digest}"' in publisher

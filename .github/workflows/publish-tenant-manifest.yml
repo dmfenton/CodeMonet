@@ -35,4 +35,5 @@ jobs:
         env:
           AWS_REGION: us-east-1
           FENTON_PLATFORM_INSTANCE_ID: i-0819504ca9b2d967b
+          GH_TOKEN: ${{ github.token }}
         run: scripts/publish-tenant-manifest.sh codemonet

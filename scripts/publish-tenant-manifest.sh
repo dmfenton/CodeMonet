@@ -57,6 +57,13 @@ if [[ ${FENTON_TENANT_MANIFEST_RENDER_ONLY:-false} == true ]]; then
   printf '%s\n' "$payload"
   exit 0
 fi
+: "${GH_TOKEN:?GH_TOKEN is required}"
+main_commit=$(gh api "repos/${repository}/commits/main" --jq .sha)
+if [[ "$main_commit" != "$commit" ]]; then
+  echo "Refusing to publish stale commit $commit; main is $main_commit" >&2
+  exit 1
+fi
+digest=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["source"]["sha256"])' "$payload_file")
 aws ssm put-parameter \
   --region "$region" \
   --name "$parameter_name" \
@@ -68,6 +75,7 @@ command_id=$(aws ssm send-command \
   --region "$region" \
   --instance-ids "$instance_id" \
   --document-name Compute-RefreshFentonTenantCatalog \
+  --parameters "AppId=${app_id},Commit=${commit},Digest=${digest}" \
   --comment "Published ${app_id} tenant manifest at ${commit}" \
   --query Command.CommandId \
   --output text)
