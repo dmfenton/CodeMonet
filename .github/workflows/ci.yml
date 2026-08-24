@@ -23,6 +23,7 @@ jobs:
               - 'server/**'
               - 'fenton-platform.tenant.json'
               - 'fenton-platform.lock'
+              - 'scripts/worktree-bootstrap.sh'
             frontend:
               - 'app/**'
               - 'web/**'
