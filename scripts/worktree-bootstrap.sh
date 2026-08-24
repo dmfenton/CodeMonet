@@ -32,7 +32,6 @@ fi
 platform_source="$(dirname "$main")/fenton-platform"
 platform_target="$root/vendor/fenton-platform"
 platform_pin="$(tr -d '[:space:]' <"$root/fenton-platform.lock")"
-platform_cache="$main/.worktrees/fenton-platform-${platform_pin:0:12}"
 
 if [[ ! "$platform_pin" =~ ^[0-9a-f]{40}$ ]]; then
   echo "worktree-bootstrap: invalid fenton-platform.lock" >&2
@@ -48,31 +47,31 @@ if ! git -C "$platform_source" cat-file -e "${platform_pin}^{commit}" 2>/dev/nul
   git -C "$platform_source" fetch origin "$platform_pin"
 fi
 
-if [[ ! -e "$platform_cache" ]]; then
-  mkdir -p "$(dirname "$platform_cache")"
-  git -C "$platform_source" worktree add --detach "$platform_cache" "$platform_pin"
-fi
-
-if [[ "$(git -C "$platform_cache" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
-  echo "worktree-bootstrap: invalid platform cache at $platform_cache" >&2
-  exit 1
-fi
-
 mkdir -p "$(dirname "$platform_target")"
 if [[ -L "$platform_target" ]]; then
-  if [[ "$(readlink "$platform_target")" != "$platform_cache" ]]; then
-    ln -sfn "$platform_cache" "$platform_target"
-    echo "worktree-bootstrap: relinked vendor/fenton-platform -> ${platform_pin:0:12}"
-  fi
-elif [[ -e "$platform_target" ]]; then
-  if [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
-    echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
-    exit 1
-  fi
-else
-  ln -s "$platform_cache" "$platform_target"
-  echo "worktree-bootstrap: linked vendor/fenton-platform -> ${platform_pin:0:12}"
+  unlink "$platform_target"
 fi
+if [[ ! -e "$platform_target" ]]; then
+  if git clone --no-checkout "$platform_source" "$platform_target"; then
+    git -C "$platform_target" checkout --detach "$platform_pin"
+  fi
+fi
+for ((_attempt = 0; _attempt < 50; _attempt++)); do
+  # A concurrent bootstrap may still be cloning. Accept only its exact,
+  # fully checked-out commit.
+  [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" == "$platform_pin" ]] && break
+  sleep 0.1
+done
+
+if [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
+  echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
+  exit 1
+fi
+if [[ -n "$(git -C "$platform_target" status --porcelain --untracked-files=no)" ]]; then
+  echo "worktree-bootstrap: vendor/fenton-platform has tracked changes" >&2
+  exit 1
+fi
+echo "worktree-bootstrap: ready vendor/fenton-platform at ${platform_pin:0:12}"
 
 if [[ ! -d "$platform_target/python" ]]; then
   echo "worktree-bootstrap: locked platform checkout does not provide python/" >&2

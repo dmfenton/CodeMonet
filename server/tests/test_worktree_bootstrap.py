@@ -75,7 +75,18 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
         _run("bash", "scripts/worktree-bootstrap.sh", cwd=worktree, env=environment)
 
         linked = worktree / "vendor/fenton-platform"
-        assert linked.is_symlink()
+        assert linked.is_dir()
+        assert not linked.is_symlink()
         assert locked == _run("git", "rev-parse", "HEAD", cwd=linked)
         assert (linked / "python/version.txt").read_text(encoding="utf-8").strip() == "locked"
-        assert locked[:12] in str(linked.resolve())
+
+        (linked / "python/version.txt").write_text("dirty\n", encoding="utf-8")
+        completed = subprocess.run(
+            ("bash", "scripts/worktree-bootstrap.sh"),
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        assert completed.returncode != 0
+        assert "has tracked changes" in completed.stderr
