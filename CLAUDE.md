@@ -720,5 +720,6 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues with Do
 
 - Never merge a pull request until the `Codex review gate` check passes.
 - Address every Codex review comment, regardless of severity, and resolve every Codex review thread before merge.
+- Immediately before merge, re-query the live review threads and stop if any Codex thread is unresolved; never rely only on an earlier green status.
 - After every push, comment `@codex review` and wait for a clean review that names the exact current head SHA.
 - A clean review or green check for an earlier commit never authorizes merging a newer head.
