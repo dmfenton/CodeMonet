@@ -80,6 +80,13 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
         assert locked == _run("git", "rev-parse", "HEAD", cwd=linked)
         assert (linked / "python/version.txt").read_text(encoding="utf-8").strip() == "locked"
 
+        (platform / "python/version.txt").write_text("next\n", encoding="utf-8")
+        next_locked = _commit(platform, "next locked")
+        (worktree / "fenton-platform.lock").write_text(f"{next_locked}\n", encoding="utf-8")
+        _run("bash", "scripts/worktree-bootstrap.sh", cwd=worktree, env=environment)
+        assert next_locked == _run("git", "rev-parse", "HEAD", cwd=linked)
+        assert (linked / "python/version.txt").read_text(encoding="utf-8").strip() == "next"
+
         (linked / "python/version.txt").write_text("dirty\n", encoding="utf-8")
         completed = subprocess.run(
             ("bash", "scripts/worktree-bootstrap.sh"),

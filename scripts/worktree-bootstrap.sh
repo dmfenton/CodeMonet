@@ -49,7 +49,10 @@ fi
 
 mkdir -p "$(dirname "$platform_target")"
 if [[ -L "$platform_target" ]]; then
-  unlink "$platform_target"
+  if ! unlink "$platform_target" && [[ -L "$platform_target" ]]; then
+    echo "worktree-bootstrap: failed to replace legacy platform symlink" >&2
+    exit 1
+  fi
 fi
 if [[ ! -e "$platform_target" ]]; then
   if git clone --no-checkout "$platform_source" "$platform_target"; then
@@ -57,18 +60,33 @@ if [[ ! -e "$platform_target" ]]; then
   fi
 fi
 for ((_attempt = 0; _attempt < 50; _attempt++)); do
-  # A concurrent bootstrap may still be cloning. Accept only its exact,
-  # fully checked-out commit.
-  [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" == "$platform_pin" ]] && break
+  # A concurrent bootstrap may still be cloning.
+  git -C "$platform_target" rev-parse --git-dir >/dev/null 2>&1 && break
   sleep 0.1
 done
 
-if [[ "$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)" != "$platform_pin" ]]; then
-  echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
+platform_actual="$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)"
+if [[ -z "$platform_actual" ]]; then
+  echo "worktree-bootstrap: vendor/fenton-platform is not a checkout" >&2
   exit 1
 fi
 if [[ -n "$(git -C "$platform_target" status --porcelain --untracked-files=no)" ]]; then
   echo "worktree-bootstrap: vendor/fenton-platform has tracked changes" >&2
+  exit 1
+fi
+if [[ "$platform_actual" != "$platform_pin" ]]; then
+  if ! git -C "$platform_target" cat-file -e "${platform_pin}^{commit}" 2>/dev/null; then
+    git -C "$platform_target" fetch origin "$platform_pin" || true
+  fi
+  git -C "$platform_target" checkout --detach "$platform_pin" || true
+fi
+for ((_attempt = 0; _attempt < 50; _attempt++)); do
+  platform_actual="$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)"
+  [[ "$platform_actual" == "$platform_pin" ]] && break
+  sleep 0.1
+done
+if [[ "$platform_actual" != "$platform_pin" ]]; then
+  echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
   exit 1
 fi
 echo "worktree-bootstrap: ready vendor/fenton-platform at ${platform_pin:0:12}"
