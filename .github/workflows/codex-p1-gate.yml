@@ -20,6 +20,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  statuses: write
 
 concurrency:
   group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
@@ -31,6 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Require current clean Codex review
+        id: audit
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
@@ -81,7 +84,7 @@ jobs:
             .data.repository.pullRequest.reviewThreads.nodes[]
             | select(.isResolved | not)
             | .comments.nodes[]
-            | select((.author.login // "") | startswith("chatgpt-codex-connector"))
+            | select((.author.login // "") == "chatgpt-codex-connector")
           ] | length' <<<"$review_data")"
           (( unresolved == 0 )) || {
             echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
@@ -92,15 +95,46 @@ jobs:
             -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
             --jq '.[]
-              | select((.user.login // "") | startswith("chatgpt-codex-connector"))
+              | select((.user.login // "") == "chatgpt-codex-connector[bot]")
               | select(.body | test("Codex Review: Didn.t find any major issues"; "i"))
               | (.body | try capture("Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})").sha catch empty)' \
             | tail -n 1)"
 
-          [[ -n "$reviewed_sha" && "$head_sha" == "$reviewed_sha"* ]] || {
-            echo "::error::No clean Codex review covers current head $head_sha (latest clean review: ${reviewed_sha:-none})."
+          reviewed_full_sha=""
+          if [[ -n "$reviewed_sha" ]]; then
+            reviewed_full_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$reviewed_sha" \
+              --jq .sha 2>/dev/null || true)"
+          fi
+          [[ "$reviewed_full_sha" == "$head_sha" ]] || {
+            echo "::error::No clean Codex review covers current head $head_sha (latest clean review: ${reviewed_full_sha:-none})."
             echo "Address every Codex comment, resolve every thread, then comment '@codex review' and wait for the exact head SHA."
             exit 1
           }
 
           echo "Clean Codex review covers current head $head_sha; no unresolved Codex threads."
+
+      - name: Publish gate on pull-request head
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+        run: |
+          set -euo pipefail
+          head_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$AUDIT_OUTCOME" == success ]]; then
+            state=success
+            description='Exact-head Codex review is clean'
+          else
+            state=failure
+            description='Codex comments or exact-head review remain'
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
+            -f state="$state" \
+            -f context='Codex review gate' \
+            -f description="$description"
+
+      - name: Fail closed when review audit fails
+        if: steps.audit.outcome != 'success'
+        run: exit 1

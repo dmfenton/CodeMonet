@@ -109,12 +109,14 @@ The `main` branch is protected with these rules:
 
 | Rule                              | Setting                   |
 | --------------------------------- | ------------------------- |
-| Required status checks            | CI Success                |
+| Required status checks            | CI Success, Codex review gate |
 | Require branches to be up to date | Yes                       |
+| Require conversation resolution   | Yes                       |
 | Enforce for admins                | No (can bypass if needed) |
 | Force pushes                      | Blocked                   |
 
-PRs to main require the "CI Success" check to pass before merging.
+PRs to main require both "CI Success" and "Codex review gate" to pass before
+merging. The Codex gate also requires every Codex review thread to be resolved.
 
 **Important:** Even though admin bypass is enabled, always use PRs. Never push directly to main.
 
