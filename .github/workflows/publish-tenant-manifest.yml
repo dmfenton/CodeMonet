@@ -1,0 +1,38 @@
+name: Publish Fenton tenant manifest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fenton-platform.tenant.json'
+      - 'scripts/publish-tenant-manifest.sh'
+      - '.github/workflows/publish-tenant-manifest.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codemonet-tenant-manifest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: codemonet-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::573988763875:role/github-actions-codemonet-release
+          aws-region: us-east-1
+      - name: Publish and activate CodeMonet manifest
+        env:
+          AWS_REGION: us-east-1
+          FENTON_PLATFORM_INSTANCE_ID: i-0819504ca9b2d967b
+        run: scripts/publish-tenant-manifest.sh codemonet
