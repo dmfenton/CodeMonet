@@ -14,12 +14,5 @@
         ]
       }
     ]
-  },
-  "communications": {
-    "agent": {
-      "id": "codemonet",
-      "service": "drawing-agent",
-      "path": "/v1/channel-turns"
-    }
   }
 }
