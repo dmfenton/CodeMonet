@@ -1,0 +1,106 @@
+name: Codex review gate
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+  issue_comment:
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to verify
+        required: true
+        type: number
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  review-gate:
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require current clean Codex review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          name="${GITHUB_REPOSITORY#*/}"
+          # shellcheck disable=SC2016
+          review_data="$(gh api graphql \
+            -F owner="$owner" \
+            -F name="$name" \
+            -F number="$PR_NUMBER" \
+            -f query='query($owner: String!, $name: String!, $number: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $number) {
+                  headRefOid
+                  reviewThreads(first: 100) {
+                    pageInfo { hasNextPage }
+                    nodes {
+                      isResolved
+                      comments(first: 100) {
+                        pageInfo { hasNextPage }
+                        nodes { body author { login } }
+                      }
+                    }
+                  }
+                }
+              }
+            }')"
+
+          head_sha="$(jq -r '.data.repository.pullRequest.headRefOid' <<<"$review_data")"
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Could not resolve the current PR head SHA."
+            exit 1
+          }
+
+          truncated="$(jq '[
+            .data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage,
+            (.data.repository.pullRequest.reviewThreads.nodes[] |
+              .comments.pageInfo.hasNextPage)
+          ] | any' <<<"$review_data")"
+          [[ "$truncated" == false ]] || {
+            echo "::error::Review pagination exceeded the fail-closed audit limit."
+            exit 1
+          }
+
+          unresolved="$(jq '[
+            .data.repository.pullRequest.reviewThreads.nodes[]
+            | select(.isResolved | not)
+            | .comments.nodes[]
+            | select((.author.login // "") | startswith("chatgpt-codex-connector"))
+          ] | length' <<<"$review_data")"
+          (( unresolved == 0 )) || {
+            echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
+            exit 1
+          }
+
+          reviewed_sha="$(gh api --paginate \
+            -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
+            --jq '.[] 
+              | select((.user.login // "") | startswith("chatgpt-codex-connector"))
+              | select(.body | test("Codex Review: Didn.t find any major issues"; "i"))
+              | (.body | try capture("Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})").sha catch empty)' \
+            | tail -n 1)"
+
+          [[ -n "$reviewed_sha" && "$head_sha" == "$reviewed_sha"* ]] || {
+            echo "::error::No clean Codex review covers current head $head_sha (latest clean review: ${reviewed_sha:-none})."
+            echo "Address every Codex comment, resolve every thread, then comment '@codex review' and wait for the exact head SHA."
+            exit 1
+          }
+
+          echo "Clean Codex review covers current head $head_sha; no unresolved Codex threads."

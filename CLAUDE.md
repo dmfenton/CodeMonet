@@ -713,3 +713,10 @@ See [docs/analytics.md](docs/analytics.md) for Umami setup.
 ## Troubleshooting
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues with Docker, SQLite, SSM, and the slim image.
+
+## Codex Review Gate
+
+- Never merge a pull request until the `Codex review gate` check passes.
+- Address every Codex review comment, regardless of severity, and resolve every Codex review thread before merge.
+- After every push, comment `@codex review` and wait for a clean review that names the exact current head SHA.
+- A clean review or green check for an earlier commit never authorizes merging a newer head.
