@@ -58,6 +58,9 @@ for ((_attempt = 0; _attempt < 100; _attempt++)); do
   if [[ "$platform_lock_owner" =~ ^[0-9]+$ ]] && ! kill -0 "$platform_lock_owner" 2>/dev/null; then
     unlink "$platform_lock/owner" 2>/dev/null || true
     rmdir "$platform_lock" 2>/dev/null || true
+  elif [[ "$_attempt" -ge 20 && ! "$platform_lock_owner" =~ ^[0-9]+$ ]]; then
+    unlink "$platform_lock/owner" 2>/dev/null || true
+    rmdir "$platform_lock" 2>/dev/null || true
   fi
   sleep 0.1
 done

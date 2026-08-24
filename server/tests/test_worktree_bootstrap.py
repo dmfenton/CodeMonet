@@ -71,6 +71,8 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
             "PATH": f"{tools}:{os.environ['PATH']}",
             "VOLTA_HOME": str(tools / "volta"),
         }
+        stale_lock = worktree / "vendor/.fenton-platform-bootstrap.lock"
+        stale_lock.mkdir(parents=True)
 
         _run("bash", "scripts/worktree-bootstrap.sh", cwd=worktree, env=environment)
 
