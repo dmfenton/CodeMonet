@@ -31,11 +31,34 @@ jobs:
     if: github.event_name != 'issue_comment' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve and invalidate pull-request head
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          head_sha="$EVENT_HEAD_SHA"
+          if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            head_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
+          fi
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Could not resolve the current PR head SHA."
+            exit 1
+          }
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
+            -f state=pending \
+            -f context='Codex review gate' \
+            -f description='Rechecking Codex comments and exact-head review'
+
       - name: Require current clean Codex review
         id: audit
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         run: |
           set -euo pipefail
@@ -49,7 +72,6 @@ jobs:
             -f query='query($owner: String!, $name: String!, $number: Int!) {
               repository(owner: $owner, name: $name) {
                 pullRequest(number: $number) {
-                  headRefOid
                   reviewThreads(first: 100) {
                     pageInfo { hasNextPage }
                     nodes {
@@ -63,13 +85,6 @@ jobs:
                 }
               }
             }')"
-
-          head_sha="$(jq -r '.data.repository.pullRequest.headRefOid' <<<"$review_data")"
-          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::Could not resolve the current PR head SHA."
-            exit 1
-          }
-          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
 
           truncated="$(jq '[
             .data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage,
@@ -119,19 +134,19 @@ jobs:
             reviewed_full_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$reviewed_sha" \
               --jq .sha 2>/dev/null || true)"
           fi
-          [[ "$reviewed_full_sha" == "$head_sha" ]] || {
-            echo "::error::No clean Codex review covers current head $head_sha (latest clean review: ${reviewed_full_sha:-none})."
+          [[ "$reviewed_full_sha" == "$HEAD_SHA" ]] || {
+            echo "::error::No clean Codex review covers current head $HEAD_SHA (latest clean review: ${reviewed_full_sha:-none})."
             echo "Address every Codex comment, resolve every thread, then comment '@codex review' and wait for the exact head SHA."
             exit 1
           }
 
-          echo "Clean Codex review covers current head $head_sha; no unresolved Codex threads."
+          echo "Clean Codex review covers current head $HEAD_SHA; no unresolved Codex threads."
 
       - name: Publish gate on pull-request head
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ steps.audit.outputs.head_sha }}
+          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
           AUDIT_OUTCOME: ${{ steps.audit.outcome }}
         run: |
           set -euo pipefail
