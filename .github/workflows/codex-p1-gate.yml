@@ -91,7 +91,7 @@ jobs:
           reviewed_sha="$(gh api --paginate \
             -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" \
-            --jq '.[] 
+            --jq '.[]
               | select((.user.login // "") | startswith("chatgpt-codex-connector"))
               | select(.body | test("Codex Review: Didn.t find any major issues"; "i"))
               | (.body | try capture("Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})").sha catch empty)' \
