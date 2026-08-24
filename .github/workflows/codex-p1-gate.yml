@@ -35,19 +35,22 @@ jobs:
         id: head
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         run: |
           set -euo pipefail
-          head_sha="$EVENT_HEAD_SHA"
-          if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
-            head_sha="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .head.sha)"
-          fi
+          pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          head_sha="$(jq -r .head.sha <<<"$pr_data")"
+          base_sha="$(jq -r .base.sha <<<"$pr_data")"
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
             echo "::error::Could not resolve the current PR head SHA."
             exit 1
           }
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Could not resolve the current PR base SHA."
+            exit 1
+          }
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
             -f state=pending \
             -f context='Codex review gate' \
@@ -83,11 +86,16 @@ jobs:
                     }
                   }
                 }
+                openPullRequests: pullRequests(states: OPEN, first: 100) {
+                  pageInfo { hasNextPage }
+                  nodes { number headRefOid }
+                }
               }
             }')"
 
           truncated="$(jq '[
             .data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage,
+            .data.repository.openPullRequests.pageInfo.hasNextPage,
             (.data.repository.pullRequest.reviewThreads.nodes[] |
               .comments.pageInfo.hasNextPage)
           ] | any' <<<"$review_data")"
@@ -104,6 +112,17 @@ jobs:
           ] | length' <<<"$review_data")"
           (( unresolved == 0 )) || {
             echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
+            exit 1
+          }
+
+          shared_head_count="$(jq \
+            --arg head "$HEAD_SHA" \
+            --argjson current "$PR_NUMBER" \
+            '[.data.repository.openPullRequests.nodes[]
+              | select(.number != $current and .headRefOid == $head)
+            ] | length' <<<"$review_data")"
+          (( shared_head_count == 0 )) || {
+            echo "::error::$shared_head_count other open pull request(s) share head $HEAD_SHA."
             exit 1
           }
 
@@ -147,16 +166,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
           AUDIT_OUTCOME: ${{ steps.audit.outcome }}
         run: |
           set -euo pipefail
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          current_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+          current_head_sha="$(jq -r .head.sha <<<"$current_pr")"
+          current_base_sha="$(jq -r .base.sha <<<"$current_pr")"
           if [[ "$AUDIT_OUTCOME" == success ]]; then
             state=success
             description='Exact-head Codex review is clean'
           else
             state=failure
             description='Codex comments or exact-head review remain'
+          fi
+          if [[ "$current_head_sha" != "$HEAD_SHA" || "$current_base_sha" != "$BASE_SHA" ]]; then
+            state=failure
+            description='Pull-request head or base changed during audit'
           fi
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
             -f state="$state" \
