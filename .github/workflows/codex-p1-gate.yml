@@ -98,12 +98,44 @@ jobs:
           current_body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           previous_body="$(jq -r '.changes.body.from // ""' "$GITHUB_EVENT_PATH")"
           request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
-          marker_pattern='codex-(review|base)-invalidation:'
+          marker_pattern='codex-(review|base|head|feedback)-invalidation:'
           if grep -Eiq "$request_pattern|$marker_pattern" \
             <<<"$current_body"$'\n'"$previous_body"; then
             gh api --method POST \
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
+          fi
+
+      - name: Preserve pull-request lifecycle invalidation
+        if: >-
+          github.event_name == 'pull_request_target' &&
+          (github.event.action == 'synchronize' ||
+           github.event.action == 'reopened' ||
+           github.event.action == 'ready_for_review')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_ACTION: ${{ github.event.action }}
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            -f body="<!-- codex-head-invalidation:$HEAD_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
+
+      - name: Preserve deleted Codex feedback invalidation
+        if: github.event_name == 'pull_request_review_comment' && github.event.action == 'deleted'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          deleted_author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
+          if [[ "$deleted_author" == chatgpt-codex-connector* ]]; then
+            gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="<!-- codex-feedback-invalidation:$HEAD_SHA --> Codex feedback was deleted; a fresh @codex review is required."
           fi
 
       - name: Require current clean Codex review
@@ -194,7 +226,7 @@ jobs:
                     "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
                   ))
                 )
-                or (.body // "" | test("codex-(review|base)-invalidation:"))
+                or (.body // "" | test("codex-(review|base|head|feedback)-invalidation:"))
               ))
             | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
@@ -329,7 +361,7 @@ jobs:
                       "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
                     ))
                   )
-                  or (.body // "" | test("codex-(review|base)-invalidation:"))
+                  or (.body // "" | test("codex-(review|base|head|feedback)-invalidation:"))
                 ))
               | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
             ' <<<"$final_comments_data")"
