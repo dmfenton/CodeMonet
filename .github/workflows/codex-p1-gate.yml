@@ -83,12 +83,10 @@ jobs:
           base_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '$embedded.base // .base.sha // $event.pull_request.base.sha // empty' <<<"$pr_data")"
           embedded_generation="$(jq -r '[.head // "", .base // ""] | join(":")' <<<"$embedded")" live_generation="$(jq -r '[.head.sha // "", .base.sha // ""] | join(":")' <<<"$pr_data")"
           if [[ "$embedded_generation" != : && "$live_generation" != : && "$embedded_generation" != "$live_generation" ]]; then
-            stale_kind="$(jq -r '.kind // ""' <<<"$embedded")"; stale_body="$(jq -r '.comment.body // ""' <<<"$event_data")"; stale_association="$(jq -r '.comment.author_association // ""' <<<"$event_data")"; stale_request_id="$(jq -r '.comment.id // 0' <<<"$event_data")"
+            stale_kind="$(jq -r '.kind // ""' <<<"$embedded")"; stale_body="$(jq -r '.comment.body // ""' <<<"$event_data")"; stale_association="$(jq -r '.comment.author_association // ""' <<<"$event_data")"
             if [[ "$stale_kind" == request-generation && "$stale_association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ && "$stale_body" =~ (^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$) ]]; then
               IFS=: read -r live_head live_base <<<"$live_generation"; [[ "$live_head" =~ ^[0-9a-f]{40}$ && "$live_base" =~ ^[0-9a-f]{40}$ ]]
               retry_api gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$live_head" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Stale review request invalidated the live head'
-              retry_api gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-attempt:$live_head:$live_base:$stale_request_id:$GITHUB_RUN_ID --> Stale generation request counted against the live head."
-              retry_api gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$live_head" -f state=success -f context='Codex review request owner' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER" -f description="PR #$PR_NUMBER used this live head review generation"
             fi
             echo "::error::Ignoring stale generation activity."; exit 1
           fi
@@ -171,7 +169,7 @@ jobs:
           body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           association="$(jq -r '.comment.author_association // ""' "$GITHUB_EVENT_PATH")"
           request_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
-          current_generation="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.sha, .base.sha] | join(":")')"; [[ "$current_generation" == "$HEAD_SHA:$BASE_SHA" ]] || exit 0
+          current_generation="$(retry_api gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.sha, .base.sha] | join(":")')"; [[ "$current_generation" == "$HEAD_SHA:$BASE_SHA" ]] || exit 0
           if [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ && "$body" =~ (^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$) ]]; then
             request_marker='codex-request-attempt'; if [[ "$body" == *"codex-request-generation:$HEAD_SHA:$BASE_SHA"* ]]; then request_marker='codex-request-use'; fi
             retry_api gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- $request_marker:$HEAD_SHA:$BASE_SHA:$request_id:$GITHUB_RUN_ID --> Authenticated review request attempt recorded."
