@@ -85,7 +85,8 @@ command_id=$(aws ssm send-command \
   --output text)
 
 status=Pending
-for _ in $(seq 1 450); do
+readonly refresh_poll_attempts=750 # 25 minutes; matches the SSM command's bounded lifetime.
+for ((attempt = 0; attempt < refresh_poll_attempts; attempt++)); do
   status=$(aws ssm get-command-invocation \
     --region "$region" \
     --command-id "$command_id" \
