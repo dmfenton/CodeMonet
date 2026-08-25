@@ -53,7 +53,8 @@ def test_tenant_manifest_publisher_adds_immutable_source() -> None:
         "sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
     }
     publisher = (ROOT / "scripts/publish-tenant-manifest.sh").read_text(encoding="utf-8")
-    assert 'gh api "repos/${repository}/commits/main"' in publisher
+    assert '"repos/${repository}/contents/${manifest}?ref=main"' in publisher
+    assert "Main manifest changed during activation" in publisher
     assert '--parameters "AppId=${app_id},Commit=${commit},Digest=${digest}"' in publisher
     workflow = (ROOT / ".github/workflows/publish-tenant-manifest.yml").read_text(encoding="utf-8")
     trigger = workflow.split("permissions:", maxsplit=1)[0]

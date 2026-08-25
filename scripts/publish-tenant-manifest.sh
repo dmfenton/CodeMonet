@@ -58,12 +58,16 @@ if [[ ${FENTON_TENANT_MANIFEST_RENDER_ONLY:-false} == true ]]; then
   exit 0
 fi
 : "${GH_TOKEN:?GH_TOKEN is required}"
-main_commit=$(gh api "repos/${repository}/commits/main" --jq .sha)
-if [[ "$main_commit" != "$commit" ]]; then
-  echo "Refusing to publish stale commit $commit; main is $main_commit" >&2
+digest=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["source"]["sha256"])' "$payload_file")
+main_manifest_digest() {
+  gh api -H "Accept: application/vnd.github.raw+json" \
+    "repos/${repository}/contents/${manifest}?ref=main" \
+    | shasum -a 256 | awk '{print $1}'
+}
+if [[ "$(main_manifest_digest)" != "$digest" ]]; then
+  echo "Refusing to publish a manifest that differs from current main" >&2
   exit 1
 fi
-digest=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["source"]["sha256"])' "$payload_file")
 aws ssm put-parameter \
   --region "$region" \
   --name "$parameter_name" \
@@ -102,5 +106,9 @@ for _ in $(seq 1 90); do
 done
 if [[ "$status" != Success ]]; then
   echo "Catalog refresh timed out with status $status" >&2
+  exit 1
+fi
+if [[ "$(main_manifest_digest)" != "$digest" ]]; then
+  echo "Main manifest changed during activation; dispatch the current main release" >&2
   exit 1
 fi
