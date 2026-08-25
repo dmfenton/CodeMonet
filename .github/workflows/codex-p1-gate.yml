@@ -29,6 +29,6 @@ permissions:
 
 jobs:
   enforce:
-    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@f0d90b3ea005ec432484a5030d708ffabe1f2e03
+    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@29502f3871ed02417b4438454a4a077b127694da
     with:
       pr_number: ${{ inputs.pr_number || '0' }}
