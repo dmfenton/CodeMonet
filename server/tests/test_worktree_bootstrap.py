@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -64,7 +66,14 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
         _run("git", "worktree", "add", "-b", "feature", str(worktree), cwd=app)
 
         _write_tool(tools / "node", "echo 24")
-        _write_tool(tools / "npm", "exit 0")
+        _write_tool(
+            tools / "npm",
+            'if [ -n "${NPM_STARTED_FILE:-}" ]; then\n'
+            '  : > "$NPM_STARTED_FILE"\n'
+            '  sleep "${NPM_SLEEP_SECONDS:-0}"\n'
+            "fi\n"
+            "exit 0",
+        )
         _write_tool(tools / "uv", "exit 0")
         environment = {
             **os.environ,
@@ -74,7 +83,37 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
         stale_lock = platform / ".git/fenton-platform-bootstrap.v2.lock"
         stale_lock.write_text(f"{os.getpid()}\n", encoding="utf-8")
 
-        _run("bash", "scripts/worktree-bootstrap.sh", cwd=worktree, env=environment)
+        npm_started = repositories / "npm-started"
+        environment.update(
+            NPM_STARTED_FILE=str(npm_started),
+            NPM_SLEEP_SECONDS="2",
+        )
+        bootstrap = subprocess.Popen(
+            ("bash", "scripts/worktree-bootstrap.sh"),
+            cwd=worktree,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=environment,
+        )
+        for _attempt in range(100):
+            if npm_started.exists():
+                break
+            time.sleep(0.02)
+        assert npm_started.exists(), "bootstrap did not reach npm"
+
+        if flock := shutil.which("flock"):
+            lock_probe = subprocess.run((flock, "-n", str(stale_lock), "true"))
+        else:
+            lock_probe = subprocess.run(
+                (shutil.which("lockf") or "lockf", "-t", "0", str(stale_lock), "true")
+            )
+        assert lock_probe.returncode == 0, "platform lock remained held during npm install"
+
+        stdout, stderr = bootstrap.communicate(timeout=10)
+        assert bootstrap.returncode == 0, f"stdout:\n{stdout}\nstderr:\n{stderr}"
+        environment.pop("NPM_STARTED_FILE")
+        environment.pop("NPM_SLEEP_SECONDS")
 
         linked = worktree / "vendor/fenton-platform"
         assert linked.is_dir()
