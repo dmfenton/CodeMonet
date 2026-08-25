@@ -88,7 +88,7 @@ jobs:
                 }
                 openPullRequests: pullRequests(states: OPEN, first: 100) {
                   pageInfo { hasNextPage }
-                  nodes { number headRefOid }
+                  nodes { number headRefOid headRepositoryOwner { login } }
                 }
               }
             }')"
@@ -117,9 +117,14 @@ jobs:
 
           shared_head_count="$(jq \
             --arg head "$HEAD_SHA" \
+            --arg owner "$owner" \
             --argjson current "$PR_NUMBER" \
             '[.data.repository.openPullRequests.nodes[]
-              | select(.number != $current and .headRefOid == $head)
+              | select(
+                  .number != $current
+                  and .headRefOid == $head
+                  and (.headRepositoryOwner.login // "") == $owner
+                )
             ] | length' <<<"$review_data")"
           (( shared_head_count == 0 )) || {
             echo "::error::$shared_head_count other open pull request(s) share head $HEAD_SHA."
@@ -143,7 +148,7 @@ jobs:
                   "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
                 ))
               ))
-            | (map(.created_at) | max) // "0000-01-01T00:00:00Z"
+            | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
           feedback_at="$(jq -r '
             [.data.repository.pullRequest.reviewThreads.nodes[].comments.nodes[]
@@ -177,6 +182,7 @@ jobs:
             exit 1
           }
 
+          echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
           echo "Clean Codex review covers current head $HEAD_SHA; no unresolved Codex threads."
 
       - name: Publish gate on pull-request head
@@ -187,6 +193,7 @@ jobs:
           BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
           AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          AUDIT_CUTOFF: ${{ steps.audit.outputs.cutoff }}
         run: |
           set -euo pipefail
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -203,6 +210,114 @@ jobs:
           if [[ "$current_head_sha" != "$HEAD_SHA" || "$current_base_sha" != "$BASE_SHA" ]]; then
             state=failure
             description='Pull-request head or base changed during audit'
+          fi
+          if [[ "$state" == success ]]; then
+            owner="${GITHUB_REPOSITORY%%/*}"
+            name="${GITHUB_REPOSITORY#*/}"
+            # shellcheck disable=SC2016
+            final_review_data="$(gh api graphql \
+              -F owner="$owner" \
+              -F name="$name" \
+              -F number="$PR_NUMBER" \
+              -f query='query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 100) {
+                      pageInfo { hasNextPage }
+                      nodes {
+                        isResolved
+                        comments(first: 100) {
+                          pageInfo { hasNextPage }
+                          nodes { createdAt updatedAt author { login } }
+                        }
+                      }
+                    }
+                  }
+                  openPullRequests: pullRequests(states: OPEN, first: 100) {
+                    pageInfo { hasNextPage }
+                    nodes { number headRefOid headRepositoryOwner { login } }
+                  }
+                }
+              }')"
+            final_truncated="$(jq '[
+              .data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage,
+              .data.repository.openPullRequests.pageInfo.hasNextPage,
+              (.data.repository.pullRequest.reviewThreads.nodes[] |
+                .comments.pageInfo.hasNextPage)
+            ] | any' <<<"$final_review_data")"
+            final_unresolved="$(jq '[
+              .data.repository.pullRequest.reviewThreads.nodes[]
+              | select(.isResolved | not)
+              | .comments.nodes[]
+              | select((.author.login // "") == "chatgpt-codex-connector")
+            ] | length' <<<"$final_review_data")"
+            final_shared_head_count="$(jq \
+              --arg head "$HEAD_SHA" \
+              --arg owner "$owner" \
+              --argjson current "$PR_NUMBER" \
+              '[.data.repository.openPullRequests.nodes[]
+                | select(
+                    .number != $current
+                    and .headRefOid == $head
+                    and (.headRepositoryOwner.login // "") == $owner
+                  )
+              ] | length' <<<"$final_review_data")"
+            final_base_changed_at="$(gh api --paginate \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/events?per_page=100" \
+              --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
+              | tail -n 1)"
+            final_base_changed_at="${final_base_changed_at:-0000-01-01T00:00:00Z}"
+            final_comments_data="$(gh api --paginate --slurp \
+              -H 'Accept: application/vnd.github+json' \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+            final_review_requested_at="$(jq -r '
+              add
+              | map(select(
+                  (.user.login // "") != "chatgpt-codex-connector[bot]"
+                  and (.body // "" | test(
+                    "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
+                  ))
+                ))
+              | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
+            ' <<<"$final_comments_data")"
+            final_feedback_at="$(jq -r '
+              [.data.repository.pullRequest.reviewThreads.nodes[].comments.nodes[]
+                | select((.author.login // "") == "chatgpt-codex-connector")
+                | (.updatedAt // .createdAt)
+              ] | max // "0000-01-01T00:00:00Z"
+            ' <<<"$final_review_data")"
+            final_cutoff="$(printf '%s\n' \
+              "$final_base_changed_at" \
+              "$final_review_requested_at" \
+              "$final_feedback_at" \
+              | sort | tail -n 1)"
+            final_reviewed_sha="$(jq -r --arg cutoff "$final_cutoff" '
+              add
+              | map(select(
+                  (.user.login // "") == "chatgpt-codex-connector[bot]"
+                  and (.created_at // "") > $cutoff
+                  and (.body | test("Codex Review: Didn.t find any major issues"; "i"))
+                ))
+              | last
+              | (.body | try capture(
+                  "Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})"
+                ).sha catch empty)
+            ' <<<"$final_comments_data")"
+            final_reviewed_full_sha=""
+            if [[ -n "$final_reviewed_sha" ]]; then
+              final_reviewed_full_sha="$(gh api \
+                "repos/$GITHUB_REPOSITORY/commits/$final_reviewed_sha" \
+                --jq .sha 2>/dev/null || true)"
+            fi
+            if [[ "$final_truncated" != false \
+              || "$final_unresolved" != 0 \
+              || "$final_shared_head_count" != 0 \
+              || "$final_cutoff" != "$AUDIT_CUTOFF" \
+              || "$final_reviewed_full_sha" != "$HEAD_SHA" ]]; then
+              state=failure
+              description='Review activity changed during final audit'
+            fi
           fi
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
             -f state="$state" \
