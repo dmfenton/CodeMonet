@@ -182,7 +182,12 @@ jobs:
       - name: Resolve signing identity
         run: |
           KEYCHAIN_PATH=signing_temp.keychain
-          SIGNING_IDENTITY_SHA1=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+          SIGNING_KEYCHAINS=(
+            "$KEYCHAIN_PATH"
+            /Library/Keychains/System.keychain
+            /System/Library/Keychains/SystemRootCertificates.keychain
+          )
+          SIGNING_IDENTITY_SHA1=$(security find-identity -v -p codesigning "${SIGNING_KEYCHAINS[@]}" \
             | awk -F '"' '/Apple Distribution|iPhone Distribution/ { print $1 }' \
             | awk '{ print $2; exit }')
           if ! [[ "$SIGNING_IDENTITY_SHA1" =~ ^[0-9A-F]{40}$ ]]; then
