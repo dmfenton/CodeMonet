@@ -44,7 +44,9 @@ jobs:
         (github.event.issue.pull_request &&
           (github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
             github.event.comment.user.login == 'github-actions[bot]' ||
-            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))))
+            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))) &&
+      (github.event_name != 'pull_request_review' || github.event.review.user.login == 'chatgpt-codex-connector[bot]' || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) &&
+      (github.event_name != 'pull_request_review_comment' || github.event.comment.user.login == 'chatgpt-codex-connector[bot]' || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     outputs:
       head_sha: ${{ steps.head.outputs.head_sha }}
@@ -77,11 +79,11 @@ jobs:
           author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
           association="$(jq -r '.comment.author_association // ""' "$GITHUB_EVENT_PATH")"
           request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
-          marker_pattern='codex-(review|base|head|feedback)-invalidation:'
+          marker_pattern='codex-(review|base|head|feedback|resolution)-invalidation:'
           bodies="$current_body"$'\n'"$previous_body"
           replacement_marker="codex-review-invalidation:$HEAD_SHA"
           [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies" && replacement_marker="codex-head-invalidation:$HEAD_SHA:$BASE_SHA:restored" || true
-          if { [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]] && grep -Eiq "$request_pattern" <<<"$bodies"; } \
+          if { [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]] && grep -Eiq "$request_pattern|$marker_pattern" <<<"$bodies"; } \
             || { [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies"; }; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- $replacement_marker --> Review request or generation marker changed; a fresh @codex review is required."
@@ -193,10 +195,11 @@ jobs:
                   and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR"))
                   and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"))
                 )
-                or ((.user.login // "") == "github-actions[bot]" and (.body // "" | test("codex-(review|base|head|feedback)-invalidation:")))
               ))
             | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
+          invalidation_at="$(jq -r --arg head "$HEAD_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and (.body // "" | test("codex-(review|base|head|feedback)-invalidation:"))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head))))) | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"' <<<"$comments_data")"
+          [[ "$review_requested_at" > "$invalidation_at" ]] || { echo "::error::A trusted @codex review request must follow the latest invalidation."; exit 1; }
           feedback_at="$(jq -r '
             [.data.repository.pullRequest.reviewThreads.nodes[]
               | select(any(.comments.nodes[]; (.author.login // "") == "chatgpt-codex-connector"))
@@ -212,7 +215,7 @@ jobs:
             echo "::error::A fresh @codex review request is required after the latest Codex feedback."
             exit 1
           fi
-          cutoff="$(printf '%s\n' "$review_requested_at" "$feedback_at" \
+          cutoff="$(printf '%s\n' "$review_requested_at" "$feedback_at" "$invalidation_at" \
             | sort | tail -n 1)"
           reviewed_sha="$(jq -r --arg cutoff "$cutoff" '
             add
@@ -314,10 +317,10 @@ jobs:
                     and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR"))
                     and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"))
                   )
-                  or ((.user.login // "") == "github-actions[bot]" and (.body // "" | test("codex-(review|base|head|feedback)-invalidation:")))
                 ))
               | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
             ' <<<"$final_comments_data")"
+            final_invalidation_at="$(jq -r --arg head "$HEAD_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and (.body // "" | test("codex-(review|base|head|feedback)-invalidation:"))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head))))) | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"' <<<"$final_comments_data")"
             final_feedback_at="$(jq -r '
               [.data.repository.pullRequest.reviewThreads.nodes[]
                 | select(any(.comments.nodes[]; (.author.login // "") == "chatgpt-codex-connector"))
@@ -327,9 +330,8 @@ jobs:
                 | (.updatedAt // .createdAt)
               ] | max // "0000-01-01T00:00:00Z"
             ' <<<"$final_review_data")"
-            final_cutoff="$(printf '%s\n' \
-              "$final_review_requested_at" \
-              "$final_feedback_at" \
+            final_cutoff="$(printf '%s\n' "$final_review_requested_at" \
+              "$final_feedback_at" "$final_invalidation_at" \
               | sort | tail -n 1)"
             final_reviewed_sha="$(jq -r --arg cutoff "$final_cutoff" '
               add
@@ -352,6 +354,8 @@ jobs:
             if [[ "$final_truncated" != false \
               || "$final_unresolved" != 0 \
               || "$final_shared_head_count" != 0 \
+              || "$final_review_requested_at" < "$final_invalidation_at" \
+              || "$final_review_requested_at" == "$final_invalidation_at" \
               || ( "$final_feedback_at" != "0000-01-01T00:00:00Z" \
                 && ( "$final_review_requested_at" < "$final_feedback_at" \
                   || "$final_review_requested_at" == "$final_feedback_at" ) ) \
