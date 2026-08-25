@@ -3,7 +3,7 @@ on:
   push:
     branches: [main]
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review, edited]
+    types: [opened, reopened, synchronize, ready_for_review, edited, closed]
   pull_request_review:
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
@@ -34,9 +34,24 @@ jobs:
             (( count < 100 )) && break
             (( page += 1 ))
           done
+  reconcile-closed-head:
+    if: github.event_name == 'pull_request_target' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear or re-audit the shared head status
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ github.event.pull_request.head.sha }}', CLOSED_PR: '${{ github.event.pull_request.number }}'}
+        run: |
+          set -euo pipefail
+          active="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" | jq -r --arg head "$HEAD_SHA" 'add[] | select(.head.sha == $head) | .number')"
+          if [[ -z "$active" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Closed PR status cannot authorize a future PR' || true
+          else
+            while read -r pr; do gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr/comments" -f body="<!-- codex-collision-closed:$CLOSED_PR:$GITHUB_RUN_ID --> A same-head PR closed; re-auditing the surviving open PR."; done <<<"$active"
+          fi
   preserve-invalidation:
     if: >-
       github.event_name != 'push' &&
+      (github.event_name != 'pull_request_target' || github.event.action != 'closed') &&
       (github.event_name != 'issue_comment' ||
         (github.event.issue.pull_request &&
           (github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
@@ -191,7 +206,7 @@ jobs:
           }
           head_repository="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.repo.full_name // ""')"
           [[ "$head_repository" == "$GITHUB_REPOSITORY" ]] || { echo "::error::Fork pull requests must be imported to a same-repository branch before this writable review gate can pass."; exit 1; }
-          all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+          all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
           shared_head_count="$(jq \
             --arg head "$HEAD_SHA" \
             --argjson current "$PR_NUMBER" \
@@ -281,7 +296,7 @@ jobs:
               | .comments.nodes[]
               | select((.author.login // "") == "chatgpt-codex-connector")
             ] | length' <<<"$final_review_data")"
-            final_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+            final_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
             final_shared_head_count="$(jq \
               --arg head "$HEAD_SHA" \
               --argjson current "$PR_NUMBER" \
@@ -345,7 +360,7 @@ jobs:
             success_published=true
             verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
             verification_comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
-            verification_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+            verification_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
             # shellcheck disable=SC2016
             verification_review_data="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved comments(first: 100) { pageInfo { hasNextPage } nodes { author { login } } } } } } } }')"
             verification_review_invalid="$(jq '[.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage, (.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage), ([.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | .comments.nodes[] | select((.author.login // "") == "chatgpt-codex-connector")] | length > 0)] | any' <<<"$verification_review_data")"
