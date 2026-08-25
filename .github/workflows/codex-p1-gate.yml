@@ -1,6 +1,8 @@
 name: Codex review gate
 
 on:
+  push:
+    branches: [main]
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited]
   pull_request_review:
@@ -18,7 +20,7 @@ on:
 
 permissions:
   contents: read
-  issues: read
+  issues: write
   pull-requests: read
   statuses: write
 
@@ -27,8 +29,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  invalidate-base-update:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invalidate every open pull request after a base push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            pulls="$(gh api \
+              "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&per_page=100&page=$page")"
+            count="$(jq 'length' <<<"$pulls")"
+            while IFS= read -r head_sha; do
+              [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
+                -f state=pending \
+                -f context='Codex review gate' \
+                -f description='Base advanced; fresh exact-head review required'
+            done < <(jq -r '.[].head.sha' <<<"$pulls" | sort -u)
+            (( count < 100 )) && break
+            (( page += 1 ))
+          done
+
   review-gate:
-    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    if: github.event_name != 'push' && (github.event_name != 'issue_comment' || github.event.issue.pull_request)
     runs-on: ubuntu-latest
     steps:
       - name: Resolve and invalidate pull-request head
@@ -55,6 +82,25 @@ jobs:
             -f state=pending \
             -f context='Codex review gate' \
             -f description='Rechecking Codex comments and exact-head review'
+
+      - name: Preserve removed review-request invalidation
+        if: github.event_name == 'issue_comment' && (github.event.action == 'edited' || github.event.action == 'deleted')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          current_body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
+          previous_body="$(jq -r '.changes.body.from // ""' "$GITHUB_EVENT_PATH")"
+          request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
+          marker_pattern='codex-review-invalidation:'
+          if grep -Eiq "$request_pattern|$marker_pattern" \
+            <<<"$current_body"$'\n'"$previous_body"; then
+            gh api --method POST \
+              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+              -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
+          fi
 
       - name: Require current clean Codex review
         id: audit
@@ -88,7 +134,7 @@ jobs:
                 }
                 openPullRequests: pullRequests(states: OPEN, first: 100) {
                   pageInfo { hasNextPage }
-                  nodes { number headRefOid headRepositoryOwner { login } }
+                  nodes { number headRefOid }
                 }
               }
             }')"
@@ -117,14 +163,9 @@ jobs:
 
           shared_head_count="$(jq \
             --arg head "$HEAD_SHA" \
-            --arg owner "$owner" \
             --argjson current "$PR_NUMBER" \
             '[.data.repository.openPullRequests.nodes[]
-              | select(
-                  .number != $current
-                  and .headRefOid == $head
-                  and (.headRepositoryOwner.login // "") == $owner
-                )
+              | select(.number != $current and .headRefOid == $head)
             ] | length' <<<"$review_data")"
           (( shared_head_count == 0 )) || {
             echo "::error::$shared_head_count other open pull request(s) share head $HEAD_SHA."
@@ -143,10 +184,13 @@ jobs:
           review_requested_at="$(jq -r '
             add
             | map(select(
-                (.user.login // "") != "chatgpt-codex-connector[bot]"
-                and (.body // "" | test(
-                  "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
-                ))
+                (
+                  (.user.login // "") != "chatgpt-codex-connector[bot]"
+                  and (.body // "" | test(
+                    "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
+                  ))
+                )
+                or (.body // "" | contains("codex-review-invalidation:"))
               ))
             | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
@@ -156,6 +200,12 @@ jobs:
               | (.updatedAt // .createdAt)
             ] | max // "0000-01-01T00:00:00Z"
           ' <<<"$review_data")"
+          if [[ "$feedback_at" != "0000-01-01T00:00:00Z" \
+            && ( "$review_requested_at" < "$feedback_at" \
+              || "$review_requested_at" == "$feedback_at" ) ]]; then
+            echo "::error::A fresh @codex review request is required after the latest Codex feedback."
+            exit 1
+          fi
           cutoff="$(printf '%s\n' "$base_changed_at" "$review_requested_at" "$feedback_at" \
             | sort | tail -n 1)"
           reviewed_sha="$(jq -r --arg cutoff "$cutoff" '
@@ -235,7 +285,7 @@ jobs:
                   }
                   openPullRequests: pullRequests(states: OPEN, first: 100) {
                     pageInfo { hasNextPage }
-                    nodes { number headRefOid headRepositoryOwner { login } }
+                    nodes { number headRefOid }
                   }
                 }
               }')"
@@ -253,14 +303,9 @@ jobs:
             ] | length' <<<"$final_review_data")"
             final_shared_head_count="$(jq \
               --arg head "$HEAD_SHA" \
-              --arg owner "$owner" \
               --argjson current "$PR_NUMBER" \
               '[.data.repository.openPullRequests.nodes[]
-                | select(
-                    .number != $current
-                    and .headRefOid == $head
-                    and (.headRepositoryOwner.login // "") == $owner
-                  )
+                | select(.number != $current and .headRefOid == $head)
               ] | length' <<<"$final_review_data")"
             final_base_changed_at="$(gh api --paginate \
               -H 'Accept: application/vnd.github+json' \
@@ -274,10 +319,13 @@ jobs:
             final_review_requested_at="$(jq -r '
               add
               | map(select(
-                  (.user.login // "") != "chatgpt-codex-connector[bot]"
-                  and (.body // "" | test(
-                    "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
-                  ))
+                  (
+                    (.user.login // "") != "chatgpt-codex-connector[bot]"
+                    and (.body // "" | test(
+                      "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
+                    ))
+                  )
+                  or (.body // "" | contains("codex-review-invalidation:"))
                 ))
               | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
             ' <<<"$final_comments_data")"
@@ -313,6 +361,9 @@ jobs:
             if [[ "$final_truncated" != false \
               || "$final_unresolved" != 0 \
               || "$final_shared_head_count" != 0 \
+              || ( "$final_feedback_at" != "0000-01-01T00:00:00Z" \
+                && ( "$final_review_requested_at" < "$final_feedback_at" \
+                  || "$final_review_requested_at" == "$final_feedback_at" ) ) \
               || "$final_cutoff" != "$AUDIT_CUTOFF" \
               || "$final_reviewed_full_sha" != "$HEAD_SHA" ]]; then
               state=failure
