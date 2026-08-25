@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
 - Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
 
+### Fixed
+
+- Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
+
 ## [1.39.3] - 2026-08-23
 
 ### Fixed

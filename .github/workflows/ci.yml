@@ -22,6 +22,7 @@ jobs:
             server:
               - 'server/**'
               - 'app/app.config.js'
+              - 'shared/src/auth/platform.ts'
               - 'fenton-platform.tenant.json'
               - 'fenton-platform.lock'
               - 'scripts/worktree-bootstrap.sh'

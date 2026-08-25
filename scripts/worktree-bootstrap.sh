@@ -43,12 +43,8 @@ if [[ ! -e "$platform_source/.git" ]]; then
   exit 1
 fi
 
-if ! git -C "$platform_source" cat-file -e "${platform_pin}^{commit}" 2>/dev/null; then
-  git -C "$platform_source" fetch origin "$platform_pin"
-fi
-
-mkdir -p "$(dirname "$platform_target")"
-platform_lock="$root/vendor/.fenton-platform-bootstrap.lock"
+platform_common_dir="$(cd "$platform_source" && cd "$(git rev-parse --git-common-dir)" && pwd)"
+platform_lock="$platform_common_dir/fenton-platform-bootstrap.lock"
 for ((_attempt = 0; _attempt < 100; _attempt++)); do
   if mkdir "$platform_lock" 2>/dev/null; then
     printf '%s\n' "$$" >"$platform_lock/owner"
@@ -73,6 +69,12 @@ release_platform_lock() {
   rmdir "$platform_lock" 2>/dev/null || true
 }
 trap release_platform_lock EXIT
+
+if ! git -C "$platform_source" cat-file -e "${platform_pin}^{commit}" 2>/dev/null; then
+  git -C "$platform_source" fetch origin "$platform_pin"
+fi
+
+mkdir -p "$(dirname "$platform_target")"
 if [[ -L "$platform_target" ]]; then
   if ! unlink "$platform_target" && [[ -L "$platform_target" ]]; then
     echo "worktree-bootstrap: failed to replace legacy platform symlink" >&2
