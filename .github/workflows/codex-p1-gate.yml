@@ -10,11 +10,7 @@ on:
     types: [created, edited, deleted]
   issue_comment:
     types: [created, edited, deleted]
-permissions:
-  contents: read
-  issues: write
-  pull-requests: read
-  statuses: write
+permissions: {contents: read, issues: write, pull-requests: read, statuses: write}
 jobs:
   invalidate-base-update:
     if: github.event_name == 'push'
@@ -72,6 +68,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
@@ -82,10 +79,12 @@ jobs:
           request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
           marker_pattern='codex-(review|base|head|feedback)-invalidation:'
           bodies="$current_body"$'\n'"$previous_body"
+          replacement_marker="codex-review-invalidation:$HEAD_SHA"
+          [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies" && replacement_marker="codex-head-invalidation:$HEAD_SHA:$BASE_SHA:restored" || true
           if { [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]] && grep -Eiq "$request_pattern" <<<"$bodies"; } \
             || { [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies"; }; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
+              -f body="<!-- $replacement_marker --> Review request or generation marker changed; a fresh @codex review is required."
           fi
       - name: Preserve pull-request lifecycle invalidation
         if: github.event_name == 'pull_request_target'
@@ -104,7 +103,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
-          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -204,8 +202,9 @@ jobs:
             | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
           feedback_at="$(jq -r '
-            [.data.repository.pullRequest.reviewThreads.nodes[].comments.nodes[]
-              | select((.author.login // "") == "chatgpt-codex-connector")
+            [.data.repository.pullRequest.reviewThreads.nodes[]
+              | select(any(.comments.nodes[]; (.author.login // "") == "chatgpt-codex-connector"))
+              | .comments.nodes[]
               | (.updatedAt // .createdAt)
             ] | max // "0000-01-01T00:00:00Z"
           ' <<<"$review_data")"
@@ -240,7 +239,6 @@ jobs:
             exit 1
           }
           echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
-          echo "Clean Codex review covers current head $HEAD_SHA; no unresolved Codex threads."
       - name: Publish gate on pull-request head
         if: always()
         env:
@@ -256,6 +254,7 @@ jobs:
           current_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           current_head_sha="$(jq -r .head.sha <<<"$current_pr")"
           current_base_sha="$(jq -r .base.sha <<<"$current_pr")"
+          current_updated_at="$(jq -r .updated_at <<<"$current_pr")"
           if [[ "$AUDIT_OUTCOME" == success ]]; then
             state=success
             description='Exact-head Codex review is clean'
@@ -329,8 +328,9 @@ jobs:
               | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
             ' <<<"$final_comments_data")"
             final_feedback_at="$(jq -r '
-              [.data.repository.pullRequest.reviewThreads.nodes[].comments.nodes[]
-                | select((.author.login // "") == "chatgpt-codex-connector")
+              [.data.repository.pullRequest.reviewThreads.nodes[]
+                | select(any(.comments.nodes[]; (.author.login // "") == "chatgpt-codex-connector"))
+                | .comments.nodes[]
                 | (.updatedAt // .createdAt)
               ] | max // "0000-01-01T00:00:00Z"
             ' <<<"$final_review_data")"
@@ -377,7 +377,7 @@ jobs:
           latest_gate_target="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" \
             --jq '[.[] | select(.context == "Codex review gate")][0].target_url // ""')"
           if [[ "$latest_head_sha" != "$HEAD_SHA" || "$latest_base_sha" != "$BASE_SHA" \
-            || "$latest_gate_target" != "$run_url" ]]; then
+            || "$latest_updated_at" != "$current_updated_at" || "$latest_gate_target" != "$run_url" ]]; then
             state=failure
             description='Newer PR or review activity superseded this audit'
           fi
