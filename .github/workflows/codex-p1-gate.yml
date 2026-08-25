@@ -1,5 +1,4 @@
 name: Codex review gate
-
 on:
   push:
     branches: [main]
@@ -17,17 +16,14 @@ on:
         description: Pull request number to verify
         required: true
         type: number
-
 permissions:
   contents: read
   issues: write
   pull-requests: read
   statuses: write
-
 concurrency:
   group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
   cancel-in-progress: true
-
 jobs:
   invalidate-base-update:
     if: github.event_name == 'push'
@@ -57,7 +53,6 @@ jobs:
             (( count < 100 )) && break
             (( page += 1 ))
           done
-
   review-gate:
     if: github.event_name != 'push' && (github.event_name != 'issue_comment' || github.event.issue.pull_request)
     runs-on: ubuntu-latest
@@ -86,7 +81,6 @@ jobs:
             -f state=pending \
             -f context='Codex review gate' \
             -f description='Rechecking Codex comments and exact-head review'
-
       - name: Preserve removed review-request invalidation
         if: github.event_name == 'issue_comment' && (github.event.action == 'edited' || github.event.action == 'deleted')
         env:
@@ -105,7 +99,6 @@ jobs:
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
           fi
-
       - name: Preserve pull-request lifecycle invalidation
         if: >-
           github.event_name == 'pull_request_target' &&
@@ -122,7 +115,6 @@ jobs:
           gh api --method POST \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
             -f body="<!-- codex-head-invalidation:$HEAD_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
-
       - name: Preserve deleted Codex feedback invalidation
         if: github.event_name == 'pull_request_review_comment' && github.event.action == 'deleted'
         env:
@@ -137,7 +129,6 @@ jobs:
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-feedback-invalidation:$HEAD_SHA --> Codex feedback was deleted; a fresh @codex review is required."
           fi
-
       - name: Require current clean Codex review
         id: audit
         continue-on-error: true
@@ -174,7 +165,6 @@ jobs:
                 }
               }
             }')"
-
           truncated="$(jq '[
             .data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage,
             .data.repository.openPullRequests.pageInfo.hasNextPage,
@@ -185,7 +175,6 @@ jobs:
             echo "::error::Review pagination exceeded the fail-closed audit limit."
             exit 1
           }
-
           unresolved="$(jq '[
             .data.repository.pullRequest.reviewThreads.nodes[]
             | select(.isResolved | not)
@@ -196,7 +185,6 @@ jobs:
             echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
             exit 1
           }
-
           shared_head_count="$(jq \
             --arg head "$HEAD_SHA" \
             --argjson current "$PR_NUMBER" \
@@ -207,7 +195,6 @@ jobs:
             echo "::error::$shared_head_count other open pull request(s) share head $HEAD_SHA."
             exit 1
           }
-
           base_changed_at="$(gh api --paginate \
             -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/events?per_page=100" \
@@ -256,7 +243,6 @@ jobs:
                 "Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})"
               ).sha catch empty)
           ' <<<"$comments_data")"
-
           reviewed_full_sha=""
           if [[ -n "$reviewed_sha" ]]; then
             reviewed_full_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$reviewed_sha" \
@@ -267,10 +253,8 @@ jobs:
             echo "Address every Codex comment, resolve every thread, then comment '@codex review' and wait for the exact head SHA."
             exit 1
           }
-
           echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
           echo "Clean Codex review covers current head $HEAD_SHA; no unresolved Codex threads."
-
       - name: Publish gate on pull-request head
         if: always()
         env:
@@ -410,7 +394,6 @@ jobs:
             -f state="$state" \
             -f context='Codex review gate' \
             -f description="$description"
-
       - name: Fail closed when review audit fails
         if: steps.audit.outcome != 'success'
         run: exit 1
