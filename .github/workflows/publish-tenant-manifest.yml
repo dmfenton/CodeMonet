@@ -1,12 +1,6 @@
 name: Publish Fenton tenant manifest
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'fenton-platform.tenant.json'
-      - 'scripts/publish-tenant-manifest.sh'
-      - '.github/workflows/publish-tenant-manifest.yml'
   workflow_dispatch:
 
 permissions:
