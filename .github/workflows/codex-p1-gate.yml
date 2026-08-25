@@ -343,10 +343,13 @@ jobs:
           if [[ "$state" == success ]]; then
             verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
             verification_comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+            verification_open_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
             verification_generation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and ((.body // "") | test("codex-(request-generation|resolution-invalidation):" + $head + ":" + $base))) or ((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(review|base|head|feedback)-invalidation:" + $head + ":" + $base)))) | .id] | max // 0' <<<"$verification_comments")"
+            verification_shared_head_count="$(jq --arg head "$HEAD_SHA" --argjson current "$PR_NUMBER" '[add[] | select(.number != $current and .head.sha == $head)] | length' <<<"$verification_open_pulls")"
             if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
               || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
-              || "$verification_generation_id" != "$AUDIT_GENERATION_ID" ]]; then
+              || "$verification_generation_id" != "$AUDIT_GENERATION_ID" \
+              || "$verification_shared_head_count" != 0 ]]; then
               gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
                 -f state=pending -f context='Codex review gate' -f target_url="$run_url" \
                 -f description='Newer PR activity awaits its serialized audit'
