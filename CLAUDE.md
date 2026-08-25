@@ -109,12 +109,14 @@ The `main` branch is protected with these rules:
 
 | Rule                              | Setting                   |
 | --------------------------------- | ------------------------- |
-| Required status checks            | CI Success                |
+| Required status checks            | CI Success, Codex review gate |
 | Require branches to be up to date | Yes                       |
+| Require conversation resolution   | Yes                       |
 | Enforce for admins                | No (can bypass if needed) |
 | Force pushes                      | Blocked                   |
 
-PRs to main require the "CI Success" check to pass before merging.
+PRs to main require both "CI Success" and "Codex review gate" to pass before
+merging. The Codex gate also requires every Codex review thread to be resolved.
 
 **Important:** Even though admin bypass is enabled, always use PRs. Never push directly to main.
 
@@ -713,3 +715,14 @@ See [docs/analytics.md](docs/analytics.md) for Umami setup.
 ## Troubleshooting
 
 See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues with Docker, SQLite, SSM, and the slim image.
+
+## Codex Review Gate
+
+- Never merge a pull request until the `Codex review gate` check passes.
+- Address every Codex review comment, regardless of severity, and resolve every Codex review thread before merge.
+- Allow only one `@codex review` request per head SHA. After an invalidation requires another review, push a new commit before re-requesting; an empty commit is acceptable only when no code change is needed.
+- Immediately before merge, re-query the live review threads and stop if any Codex thread is unresolved; never rely only on an earlier green status.
+- After resolving or reopening any Codex thread, first post `<!-- codex-resolution-invalidation:<full current head SHA>:<full current base SHA> -->`, then push a new commit, then comment `@codex review <!-- codex-request-generation:<full new head SHA>:<full current base SHA> -->` and wait for the gate to recompute.
+- For the one-time PR that first introduces this workflow before it exists on the default branch, publish the bootstrap status out of band only after manually performing the same exact-head clean-review and live-thread audit; this exception ends once the workflow is on the default branch.
+- After every push, comment `@codex review <!-- codex-request-generation:<full current head SHA>:<full current base SHA> -->` and wait for a clean review that names the exact current head SHA.
+- A clean review or green check for an earlier commit never authorizes merging a newer head.
