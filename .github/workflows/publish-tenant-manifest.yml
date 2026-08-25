@@ -1,6 +1,10 @@
 name: Publish Fenton tenant manifest
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - fenton-platform.tenant.json
   workflow_dispatch:
 
 permissions:
