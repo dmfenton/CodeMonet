@@ -193,8 +193,8 @@ jobs:
         continue-on-error: true
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}'}
         run: |
-          set -euo pipefail
-          retry_api() { local delay; for delay in 1 2 4 8 16; do "$@" && return; sleep "$delay"; done; return 1; }
+          set -euo pipefail; retry_api() { local delay; for delay in 1 2 4 8 16; do "$@" && return; sleep "$delay"; done; return 1; }
+          unsafe_newer_pr_run_count() { local runs ids run_id preserve count=0; runs="$(retry_api gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?per_page=100")"; ids="$(jq -r --arg title "Codex review gate PR #$PR_NUMBER" --argjson current "$GITHUB_RUN_ID" 'map(.workflow_runs) | add | .[] | select(.display_title == $title and .id > $current) | .id' <<<"$runs")"; while read -r run_id; do [[ -z "$run_id" ]] || { preserve="$(retry_api gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "preserve-invalidation")][0] | ((.status // "missing") + ":" + (.conclusion // ""))')"; [[ "$preserve" =~ ^completed:(success|skipped)$ ]] || count=$((count + 1)); }; done <<<"$ids"; printf '%s\n' "$count"; }
           for (( attempt = 0; attempt < 30; attempt++ )); do
             blocking=0
             for status in queued in_progress; do
@@ -317,7 +317,7 @@ jobs:
             final_resolution_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
             final_reviewed_sha="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --argjson generation "$final_generation_id" 'add | map(select((((.user.login // "") == "chatgpt-codex-connector[bot]") or ((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-clean-review:" + $head + ":" + $base + ":")))) and .id > $generation)) | last | select(.body | test("Codex Review: Didn.t find any major issues"; "i")) | (.body | try capture("Reviewed commit:[^0-9a-fA-F]*(?<sha>[0-9a-fA-F]{7,40})").sha catch empty)' <<<"$final_comments_data")"
             final_reviewed_full_sha=""; [[ -z "$final_reviewed_sha" ]] || final_reviewed_full_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$final_reviewed_sha" --jq .sha 2>/dev/null || true)"
-            final_newer_pr_run_count="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?per_page=100" | jq --arg title "Codex review gate PR #$PR_NUMBER" --argjson current "$GITHUB_RUN_ID" '[map(.workflow_runs) | add | .[] | select(.display_title == $title and .id > $current)] | length')"
+            final_newer_pr_run_count="$(unsafe_newer_pr_run_count)"
             if [[ "$final_truncated" != false \
               || "$final_unresolved" != 0 \
               || "$final_shared_head_count" != 0 \
@@ -371,7 +371,7 @@ jobs:
             verification_resolution_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_shared_head_count="$(jq --arg head "$HEAD_SHA" --argjson current "$PR_NUMBER" '[add[] | select(.number != $current and .head.sha == $head)] | length' <<<"$verification_all_pulls")"
             verification_newer_status_count="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" | jq --argjson audit "$AUDIT_STATUS_ID" --arg run "$run_url" '[add[] | select(.context == "Codex review gate" and .id > $audit and .target_url != $run)] | length')"
-            verification_newer_pr_run_count="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?per_page=100" | jq --arg title "Codex review gate PR #$PR_NUMBER" --argjson current "$GITHUB_RUN_ID" '[map(.workflow_runs) | add | .[] | select(.display_title == $title and .id > $current)] | length')"
+            verification_newer_pr_run_count="$(unsafe_newer_pr_run_count)"
             if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
               || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
               || "$(jq -r .state <<<"$verification_pr")" != open \
