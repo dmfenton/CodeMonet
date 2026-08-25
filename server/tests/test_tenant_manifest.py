@@ -56,6 +56,7 @@ def test_tenant_manifest_publisher_adds_immutable_source() -> None:
     assert '"repos/${repository}/contents/${manifest}?ref=main"' in publisher
     assert "Main manifest changed during activation" in publisher
     assert '--parameters "AppId=${app_id},Commit=${commit},Digest=${digest}"' in publisher
+    assert "seq 1 450" in publisher
     workflow = (ROOT / ".github/workflows/publish-tenant-manifest.yml").read_text(encoding="utf-8")
     trigger = workflow.split("permissions:", maxsplit=1)[0]
     assert "workflow_dispatch:" in trigger
