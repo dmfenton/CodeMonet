@@ -52,13 +52,14 @@ jobs:
     if: >-
       github.event_name != 'push' &&
       (github.event_name != 'pull_request_target' || github.event.action != 'closed') &&
+      (github.event_name != 'pull_request_target' || github.event.action != 'edited' || github.event.changes.base.ref.from) &&
       (github.event_name != 'issue_comment' ||
         (github.event.issue.pull_request &&
           (github.event.comment.user.login == 'chatgpt-codex-connector[bot]' ||
             github.event.comment.user.login == 'github-actions[bot]' ||
             contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))) &&
-      (github.event_name != 'pull_request_review' || github.event.review.user.login == 'chatgpt-codex-connector[bot]' || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) &&
-      (github.event_name != 'pull_request_review_comment' || github.event.comment.user.login == 'chatgpt-codex-connector[bot]' || contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      (github.event_name != 'pull_request_review' || github.event.review.user.login == 'chatgpt-codex-connector[bot]') &&
+      (github.event_name != 'pull_request_review_comment' || github.event.comment.user.login == 'chatgpt-codex-connector[bot]')
     runs-on: ubuntu-latest
     outputs:
       head_sha: ${{ steps.head.outputs.head_sha }}
@@ -71,9 +72,9 @@ jobs:
           set -euo pipefail
           pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" 2>/dev/null || printf '{}')"
           event_data="$(<"$GITHUB_EVENT_PATH")"
-          embedded="$(jq -c '.comment.body // "" | try capture("codex-(request-generation|resolution-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {}' <<<"$event_data")"
-          head_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '.head.sha // $event.pull_request.head.sha // $embedded.head // empty' <<<"$pr_data")"
-          base_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '.base.sha // $event.pull_request.base.sha // $embedded.base // empty' <<<"$pr_data")"
+          embedded="$(jq -c '.comment.body // "" | try capture("codex-(request-generation|request-use|resolution-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {}' <<<"$event_data")"
+          head_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '$embedded.head // .head.sha // $event.pull_request.head.sha // empty' <<<"$pr_data")"
+          base_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '$embedded.base // .base.sha // $event.pull_request.base.sha // empty' <<<"$pr_data")"
           if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ || ! "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
             comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" 2>/dev/null || printf '[]')"
             fallback="$(jq -c '[add[] | select((.user.login // "") == "github-actions[bot]" or ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR"))) | {id, marker: ((.body // "") | try capture("codex-(request-generation|request-use|request-revision|resolution-invalidation|base-invalidation|head-invalidation|feedback-invalidation|review-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {})} | select(.marker.head)] | (max_by(.id).marker // {})' <<<"$comments")"
@@ -150,6 +151,7 @@ jobs:
           body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           association="$(jq -r '.comment.author_association // ""' "$GITHUB_EVENT_PATH")"
           request_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
+          current_generation="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.sha, .base.sha] | join(":")')"; [[ "$current_generation" == "$HEAD_SHA:$BASE_SHA" ]] || exit 0
           if [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ && "$body" =~ (^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$) ]]; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-use:$HEAD_SHA:$BASE_SHA:$request_id:$GITHUB_RUN_ID --> Authenticated review request use recorded."
           fi
