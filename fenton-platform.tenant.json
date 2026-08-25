@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "app_id": "codemonet",
+  "presentation": {
+    "sign_in_name": "Code Monet"
+  },
+  "oauth": {
+    "clients": [
+      {
+        "client_id": "net.dmfenton.codemonet",
+        "audience": "codemonet-api",
+        "redirect_uris": [
+          "https://monet.dmfenton.net/auth/callback"
+        ]
+      }
+    ]
+  }
+}

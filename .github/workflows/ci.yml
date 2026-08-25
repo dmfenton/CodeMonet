@@ -21,7 +21,13 @@ jobs:
           filters: |
             server:
               - 'server/**'
+              - 'app/app.config.js'
+              - 'shared/src/auth/platform.ts'
+              - 'fenton-platform.tenant.json'
               - 'fenton-platform.lock'
+              - 'scripts/worktree-bootstrap.sh'
+              - 'scripts/publish-tenant-manifest.sh'
+              - '.github/workflows/publish-tenant-manifest.yml'
             frontend:
               - 'app/**'
               - 'web/**'
