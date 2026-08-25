@@ -177,6 +177,12 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}'}
         run: |
           set -euo pipefail
+          for (( attempt = 0; attempt < 30; attempt++ )); do
+            blocking=0
+            for status in queued in_progress; do while read -r run_id; do (( run_id < GITHUB_RUN_ID )) || continue; preserve="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "preserve-invalidation") | .status][0] // "pending"')"; [[ "$preserve" == completed ]] || blocking=1; done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'); done
+            (( blocking == 0 )) && break; sleep 2
+          done
+          (( blocking == 0 )) || { echo "::error::Earlier invalidation preservation did not complete before this audit."; exit 1; }
           latest_gate_target="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" --jq '[.[] | select(.context == "Codex review gate")][0].target_url // ""')"
           latest_run_id="$(sed -nE 's#^.*/actions/runs/([0-9]+)$#\1#p' <<<"$latest_gate_target")"
           if [[ -n "$latest_run_id" && "$latest_run_id" -gt "$GITHUB_RUN_ID" ]]; then echo "::error::A newer workflow run already owns the gate."; exit 1; fi
@@ -187,20 +193,14 @@ jobs:
           # shellcheck disable=SC2016
           review_data="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved comments(first: 100) { pageInfo { hasNextPage } nodes { author { login } } } } } } } }')"
           truncated="$(jq '[.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage, (.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage)] | any' <<<"$review_data")"
-          [[ "$truncated" == false ]] || {
-            echo "::error::Review pagination exceeded the fail-closed audit limit."
-            exit 1
-          }
+          [[ "$truncated" == false ]] || { echo "::error::Review pagination exceeded the fail-closed audit limit."; exit 1; }
           unresolved="$(jq '[
             .data.repository.pullRequest.reviewThreads.nodes[]
             | select(.isResolved | not)
             | .comments.nodes[]
             | select((.author.login // "") == "chatgpt-codex-connector")
           ] | length' <<<"$review_data")"
-          (( unresolved == 0 )) || {
-            echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
-            exit 1
-          }
+          (( unresolved == 0 )) || { echo "::error::$unresolved unresolved Codex review thread comment(s) remain."; exit 1; }
           IFS=$'\t' read -r head_repository pr_state pr_author <<<"$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.repo.full_name // "", .state, .user.login // ""] | @tsv')"
           [[ "$head_repository" == "$GITHUB_REPOSITORY" && "$pr_author" != 'dependabot[bot]' ]] || { echo "::error::Fork and Dependabot pull requests cannot use this writable review gate."; exit 1; }
           [[ "$pr_state" == open ]] || { echo "::error::Closed pull requests cannot publish a successful gate."; exit 1; }
