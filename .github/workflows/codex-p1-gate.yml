@@ -27,17 +27,12 @@ jobs:
             while IFS=$'\t' read -r pr_number head_sha base_sha; do
               [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
               [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || continue
-              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
-                -f state=pending -f context='Codex review gate' \
-                -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-                -f description='Base advanced; fresh exact-head review required'
-              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" \
-                -f body="<!-- codex-base-invalidation:$head_sha:$base_sha --> Base advanced to $base_sha; a fresh @codex review is required."
+              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Base advanced; fresh exact-head review required'
+              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" -f body="<!-- codex-base-invalidation:$head_sha:$base_sha --> Base advanced to $base_sha; a fresh @codex review is required."
               comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments?per_page=100")"
               request_id="$(jq -r --arg head "$head_sha" --arg base "$base_sha" 'add | map(select((.user.login // "") != "chatgpt-codex-connector[bot]" and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$comments")"
               if (( request_id > 0 )); then
-                gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" \
-                  -f body="<!-- codex-request-acceptance:$head_sha:$base_sha:$request_id --> The exact-generation request follows this base lifecycle event."
+                gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" -f body="<!-- codex-request-acceptance:$head_sha:$base_sha:$request_id --> The exact-generation request follows this base lifecycle event."
               fi
             done < <(jq -r '.[] | [.number, .head.sha, .base.sha] | @tsv' <<<"$pulls")
             (( count < 100 )) && break
@@ -71,13 +66,10 @@ jobs:
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR head SHA."; exit 1; }
           [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR base SHA."; exit 1; }
           printf 'head_sha=%s\nbase_sha=%s\n' "$head_sha" "$base_sha" >> "$GITHUB_OUTPUT"
-      - name: Publish pending invalidation
+      - name: Publish pending before preservation
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}'}
         run: |
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-            -f state=pending -f context='Codex review gate' \
-            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            -f description='Rechecking Codex comments and exact-head review'
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Rechecking Codex comments and exact-head review'
       - name: Preserve removed review-request invalidation
         if: github.event_name == 'issue_comment' && (github.event.action == 'edited' || github.event.action == 'deleted')
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.issue.number }}'}
@@ -94,16 +86,21 @@ jobs:
           [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies" && replacement_marker="codex-head-invalidation:$HEAD_SHA:$BASE_SHA:restored" || true
           if { [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]] && grep -Eiq "$request_pattern|$marker_pattern" <<<"$bodies"; } \
             || { [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies"; }; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              -f body="<!-- $replacement_marker --> Review request or generation marker changed; a fresh @codex review is required."
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- $replacement_marker --> Review request or generation marker changed; a fresh @codex review is required."
+          fi
+          if [[ "${{ github.event.action }}" == edited \
+            && "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ \
+            && "$current_body" =~ $request_pattern \
+            && "$current_body" == *"codex-request-generation:$HEAD_SHA:$BASE_SHA"* ]]; then
+            source_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-revision:$HEAD_SHA:$BASE_SHA:$source_id --> Edited exact-generation request accepted after its edit invalidation."
           fi
       - name: Preserve pull-request lifecycle invalidation
         if: github.event_name == 'pull_request_target'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number }}', PR_ACTION: '${{ github.event.action }}'}
         run: |
           set -euo pipefail
-          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
           if [[ "$PR_ACTION" != closed ]]; then
             event_updated_at="$(jq -r '.pull_request.updated_at // ""' "$GITHUB_EVENT_PATH")"
             comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
@@ -113,8 +110,7 @@ jobs:
               request_id=0
             fi
             if [[ "${request_id:-0}" -gt 0 ]]; then
-              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-                -f body="<!-- codex-request-acceptance:$HEAD_SHA:$BASE_SHA:$request_id --> The exact-generation request follows this pull-request lifecycle event."
+              gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-acceptance:$HEAD_SHA:$BASE_SHA:$request_id --> The exact-generation request follows this pull-request lifecycle event."
             fi
           fi
       - name: Preserve authenticated review invalidation
@@ -127,16 +123,26 @@ jobs:
             && "$review_author" == "chatgpt-codex-connector[bot]" \
             && "$review_body" =~ Codex.Review:.Didn.t.find.any.major.issues ]]; then exit 0; fi
           review_id="$(jq -r '.review.id // 0' "$GITHUB_EVENT_PATH")"
-          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$review_id:$REVIEW_ACTION --> Authenticated review feedback changed; a fresh @codex review is required."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$review_id:$REVIEW_ACTION --> Authenticated review feedback changed; a fresh @codex review is required."
       - name: Preserve authenticated review-comment invalidation
         if: github.event_name == 'pull_request_review_comment'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number }}', COMMENT_ACTION: '${{ github.event.action }}'}
         run: |
           set -euo pipefail
           comment_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
-          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:$COMMENT_ACTION --> Authenticated review feedback changed; a fresh @codex review is required."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:$COMMENT_ACTION --> Authenticated review feedback changed; a fresh @codex review is required."
+      - name: Preserve created Codex top-level feedback
+        if: github.event_name == 'issue_comment' && github.event.action == 'created'
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.issue.number }}'}
+        run: |
+          set -euo pipefail
+          author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
+          body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
+          comment_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
+          if [[ "$author" == "chatgpt-codex-connector[bot]" \
+            && ! "$body" =~ Codex.Review:.Didn.t.find.any.major.issues ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:created --> Codex feedback arrived; a fresh @codex review is required."
+          fi
       - name: Preserve accepted exact-generation request
         if: github.event_name == 'issue_comment' && github.event.action == 'created'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.issue.number }}'}
@@ -155,9 +161,14 @@ jobs:
             && "$body" == *"codex-request-generation:$HEAD_SHA:$BASE_SHA"* \
             && "$request_id" -gt 0 \
             && "$lifecycle_count" -gt 0 ]]; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              -f body="<!-- codex-request-acceptance:$HEAD_SHA:$BASE_SHA:$request_id --> Trusted exact-generation request accepted after the current lifecycle marker."
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-acceptance:$HEAD_SHA:$BASE_SHA:$request_id --> Trusted exact-generation request accepted after the current lifecycle marker."
           fi
+      - name: Republish pending after preservation
+        if: always()
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}'}
+        run: |
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Preserved review activity awaits serialized audit'
   review-gate:
     needs: preserve-invalidation
     concurrency:
@@ -171,10 +182,8 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'}
         run: |
           set -euo pipefail
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-            -f state=pending -f context='Codex review gate' \
-            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            -f description='Serialized exact-head review audit is running'
+          audit_status_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Serialized exact-head review audit is running' --jq .id)"
+          echo "status_id=$audit_status_id" >> "$GITHUB_OUTPUT"
           owner="${GITHUB_REPOSITORY%%/*}"
           name="${GITHUB_REPOSITORY#*/}"
           # shellcheck disable=SC2016
@@ -211,17 +220,18 @@ jobs:
             echo "::error::$shared_head_count other pull request(s) have used head $HEAD_SHA."
             exit 1
           }
-          comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
-            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+          comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
           base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$comments_data")"
           (( base_marker_count > 0 )) || { echo "::error::No durable marker binds this review generation to base $BASE_SHA."; exit 1; }
           request_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") != "chatgpt-codex-connector[bot]" and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$comments_data")"
-          request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request)))) | (map(.id) | max) // 0' <<<"$comments_data")"
+          request_revision_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-revision:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$comments_data")"
+          generation_id="$request_id"
+          if (( request_revision_id > generation_id )); then generation_id="$request_revision_id"; fi
+          request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$comments_data")"
           lifecycle_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(base|head)-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$comments_data")"
           feedback_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(review|feedback)-invalidation:" + $head + ":" + $base))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base))))) | (map(.id) | max) // 0' <<<"$comments_data")"
-          (( request_id > feedback_invalidation_id )) || { echo "::error::A generation-bound @codex review request must follow the latest feedback invalidation."; exit 1; }
-          (( request_id > lifecycle_invalidation_id || request_acceptance_id > lifecycle_invalidation_id )) || { echo "::error::The exact-generation request has not been accepted after the current lifecycle marker."; exit 1; }
-          generation_id="$request_id"
+          (( generation_id > feedback_invalidation_id )) || { echo "::error::A generation-bound @codex review request must follow the latest feedback invalidation."; exit 1; }
+          (( generation_id > lifecycle_invalidation_id || request_acceptance_id > lifecycle_invalidation_id )) || { echo "::error::The exact-generation request has not been accepted after the current lifecycle marker."; exit 1; }
           reviewed_sha="$(jq -r --argjson generation "$generation_id" '
             add
             | map(select(
@@ -247,16 +257,14 @@ jobs:
           echo "generation_id=$generation_id" >> "$GITHUB_OUTPUT"
       - name: Publish gate on pull-request head
         if: always()
-        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}', AUDIT_OUTCOME: '${{ steps.audit.outcome }}', AUDIT_GENERATION_ID: '${{ steps.audit.outputs.generation_id }}'}
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}', AUDIT_OUTCOME: '${{ steps.audit.outcome }}', AUDIT_GENERATION_ID: '${{ steps.audit.outputs.generation_id }}', AUDIT_STATUS_ID: '${{ steps.audit.outputs.status_id }}'}
         run: |
           set -Eeuo pipefail
           success_published=false
           restore_pending_on_error() {
             if [[ "$success_published" == true ]]; then
               trap - ERR
-              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-                -f state=pending -f context='Codex review gate' -f target_url="$run_url" \
-                -f description='Final verification failed; serialized audit required' || true
+              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$run_url" -f description='Final verification failed; serialized audit required' || true
             fi
           }
           trap restore_pending_on_error ERR
@@ -304,14 +312,16 @@ jobs:
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
             final_base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$final_comments_data")"
             final_request_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") != "chatgpt-codex-connector[bot]" and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
-            final_request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$final_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request)))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
+            final_request_revision_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$final_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-revision:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
+            final_generation_id="$final_request_id"
+            if (( final_request_revision_id > final_generation_id )); then final_generation_id="$final_request_revision_id"; fi
+            final_request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$final_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
             final_lifecycle_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(base|head)-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
             final_feedback_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(review|feedback)-invalidation:" + $head + ":" + $base))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base))))) | (map(.id) | max) // 0' <<<"$final_comments_data")"
             final_lifecycle_valid=false
-            if (( final_request_id > final_lifecycle_invalidation_id || final_request_acceptance_id > final_lifecycle_invalidation_id )); then
+            if (( final_generation_id > final_lifecycle_invalidation_id || final_request_acceptance_id > final_lifecycle_invalidation_id )); then
               final_lifecycle_valid=true
             fi
-            final_generation_id="$final_request_id"
             final_reviewed_sha="$(jq -r --argjson generation "$final_generation_id" '
               add
               | map(select(
@@ -326,14 +336,12 @@ jobs:
             ' <<<"$final_comments_data")"
             final_reviewed_full_sha=""
             if [[ -n "$final_reviewed_sha" ]]; then
-              final_reviewed_full_sha="$(gh api \
-                "repos/$GITHUB_REPOSITORY/commits/$final_reviewed_sha" \
-                --jq .sha 2>/dev/null || true)"
+              final_reviewed_full_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$final_reviewed_sha" --jq .sha 2>/dev/null || true)"
             fi
             if [[ "$final_truncated" != false \
               || "$final_unresolved" != 0 \
               || "$final_shared_head_count" != 0 \
-              || "$final_request_id" -le "$final_feedback_invalidation_id" \
+              || "$final_generation_id" -le "$final_feedback_invalidation_id" \
               || "$final_lifecycle_valid" != true \
               || "$final_generation_id" != "$AUDIT_GENERATION_ID" \
               || "$final_reviewed_full_sha" != "$HEAD_SHA" \
@@ -356,32 +364,33 @@ jobs:
             state=failure
             description='Newer PR or review activity superseded this audit'
           fi
-          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-            -f state="$state" -f context='Codex review gate' -f target_url="$run_url" \
-            -f description="$description"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state="$state" -f context='Codex review gate' -f target_url="$run_url" -f description="$description"
           if [[ "$state" == success ]]; then
             success_published=true
             verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
             verification_comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
             verification_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
             verification_request_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") != "chatgpt-codex-connector[bot]" and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
-            verification_request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$verification_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
+            verification_request_revision_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$verification_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-revision:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$verification_comments")"
+            verification_generation_id="$verification_request_id"
+            if (( verification_request_revision_id > verification_generation_id )); then verification_generation_id="$verification_request_revision_id"; fi
+            verification_request_acceptance_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$verification_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-acceptance:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_lifecycle_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(base|head)-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_feedback_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(review|feedback)-invalidation:" + $head + ":" + $base))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base))))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_shared_head_count="$(jq --arg head "$HEAD_SHA" --argjson current "$PR_NUMBER" '[add[] | select(.number != $current and .head.sha == $head)] | length' <<<"$verification_all_pulls")"
             verification_lifecycle_valid=false
-            if (( verification_request_id > verification_lifecycle_invalidation_id || verification_request_acceptance_id > verification_lifecycle_invalidation_id )); then
+            if (( verification_generation_id > verification_lifecycle_invalidation_id || verification_request_acceptance_id > verification_lifecycle_invalidation_id )); then
               verification_lifecycle_valid=true
             fi
+            verification_newer_status_count="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" | jq --argjson audit "$AUDIT_STATUS_ID" --arg run "$run_url" '[add[] | select(.context == "Codex review gate" and .id > $audit and .target_url != $run)] | length')"
             if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
               || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
-              || "$verification_request_id" != "$AUDIT_GENERATION_ID" \
-              || "$verification_request_id" -le "$verification_feedback_invalidation_id" \
+              || "$verification_generation_id" != "$AUDIT_GENERATION_ID" \
+              || "$verification_generation_id" -le "$verification_feedback_invalidation_id" \
               || "$verification_lifecycle_valid" != true \
+              || "$verification_newer_status_count" != 0 \
               || "$verification_shared_head_count" != 0 ]]; then
-              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
-                -f state=pending -f context='Codex review gate' -f target_url="$run_url" \
-                -f description='Newer PR activity awaits its serialized audit'
+              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$run_url" -f description='Newer PR activity awaits its serialized audit'
               success_published=false
             fi
           fi
