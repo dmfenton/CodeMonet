@@ -59,6 +59,4 @@ def test_tenant_manifest_publisher_adds_immutable_source() -> None:
     workflow = (ROOT / ".github/workflows/publish-tenant-manifest.yml").read_text(encoding="utf-8")
     trigger = workflow.split("permissions:", maxsplit=1)[0]
     assert "workflow_dispatch:" in trigger
-    assert "push:" in trigger
-    assert "branches: [main]" in trigger
-    assert "- fenton-platform.tenant.json" in trigger
+    assert "push:" not in trigger
