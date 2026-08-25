@@ -21,9 +21,6 @@ permissions:
   issues: write
   pull-requests: read
   statuses: write
-concurrency:
-  group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
-  cancel-in-progress: false
 jobs:
   invalidate-base-update:
     if: github.event_name == 'push'
@@ -83,10 +80,13 @@ jobs:
           set -euo pipefail
           current_body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           previous_body="$(jq -r '.changes.body.from // ""' "$GITHUB_EVENT_PATH")"
+          author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
+          association="$(jq -r '.comment.author_association // ""' "$GITHUB_EVENT_PATH")"
           request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
           marker_pattern='codex-(review|base|head|feedback)-invalidation:'
-          if grep -Eiq "$request_pattern|$marker_pattern" \
-            <<<"$current_body"$'\n'"$previous_body"; then
+          bodies="$current_body"$'\n'"$previous_body"
+          if { [[ "$association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]] && grep -Eiq "$request_pattern" <<<"$bodies"; } \
+            || { [[ "$author" == "github-actions[bot]" ]] && grep -Eiq "$marker_pattern" <<<"$bodies"; }; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
           fi
@@ -95,7 +95,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
-          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_ACTION: ${{ github.event.action }}
         run: |
@@ -112,7 +111,7 @@ jobs:
         run: |
           set -euo pipefail
           deleted_author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
-          if [[ "$deleted_author" == chatgpt-codex-connector* ]]; then
+          if [[ "$deleted_author" == "chatgpt-codex-connector[bot]" ]]; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-feedback-invalidation:$HEAD_SHA --> Codex feedback was deleted; a fresh @codex review is required."
           fi
@@ -122,6 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         run: |
           set -euo pipefail
