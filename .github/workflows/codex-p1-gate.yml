@@ -75,9 +75,11 @@ jobs:
           set -euo pipefail
           pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" 2>/dev/null || printf '{}')"
           event_data="$(<"$GITHUB_EVENT_PATH")"
+          pr_state="$(jq -r --argjson event "$event_data" '.state // $event.pull_request.state // $event.issue.state // empty' <<<"$pr_data")"; [[ "$pr_state" == open ]] || { echo "::error::Ignoring activity for a closed or unavailable pull request."; exit 1; }
           embedded="$(jq -c 'if .action == "created" then (.comment.body // "" | try capture("codex-(request-generation|request-use|resolution-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {}) else {} end' <<<"$event_data")"
           head_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '$embedded.head // .head.sha // $event.pull_request.head.sha // empty' <<<"$pr_data")"
           base_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '$embedded.base // .base.sha // $event.pull_request.base.sha // empty' <<<"$pr_data")"
+          embedded_generation="$(jq -r '[.head // "", .base // ""] | join(":")' <<<"$embedded")" live_generation="$(jq -r '[.head.sha // "", .base.sha // ""] | join(":")' <<<"$pr_data")"; [[ "$embedded_generation" == : || "$live_generation" == : || "$embedded_generation" == "$live_generation" ]] || { echo "::error::Ignoring stale generation activity."; exit 1; }
           if [[ ! "$head_sha" =~ ^[0-9a-f]{40}$ || ! "$base_sha" =~ ^[0-9a-f]{40}$ ]]; then
             comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" 2>/dev/null || printf '[]')"
             fallback="$(jq -c '[add[] | select((.user.login // "") == "github-actions[bot]" or ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR"))) | {id, marker: ((.body // "") | try capture("codex-(request-generation|request-use|request-revision|resolution-invalidation|base-invalidation|head-invalidation|feedback-invalidation|review-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {})} | select(.marker.head)] | (max_by(.id).marker // {})' <<<"$comments")"
@@ -199,8 +201,8 @@ jobs:
             echo "::error::$unresolved unresolved Codex review thread comment(s) remain."
             exit 1
           }
-          IFS=$'\t' read -r head_repository pr_state <<<"$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.repo.full_name // "", .state] | @tsv')"
-          [[ "$head_repository" == "$GITHUB_REPOSITORY" ]] || { echo "::error::Fork pull requests must be imported to a same-repository branch before this writable review gate can pass."; exit 1; }
+          IFS=$'\t' read -r head_repository pr_state pr_author <<<"$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.repo.full_name // "", .state, .user.login // ""] | @tsv')"
+          [[ "$head_repository" == "$GITHUB_REPOSITORY" && "$pr_author" != 'dependabot[bot]' ]] || { echo "::error::Fork and Dependabot pull requests cannot use this writable review gate."; exit 1; }
           [[ "$pr_state" == open ]] || { echo "::error::Closed pull requests cannot publish a successful gate."; exit 1; }
           all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
           shared_head_count="$(jq \
@@ -272,7 +274,7 @@ jobs:
             state=failure
             description='Codex comments or exact-head review remain'
           fi
-          if [[ "$current_head_sha" != "$HEAD_SHA" || "$current_base_sha" != "$BASE_SHA" || "$(jq -r .state <<<"$current_pr")" != open ]]; then
+          if [[ "$current_head_sha" != "$HEAD_SHA" || "$current_base_sha" != "$BASE_SHA" || "$(jq -r .state <<<"$current_pr")" != open || "$(jq -r .user.login <<<"$current_pr")" == 'dependabot[bot]' ]]; then
             state=failure
             description='Pull-request head or base changed during audit'
           fi
@@ -375,6 +377,7 @@ jobs:
             if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
               || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
               || "$(jq -r .state <<<"$verification_pr")" != open \
+              || "$(jq -r .user.login <<<"$verification_pr")" == 'dependabot[bot]' \
               || "$verification_generation_id" != "$AUDIT_GENERATION_ID" \
               || "$verification_head_request_count" != 1 \
               || "$verification_request_owner_valid" != true \
