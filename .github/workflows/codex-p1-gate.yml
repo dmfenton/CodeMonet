@@ -43,13 +43,17 @@ jobs:
             pulls="$(gh api \
               "repos/$GITHUB_REPOSITORY/pulls?state=open&base=main&per_page=100&page=$page")"
             count="$(jq 'length' <<<"$pulls")"
-            while IFS= read -r head_sha; do
+            while IFS=$'\t' read -r pr_number head_sha base_sha; do
               [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              gh api --method POST \
+                "repos/$GITHUB_REPOSITORY/issues/$pr_number/comments" \
+                -f body="<!-- codex-base-invalidation:$head_sha:$base_sha --> Base advanced to $base_sha; a fresh @codex review is required."
               gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
                 -f state=pending \
                 -f context='Codex review gate' \
                 -f description='Base advanced; fresh exact-head review required'
-            done < <(jq -r '.[].head.sha' <<<"$pulls" | sort -u)
+            done < <(jq -r '.[] | [.number, .head.sha, .base.sha] | @tsv' <<<"$pulls")
             (( count < 100 )) && break
             (( page += 1 ))
           done
@@ -94,7 +98,7 @@ jobs:
           current_body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           previous_body="$(jq -r '.changes.body.from // ""' "$GITHUB_EVENT_PATH")"
           request_pattern='(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)'
-          marker_pattern='codex-review-invalidation:'
+          marker_pattern='codex-(review|base)-invalidation:'
           if grep -Eiq "$request_pattern|$marker_pattern" \
             <<<"$current_body"$'\n'"$previous_body"; then
             gh api --method POST \
@@ -190,7 +194,7 @@ jobs:
                     "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
                   ))
                 )
-                or (.body // "" | contains("codex-review-invalidation:"))
+                or (.body // "" | test("codex-(review|base)-invalidation:"))
               ))
             | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
           ' <<<"$comments_data")"
@@ -325,7 +329,7 @@ jobs:
                       "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
                     ))
                   )
-                  or (.body // "" | contains("codex-review-invalidation:"))
+                  or (.body // "" | test("codex-(review|base)-invalidation:"))
                 ))
               | (map(.updated_at // .created_at) | max) // "0000-01-01T00:00:00Z"
             ' <<<"$final_comments_data")"
