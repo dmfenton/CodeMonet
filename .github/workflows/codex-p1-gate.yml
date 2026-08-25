@@ -10,12 +10,6 @@ on:
     types: [created, edited, deleted]
   issue_comment:
     types: [created, edited, deleted]
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: Pull request number to verify
-        required: true
-        type: number
 permissions:
   contents: read
   issues: write
@@ -48,15 +42,18 @@ jobs:
             (( count < 100 )) && break
             (( page += 1 ))
           done
-  review-gate:
+  preserve-invalidation:
     if: github.event_name != 'push' && (github.event_name != 'issue_comment' || github.event.issue.pull_request)
     runs-on: ubuntu-latest
+    outputs:
+      head_sha: ${{ steps.head.outputs.head_sha }}
+      base_sha: ${{ steps.head.outputs.base_sha }}
     steps:
       - name: Resolve and invalidate pull-request head
         id: head
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
           pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
@@ -95,6 +92,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_ACTION: ${{ github.event.action }}
         run: |
@@ -115,14 +113,21 @@ jobs:
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-feedback-invalidation:$HEAD_SHA --> Codex feedback was deleted; a fresh @codex review is required."
           fi
+  review-gate:
+    needs: preserve-invalidation
+    concurrency:
+      group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    steps:
       - name: Require current clean Codex review
         id: audit
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
-          BASE_SHA: ${{ steps.head.outputs.base_sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          HEAD_SHA: ${{ needs.preserve-invalidation.outputs.head_sha }}
+          BASE_SHA: ${{ needs.preserve-invalidation.outputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: |
           set -euo pipefail
           owner="${GITHUB_REPOSITORY%%/*}"
@@ -240,9 +245,9 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ steps.head.outputs.head_sha }}
-          BASE_SHA: ${{ steps.head.outputs.base_sha }}
-          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          HEAD_SHA: ${{ needs.preserve-invalidation.outputs.head_sha }}
+          BASE_SHA: ${{ needs.preserve-invalidation.outputs.base_sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
           AUDIT_OUTCOME: ${{ steps.audit.outcome }}
           AUDIT_CUTOFF: ${{ steps.audit.outputs.cutoff }}
         run: |
