@@ -4,6 +4,8 @@ run-name: 'Codex review gate PR #${{ github.event.pull_request.number || github.
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '2-57/5 * * * *'
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review, edited, closed]
   pull_request_review:
@@ -22,11 +24,11 @@ permissions:
   actions: write
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write
   statuses: write
 
 jobs:
   enforce:
-    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@1be59a0bb42da620daeff4da3c14502fa594688e
+    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@f0d90b3ea005ec432484a5030d708ffabe1f2e03
     with:
       pr_number: ${{ inputs.pr_number || '0' }}
