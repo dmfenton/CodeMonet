@@ -16,7 +16,7 @@ on:
     inputs:
       pr_number:
         required: true
-        type: number
+        type: string
 
 permissions:
   actions: write
@@ -27,6 +27,6 @@ permissions:
 
 jobs:
   enforce:
-    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@ee844f19a55c5c20e884a9d765220646b2180453
+    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@1be59a0bb42da620daeff4da3c14502fa594688e
     with:
-      pr_number: ${{ inputs.pr_number || 0 }}
+      pr_number: ${{ inputs.pr_number || '0' }}
