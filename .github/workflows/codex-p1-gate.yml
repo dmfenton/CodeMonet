@@ -12,7 +12,6 @@ on:
     types: [created, edited, deleted]
   workflow_dispatch: {inputs: {pr_number: {required: true, type: number}}}
 permissions: {actions: write, contents: read, issues: write, pull-requests: read, statuses: write}
-concurrency: {group: 'codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.ref }}', cancel-in-progress: false}
 jobs:
   invalidate-base-update:
     if: github.event_name == 'push'
@@ -169,6 +168,7 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Preserved review activity awaits serialized audit'
   review-gate:
     needs: preserve-invalidation
+    concurrency: {group: 'codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}', cancel-in-progress: false}
     runs-on: ubuntu-latest
     steps:
       - name: Require current clean Codex review
