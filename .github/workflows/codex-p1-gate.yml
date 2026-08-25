@@ -182,12 +182,6 @@ jobs:
             echo "::error::$shared_head_count other open pull request(s) share head $HEAD_SHA."
             exit 1
           }
-          base_changed_at="$(gh api --paginate \
-            -H 'Accept: application/vnd.github+json' \
-            "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/events?per_page=100" \
-            --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
-            | tail -n 1)"
-          base_changed_at="${base_changed_at:-0000-01-01T00:00:00Z}"
           comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
           base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$comments_data")"
@@ -216,7 +210,7 @@ jobs:
             echo "::error::A fresh @codex review request is required after the latest Codex feedback."
             exit 1
           fi
-          cutoff="$(printf '%s\n' "$base_changed_at" "$review_requested_at" "$feedback_at" \
+          cutoff="$(printf '%s\n' "$review_requested_at" "$feedback_at" \
             | sort | tail -n 1)"
           reviewed_sha="$(jq -r --arg cutoff "$cutoff" '
             add
@@ -314,12 +308,6 @@ jobs:
               '[.data.repository.openPullRequests.nodes[]
                 | select(.number != $current and .headRefOid == $head)
               ] | length' <<<"$final_review_data")"
-            final_base_changed_at="$(gh api --paginate \
-              -H 'Accept: application/vnd.github+json' \
-              "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/events?per_page=100" \
-              --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
-              | tail -n 1)"
-            final_base_changed_at="${final_base_changed_at:-0000-01-01T00:00:00Z}"
             final_comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
             final_base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$final_comments_data")"
@@ -342,7 +330,6 @@ jobs:
               ] | max // "0000-01-01T00:00:00Z"
             ' <<<"$final_review_data")"
             final_cutoff="$(printf '%s\n' \
-              "$final_base_changed_at" \
               "$final_review_requested_at" \
               "$final_feedback_at" \
               | sort | tail -n 1)"
@@ -380,6 +367,7 @@ jobs:
           latest_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           latest_head_sha="$(jq -r .head.sha <<<"$latest_pr")"
           latest_base_sha="$(jq -r .base.sha <<<"$latest_pr")"
+          latest_updated_at="$(jq -r .updated_at <<<"$latest_pr")"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           latest_gate_target="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" \
             --jq '[.[] | select(.context == "Codex review gate")][0].target_url // ""')"
@@ -391,6 +379,16 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
             -f state="$state" -f context='Codex review gate' -f target_url="$run_url" \
             -f description="$description"
+          if [[ "$state" == success ]]; then
+            verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
+            if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
+              || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
+              || "$(jq -r .updated_at <<<"$verification_pr")" != "$latest_updated_at" ]]; then
+              gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
+                -f state=failure -f context='Codex review gate' -f target_url="$run_url" \
+                -f description='PR activity changed during status publication'
+            fi
+          fi
       - name: Fail closed when review audit fails
         if: steps.audit.outcome != 'success'
         run: exit 1
