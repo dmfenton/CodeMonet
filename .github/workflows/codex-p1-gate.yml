@@ -51,7 +51,6 @@ jobs:
     outputs:
       head_sha: ${{ steps.head.outputs.head_sha }}
       base_sha: ${{ steps.head.outputs.base_sha }}
-      updated_at: ${{ steps.baseline.outputs.updated_at }}
     steps:
       - name: Resolve and invalidate pull-request head
         id: head
@@ -60,8 +59,9 @@ jobs:
           set -euo pipefail
           pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" 2>/dev/null || printf '{}')"
           event_data="$(<"$GITHUB_EVENT_PATH")"
-          head_sha="$(jq -r --argjson event "$event_data" '.head.sha // $event.pull_request.head.sha // empty' <<<"$pr_data")"
-          base_sha="$(jq -r --argjson event "$event_data" '.base.sha // $event.pull_request.base.sha // empty' <<<"$pr_data")"
+          embedded="$(jq -c '.comment.body // "" | try capture("codex-(request-generation|resolution-invalidation):(?<head>[0-9a-f]{40}):(?<base>[0-9a-f]{40})") catch {}' <<<"$event_data")"
+          head_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '.head.sha // $event.pull_request.head.sha // $embedded.head // empty' <<<"$pr_data")"
+          base_sha="$(jq -r --argjson event "$event_data" --argjson embedded "$embedded" '.base.sha // $event.pull_request.base.sha // $embedded.base // empty' <<<"$pr_data")"
           [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR head SHA."; exit 1; }
           [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR base SHA."; exit 1; }
           printf 'head_sha=%s\nbase_sha=%s\n' "$head_sha" "$base_sha" >> "$GITHUB_OUTPUT"
@@ -101,14 +101,12 @@ jobs:
         run: |
           set -euo pipefail
           deleted_author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
-          if [[ "$deleted_author" == "chatgpt-codex-connector[bot]" ]]; then
+          deleted_association="$(jq -r '.comment.author_association // ""' "$GITHUB_EVENT_PATH")"
+          if [[ "$deleted_author" == "chatgpt-codex-connector[bot]" \
+            || "$deleted_association" =~ ^(OWNER|MEMBER|COLLABORATOR)$ ]]; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
               -f body="<!-- codex-feedback-invalidation:$HEAD_SHA --> Codex feedback was deleted; a fresh @codex review is required."
           fi
-      - name: Snapshot invalidated pull-request activity
-        id: baseline
-        env: {GH_TOKEN: '${{ github.token }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'}
-        run: echo "updated_at=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq .updated_at)" >> "$GITHUB_OUTPUT"
   review-gate:
     needs: preserve-invalidation
     concurrency:
@@ -242,7 +240,7 @@ jobs:
           echo "cutoff=$cutoff" >> "$GITHUB_OUTPUT"
       - name: Publish gate on pull-request head
         if: always()
-        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', EXPECTED_UPDATED_AT: '${{ needs.preserve-invalidation.outputs.updated_at }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}', AUDIT_OUTCOME: '${{ steps.audit.outcome }}', AUDIT_CUTOFF: '${{ steps.audit.outputs.cutoff }}'}
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}', AUDIT_OUTCOME: '${{ steps.audit.outcome }}', AUDIT_CUTOFF: '${{ steps.audit.outputs.cutoff }}'}
         run: |
           set -euo pipefail
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -369,7 +367,6 @@ jobs:
           latest_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           latest_head_sha="$(jq -r .head.sha <<<"$latest_pr")"
           latest_base_sha="$(jq -r .base.sha <<<"$latest_pr")"
-          latest_updated_at="$(jq -r .updated_at <<<"$latest_pr")"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           latest_gate_target="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" \
             --jq '[.[] | select(.context == "Codex review gate")][0].target_url // ""')"
@@ -377,8 +374,7 @@ jobs:
             echo "A newer serialized audit owns the gate; leaving its pending status intact."
             exit 0
           fi
-          if [[ "$latest_head_sha" != "$HEAD_SHA" || "$latest_base_sha" != "$BASE_SHA" \
-            || "$latest_updated_at" != "$EXPECTED_UPDATED_AT" ]]; then
+          if [[ "$latest_head_sha" != "$HEAD_SHA" || "$latest_base_sha" != "$BASE_SHA" ]]; then
             state=failure
             description='Newer PR or review activity superseded this audit'
           fi
@@ -388,8 +384,7 @@ jobs:
           if [[ "$state" == success ]]; then
             verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
             if [[ "$(jq -r .head.sha <<<"$verification_pr")" != "$HEAD_SHA" \
-              || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" \
-              || "$(jq -r .updated_at <<<"$verification_pr")" != "$latest_updated_at" ]]; then
+              || "$(jq -r .base.sha <<<"$verification_pr")" != "$BASE_SHA" ]]; then
               gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" \
                 -f state=pending -f context='Codex review gate' -f target_url="$run_url" \
                 -f description='Newer PR activity awaits its serialized audit'
