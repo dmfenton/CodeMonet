@@ -103,6 +103,8 @@ jobs:
         run: |
           set -euo pipefail
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$GITHUB_RUN_ID:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
+          request_id="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" | jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0')"
+          (( request_id == 0 )) || gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-request-acceptance:$HEAD_SHA:$BASE_SHA:$request_id --> Lifecycle run $GITHUB_RUN_ID observed the exact-generation request."
       - name: Preserve authenticated review invalidation
         if: github.event_name == 'pull_request_review'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number }}', REVIEW_ACTION: '${{ github.event.action }}'}
