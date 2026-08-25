@@ -119,8 +119,9 @@ jobs:
         if: github.event_name == 'pull_request_target'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number }}', PR_ACTION: '${{ github.event.action }}'}
         run: |
-          set -euo pipefail
+          set -euo pipefail; latest_base_run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?event=push&branch=main&per_page=1" --jq '.workflow_runs[0].id // 0')"; (( latest_base_run_id > 0 ))
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$GITHUB_RUN_ID:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
+          gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$latest_base_run_id:base-push --> Current head bound to the latest base-push generation."
       - name: Preserve authenticated review invalidation
         if: github.event_name == 'pull_request_review'
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number }}', REVIEW_ACTION: '${{ github.event.action }}'}
