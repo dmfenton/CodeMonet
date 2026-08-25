@@ -11,9 +11,6 @@ on:
   issue_comment:
     types: [created, edited, deleted]
 permissions: {contents: read, issues: write, pull-requests: read, statuses: write}
-concurrency:
-  group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number || github.ref }}
-  cancel-in-progress: false
 jobs:
   invalidate-base-update:
     if: github.event_name == 'push'
@@ -123,17 +120,16 @@ jobs:
           set -euo pipefail
           comment_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:$COMMENT_ACTION --> Authenticated review feedback changed; a fresh @codex review is required."
-      - name: Preserve created Codex top-level feedback
-        if: github.event_name == 'issue_comment' && github.event.action == 'created'
-        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.issue.number }}'}
+      - name: Preserve Codex top-level feedback changes
+        if: github.event_name == 'issue_comment' && github.event.comment.user.login == 'chatgpt-codex-connector[bot]'
+        env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ steps.head.outputs.head_sha }}', BASE_SHA: '${{ steps.head.outputs.base_sha }}', PR_NUMBER: '${{ github.event.issue.number }}', COMMENT_ACTION: '${{ github.event.action }}'}
         run: |
           set -euo pipefail
-          author="$(jq -r '.comment.user.login // ""' "$GITHUB_EVENT_PATH")"
           body="$(jq -r '.comment.body // ""' "$GITHUB_EVENT_PATH")"
           comment_id="$(jq -r '.comment.id // 0' "$GITHUB_EVENT_PATH")"
-          if [[ "$author" == "chatgpt-codex-connector[bot]" \
-            && ! "$body" =~ Codex.Review:.Didn.t.find.any.major.issues ]]; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:created --> Codex feedback arrived; a fresh @codex review is required."
+          if [[ "$COMMENT_ACTION" != created \
+            || ! "$body" =~ Codex.Review:.Didn.t.find.any.major.issues ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="<!-- codex-feedback-invalidation:$HEAD_SHA:$BASE_SHA:$comment_id:$COMMENT_ACTION --> Codex feedback changed; a fresh @codex review is required."
           fi
       - name: Republish pending after preservation
         if: always()
@@ -143,6 +139,9 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Preserved review activity awaits serialized audit'
   review-gate:
     needs: preserve-invalidation
+    concurrency:
+      group: codex-p1-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - name: Require current clean Codex review
@@ -151,6 +150,9 @@ jobs:
         env: {GH_TOKEN: '${{ github.token }}', HEAD_SHA: '${{ needs.preserve-invalidation.outputs.head_sha }}', BASE_SHA: '${{ needs.preserve-invalidation.outputs.base_sha }}', PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'}
         run: |
           set -euo pipefail
+          latest_gate_target="$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" --jq '[.[] | select(.context == "Codex review gate")][0].target_url // ""')"
+          latest_run_id="$(sed -nE 's#^.*/actions/runs/([0-9]+)$#\1#p' <<<"$latest_gate_target")"
+          if [[ -n "$latest_run_id" && "$latest_run_id" -gt "$GITHUB_RUN_ID" ]]; then echo "::error::A newer workflow run already owns the gate."; exit 1; fi
           audit_status_id="$(gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" -f description='Serialized exact-head review audit is running' --jq .id)"
           echo "status_id=$audit_status_id" >> "$GITHUB_OUTPUT"
           owner="${GITHUB_REPOSITORY%%/*}"
@@ -182,7 +184,7 @@ jobs:
           }
           head_repository="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.head.repo.full_name // ""')"
           [[ "$head_repository" == "$GITHUB_REPOSITORY" ]] || { echo "::error::Fork pull requests must be imported to a same-repository branch before this writable review gate can pass."; exit 1; }
-          all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+          all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
           shared_head_count="$(jq \
             --arg head "$HEAD_SHA" \
             --argjson current "$PR_NUMBER" \
@@ -273,7 +275,7 @@ jobs:
               | .comments.nodes[]
               | select((.author.login // "") == "chatgpt-codex-connector")
             ] | length' <<<"$final_review_data")"
-            final_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+            final_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
             final_shared_head_count="$(jq \
               --arg head "$HEAD_SHA" \
               --argjson current "$PR_NUMBER" \
@@ -334,11 +336,15 @@ jobs:
             success_published=true
             verification_pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
             verification_comments="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
-            verification_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=all&per_page=100")"
+            verification_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
+            # shellcheck disable=SC2016
+            verification_review_data="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved comments(first: 100) { pageInfo { hasNextPage } nodes { author { login } } } } } } } }')"
+            verification_review_invalid="$(jq '[.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage, (.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage), ([.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | .comments.nodes[] | select((.author.login // "") == "chatgpt-codex-connector")] | length > 0)] | any' <<<"$verification_review_data")"
             verification_request_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") != "chatgpt-codex-connector[bot]" and ((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | test("(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i")) and (.body // "" | contains("codex-request-generation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_request_revision_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$verification_request_id" 'add | map(select((.user.login // "") == "github-actions[bot]" and (.body // "" | contains("codex-request-revision:" + $head + ":" + $base + ":" + $request + " -->")))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_generation_id="$verification_request_id"
             if (( verification_request_revision_id > verification_generation_id )); then verification_generation_id="$verification_request_revision_id"; fi
+            verification_latest_codex_clean="$(jq -r --argjson generation "$verification_generation_id" 'add | map(select((.user.login // "") == "chatgpt-codex-connector[bot]" and .id > $generation)) | last | ((.body // "") | test("Codex Review: Didn.t find any major issues"; "i")) // false' <<<"$verification_comments")"
             verification_lifecycle_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(base|head)-invalidation:" + $head + ":" + $base)))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_feedback_invalidation_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select(((.user.login // "") == "github-actions[bot]" and ((.body // "") | test("codex-(review|feedback)-invalidation:" + $head + ":" + $base))) or (((.author_association // "") | IN("OWNER", "MEMBER", "COLLABORATOR")) and (.body // "" | contains("codex-resolution-invalidation:" + $head + ":" + $base))))) | (map(.id) | max) // 0' <<<"$verification_comments")"
             verification_shared_head_count="$(jq --arg head "$HEAD_SHA" --argjson current "$PR_NUMBER" '[add[] | select(.number != $current and .head.sha == $head)] | length' <<<"$verification_all_pulls")"
@@ -348,6 +354,8 @@ jobs:
               || "$verification_generation_id" != "$AUDIT_GENERATION_ID" \
               || "$verification_generation_id" -le "$verification_feedback_invalidation_id" \
               || "$verification_generation_id" -le "$verification_lifecycle_invalidation_id" \
+              || "$verification_latest_codex_clean" != true \
+              || "$verification_review_invalid" != false \
               || "$verification_newer_status_count" != 0 \
               || "$verification_shared_head_count" != 0 ]]; then
               gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$HEAD_SHA" -f state=pending -f context='Codex review gate' -f target_url="$run_url" -f description='Newer PR activity awaits its serialized audit'
