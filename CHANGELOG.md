@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
 
 ## [1.39.3] - 2026-08-23
