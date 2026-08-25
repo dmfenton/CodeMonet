@@ -1,4 +1,5 @@
 name: Codex review gate
+run-name: 'Codex review gate PR #${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || 0 }}'
 on:
   push:
     branches: [main]
@@ -179,7 +180,7 @@ jobs:
           set -euo pipefail
           for (( attempt = 0; attempt < 30; attempt++ )); do
             blocking=0
-            for status in queued in_progress; do while read -r run_id; do (( run_id < GITHUB_RUN_ID )) || continue; preserve="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "preserve-invalidation") | .status][0] // "pending"')"; [[ "$preserve" == completed ]] || blocking=1; done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'); done
+            for status in queued in_progress; do while read -r run_id; do (( run_id < GITHUB_RUN_ID )) || continue; preserve="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "preserve-invalidation")][0] | ((.status // "pending") + ":" + (.conclusion // ""))')"; [[ "$preserve" =~ ^completed:(success|skipped)$ ]] || blocking=1; done < <(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?status=$status&per_page=100" --jq '.workflow_runs[].id'); done
             (( blocking == 0 )) && break; sleep 2
           done
           (( blocking == 0 )) || { echo "::error::Earlier invalidation preservation did not complete before this audit."; exit 1; }
@@ -197,12 +198,7 @@ jobs:
           review_data="$(gh api graphql -F owner="$owner" -F name="$name" -F number="$PR_NUMBER" -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved comments(first: 100) { pageInfo { hasNextPage } nodes { author { login } } } } } } } }')"
           truncated="$(jq '[.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage, (.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage)] | any' <<<"$review_data")"
           [[ "$truncated" == false ]] || { echo "::error::Review pagination exceeded the fail-closed audit limit."; exit 1; }
-          unresolved="$(jq '[
-            .data.repository.pullRequest.reviewThreads.nodes[]
-            | select(.isResolved | not)
-            | .comments.nodes[]
-            | select((.author.login // "") == "chatgpt-codex-connector")
-          ] | length' <<<"$review_data")"
+          unresolved="$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | .comments.nodes[] | select((.author.login // "") == "chatgpt-codex-connector")] | length' <<<"$review_data")"
           (( unresolved == 0 )) || { echo "::error::$unresolved unresolved Codex review thread comment(s) remain."; exit 1; }
           IFS=$'\t' read -r head_repository pr_state pr_author <<<"$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '[.head.repo.full_name // "", .state, .user.login // ""] | @tsv')"
           [[ "$head_repository" == "$GITHUB_REPOSITORY" && "$pr_author" != 'dependabot[bot]' ]] || { echo "::error::Fork and Dependabot pull requests cannot use this writable review gate."; exit 1; }
@@ -220,6 +216,11 @@ jobs:
           request_owner_valid="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/statuses?per_page=100" | jq --arg target "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER" '[add[] | select(.context == "Codex review request owner") | .target_url] | unique == [$target]')"
           [[ "$request_owner_valid" == true ]] || { echo "::error::Another pull request has used this head review generation."; exit 1; }
           request_run_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" --arg request "$request_id" 'add | map(select((.user.login // "") == "github-actions[bot]") | ((.body // "") | try capture("codex-request-use:" + $head + ":" + $base + ":" + $request + ":(?<run>[0-9]+)").run catch "0") | select(. != "0") | tonumber) | max // 0' <<<"$comments_data")"
+          failed_preservation=0
+          completed_runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/codex-p1-gate.yml/runs?status=completed&per_page=100")"
+          completed_window="$(jq --argjson request "$request_run_id" '(.workflow_runs | length) < 100 or (([.workflow_runs[].id] | min // 0) <= $request)' <<<"$completed_runs")"; [[ "$completed_window" == true ]] || { echo "::error::Completed preservation history exceeded the fail-closed audit window."; exit 1; }
+          while read -r run_id; do conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/jobs?filter=all&per_page=100" --jq '[.jobs[] | select(.name == "preserve-invalidation")][0].conclusion // "missing"')"; [[ "$conclusion" =~ ^(success|skipped)$ ]] || failed_preservation=1; done < <(jq -r --arg title "Codex review gate PR #$PR_NUMBER" --argjson request "$request_run_id" --argjson current "$GITHUB_RUN_ID" '.workflow_runs[] | select(.display_title == $title and .id > $request and .id < $current) | .id' <<<"$completed_runs")
+          (( failed_preservation == 0 )) || { echo "::error::A post-request invalidation run failed or was cancelled."; exit 1; }
           generation_id="$request_id"
           generation_run_id="$request_run_id"
           lifecycle_run_id="$(jq -r --arg head "$HEAD_SHA" --arg base "$BASE_SHA" 'add | map(select((.user.login // "") == "github-actions[bot]") | ((.body // "") | try capture("codex-(base|head)-invalidation:" + $head + ":" + $base + ":(?<run>[0-9]+)").run catch "0") | select(. != "0") | tonumber) | max // 0' <<<"$comments_data")"
@@ -286,12 +287,7 @@ jobs:
               -F number="$PR_NUMBER" \
               -f query='query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) { reviewThreads(first: 100) { pageInfo { hasNextPage } nodes { isResolved comments(first: 100) { pageInfo { hasNextPage } nodes { author { login } } } } } } } }')"
             final_truncated="$(jq '[.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage, (.data.repository.pullRequest.reviewThreads.nodes[].comments.pageInfo.hasNextPage)] | any' <<<"$final_review_data")"
-            final_unresolved="$(jq '[
-              .data.repository.pullRequest.reviewThreads.nodes[]
-              | select(.isResolved | not)
-              | .comments.nodes[]
-              | select((.author.login // "") == "chatgpt-codex-connector")
-            ] | length' <<<"$final_review_data")"
+            final_unresolved="$(jq '[.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved | not) | .comments.nodes[] | select((.author.login // "") == "chatgpt-codex-connector")] | length' <<<"$final_review_data")"
             final_all_pulls="$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100")"
             final_shared_head_count="$(jq --arg head "$HEAD_SHA" --argjson current "$PR_NUMBER" '[add[] | select(.number != $current and .head.sha == $head)] | length' <<<"$final_all_pulls")"
             final_comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
