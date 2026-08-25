@@ -81,7 +81,7 @@ jobs:
                       isResolved
                       comments(first: 100) {
                         pageInfo { hasNextPage }
-                        nodes { body author { login } }
+                        nodes { body createdAt updatedAt author { login } }
                       }
                     }
                   }
@@ -135,7 +135,25 @@ jobs:
           comments_data="$(gh api --paginate --slurp \
             -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
-          reviewed_sha="$(jq -r --arg cutoff "$base_changed_at" '
+          review_requested_at="$(jq -r '
+            add
+            | map(select(
+                (.user.login // "") != "chatgpt-codex-connector[bot]"
+                and (.body // "" | test(
+                  "(^|[[:space:]])@codex[[:space:]]+review([[:space:]]|$)"; "i"
+                ))
+              ))
+            | (map(.created_at) | max) // "0000-01-01T00:00:00Z"
+          ' <<<"$comments_data")"
+          feedback_at="$(jq -r '
+            [.data.repository.pullRequest.reviewThreads.nodes[].comments.nodes[]
+              | select((.author.login // "") == "chatgpt-codex-connector")
+              | (.updatedAt // .createdAt)
+            ] | max // "0000-01-01T00:00:00Z"
+          ' <<<"$review_data")"
+          cutoff="$(printf '%s\n' "$base_changed_at" "$review_requested_at" "$feedback_at" \
+            | sort | tail -n 1)"
+          reviewed_sha="$(jq -r --arg cutoff "$cutoff" '
             add
             | map(select(
                 (.user.login // "") == "chatgpt-codex-connector[bot]"
