@@ -85,7 +85,7 @@ command_id=$(aws ssm send-command \
   --output text)
 
 status=Pending
-for _ in $(seq 1 90); do
+for _ in $(seq 1 450); do
   status=$(aws ssm get-command-invocation \
     --region "$region" \
     --command-id "$command_id" \
