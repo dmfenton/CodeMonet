@@ -65,14 +65,8 @@ jobs:
           pr_data="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")"
           head_sha="$(jq -r .head.sha <<<"$pr_data")"
           base_sha="$(jq -r .base.sha <<<"$pr_data")"
-          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::Could not resolve the current PR head SHA."
-            exit 1
-          }
-          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || {
-            echo "::error::Could not resolve the current PR base SHA."
-            exit 1
-          }
+          [[ "$head_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR head SHA."; exit 1; }
+          [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not resolve the current PR base SHA."; exit 1; }
           echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$head_sha" \
@@ -97,21 +91,23 @@ jobs:
               -f body="<!-- codex-review-invalidation:$HEAD_SHA --> Review request changed or was removed; a fresh @codex review is required."
           fi
       - name: Preserve pull-request lifecycle invalidation
-        if: github.event_name == 'pull_request_target' && contains(fromJSON('["synchronize","reopened","ready_for_review"]'), github.event.action)
+        if: github.event_name == 'pull_request_target'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_ACTION: ${{ github.event.action }}
         run: |
           set -euo pipefail
           gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-            -f body="<!-- codex-head-invalidation:$HEAD_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
+            -f body="<!-- codex-head-invalidation:$HEAD_SHA:$BASE_SHA:$PR_ACTION --> Pull request $PR_ACTION; a fresh @codex review is required."
       - name: Preserve deleted Codex feedback invalidation
         if: github.event_name == 'pull_request_review_comment' && github.event.action == 'deleted'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.head.outputs.head_sha }}
+          BASE_SHA: ${{ steps.head.outputs.base_sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
@@ -192,9 +188,10 @@ jobs:
             --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
             | tail -n 1)"
           base_changed_at="${base_changed_at:-0000-01-01T00:00:00Z}"
-          comments_data="$(gh api --paginate --slurp \
-            -H 'Accept: application/vnd.github+json' \
+          comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
             "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+          base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$comments_data")"
+          (( base_marker_count > 0 )) || { echo "::error::No durable marker binds this review generation to base $BASE_SHA."; exit 1; }
           review_requested_at="$(jq -r '
             add
             | map(select(
@@ -323,9 +320,9 @@ jobs:
               --jq '.[] | select(.event == "base_ref_changed") | .created_at' \
               | tail -n 1)"
             final_base_changed_at="${final_base_changed_at:-0000-01-01T00:00:00Z}"
-            final_comments_data="$(gh api --paginate --slurp \
-              -H 'Accept: application/vnd.github+json' \
+            final_comments_data="$(gh api --paginate --slurp -H 'Accept: application/vnd.github+json' \
               "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments?per_page=100")"
+            final_base_marker_count="$(jq --arg head "$HEAD_SHA" --arg base "$BASE_SHA" '[add[] | select((.user.login // "") == "github-actions[bot]") | (.body // "") | select(contains("codex-base-invalidation:" + $head + ":" + $base) or contains("codex-head-invalidation:" + $head + ":" + $base + ":"))] | length' <<<"$final_comments_data")"
             final_review_requested_at="$(jq -r '
               add
               | map(select(
@@ -374,7 +371,8 @@ jobs:
                 && ( "$final_review_requested_at" < "$final_feedback_at" \
                   || "$final_review_requested_at" == "$final_feedback_at" ) ) \
               || "$final_cutoff" != "$AUDIT_CUTOFF" \
-              || "$final_reviewed_full_sha" != "$HEAD_SHA" ]]; then
+              || "$final_reviewed_full_sha" != "$HEAD_SHA" \
+              || "$final_base_marker_count" == 0 ]]; then
               state=failure
               description='Review activity changed during final audit'
             fi
