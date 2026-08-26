@@ -13,10 +13,11 @@ Or manually trigger via GitHub Actions -> TestFlight Deploy -> Run workflow.
 
 ## How It Works
 
-1. GitHub Actions (macos-15) runs on tag push
+1. GitHub Actions (`macos-26`) runs on tag push
 2. `expo prebuild` generates native iOS project
-3. Fastlane builds and signs the IPA
-4. Fastlane uploads to TestFlight
+3. Fastlane builds an unsigned archive
+4. The immutable `platform.dmfenton.net` signing action validates entitlements and packages the IPA
+5. Fastlane uploads to TestFlight
 
 ## Key Files
 
@@ -38,7 +39,6 @@ Or manually trigger via GitHub Actions -> TestFlight Deploy -> Run workflow.
 | `APPLE_TEAM_ID`                  | 10-char Apple team ID                        |
 | `APPLE_ID`                       | Apple Developer email                        |
 | `ITC_TEAM_ID`                    | App Store Connect team ID                    |
-| `KEYCHAIN_PASSWORD`              | Random string for CI keychain                |
 | `SENTRY_ORG`                     | Sentry organization slug                     |
 | `SENTRY_PROJECT`                 | Sentry project slug                          |
 | `SENTRY_AUTH_TOKEN`              | Sentry auth token for source maps (optional) |
@@ -47,6 +47,9 @@ Or manually trigger via GitHub Actions -> TestFlight Deploy -> Run workflow.
 
 Version is extracted from git tag (e.g., `v1.2.3` -> version `1.2.3`).
 Build number is auto-generated from timestamp.
+
+The app owns its generated unsigned archive, provisioning profile, entitlements, and App Store
+delivery. Do not add keychain setup or `codesign` here; those belong to the shared platform action.
 
 ## Production WebSocket URL
 

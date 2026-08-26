@@ -1,6 +1,8 @@
 # Fastfile for Code Monet iOS builds
 # https://docs.fastlane.tools
 
+require "json"
+
 default_platform(:ios)
 
 platform :ios do
@@ -15,41 +17,46 @@ platform :ios do
       in_house: false
     )
 
-    # Update code signing settings
-    update_code_signing_settings(
-      use_automatic_signing: false,
-      path: "ios/CodeMonet.xcodeproj",
-      team_id: ENV["TEAM_ID"],
-      profile_name: ENV["PROVISIONING_PROFILE_NAME"],
-      code_sign_identity: "iPhone Distribution"
-    )
-
-    keychain = ENV.fetch("KEYCHAIN_PATH")
-    signing_identity_sha1 = ENV.fetch("IOS_SIGNING_IDENTITY_SHA1")
+    app_root = File.expand_path("..", __dir__)
+    archive_path = File.join(app_root, "build/CodeMonet.xcarchive")
+    ipa_path = File.join(app_root, "build/CodeMonet.ipa")
 
     # Build the app
     build_app(
       workspace: "ios/CodeMonet.xcworkspace",
       scheme: "CodeMonet",
-      export_method: "app-store",
-      output_directory: "./build",
-      output_name: "CodeMonet.ipa",
+      archive_path: archive_path,
       clean: true,
-      xcargs: "CODE_SIGN_IDENTITY='#{signing_identity_sha1}' CODE_SIGN_KEYCHAIN='#{keychain}' OTHER_CODE_SIGN_FLAGS='--keychain #{keychain}'",
-      export_xcargs: "CODE_SIGN_KEYCHAIN='#{keychain}' OTHER_CODE_SIGN_FLAGS='--keychain #{keychain}'",
-      export_options: {
-        signingStyle: "manual",
-        signingCertificate: signing_identity_sha1,
-        teamID: ENV["TEAM_ID"],
-        provisioningProfiles: {
-          "net.dmfenton.sketchpad" => ENV["PROVISIONING_PROFILE_NAME"]
-        }
-      }
+      skip_codesigning: true,
+      skip_package_ipa: true,
+    )
+
+    manifest_path = File.join(app_root, "build/CodeMonet-signing.json")
+    File.write(
+      manifest_path,
+      JSON.generate(
+        archive_path: archive_path,
+        output_ipa: ipa_path,
+        bundles: [
+          {
+            path: "Products/Applications/CodeMonet.app",
+            profile: ENV.fetch("IOS_PROVISIONING_PROFILE_PATH"),
+            entitlements: File.join(app_root, "ios/CodeMonet/CodeMonet.entitlements"),
+          },
+        ],
+      ),
+    )
+    sh(
+      ENV.fetch("FENTON_IOS_SIGNER_PATH"),
+      manifest_path,
+      ENV.fetch("FENTON_IOS_SIGNING_IDENTITY_SHA1"),
+      ENV.fetch("FENTON_IOS_KEYCHAIN_PATH"),
     )
 
     # Upload to TestFlight
     upload_to_testflight(
       api_key: api_key,
+      ipa: ipa_path,
       skip_waiting_for_build_processing: false
     )
   end
