@@ -171,50 +171,20 @@ jobs:
         working-directory: app/ios
         run: pod install
 
-      - name: Import signing certificate
-        uses: apple-actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466 # v7.0.0
+      - name: Set up shared iOS signing
+        uses: dmfenton/platform.dmfenton.net/.github/actions/isolated-ios-signing@7c5b9b0e57bbcba96f4ded32623c589314b4ddf4
         with:
-          keychain: signing_temp
-          keychain-password: ${{ secrets.KEYCHAIN_PASSWORD }}
-          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
-          p12-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
-
-      - name: Resolve signing identity
-        run: |
-          KEYCHAIN_PATH=signing_temp.keychain
-          SIGNING_KEYCHAINS=(
-            "$KEYCHAIN_PATH"
-            /Library/Keychains/System.keychain
-            /System/Library/Keychains/SystemRootCertificates.keychain
-          )
-          SIGNING_IDENTITY_SHA1=$(security find-identity -v -p codesigning "${SIGNING_KEYCHAINS[@]}" \
-            | awk -F '"' '/Apple Distribution|iPhone Distribution/ { print $1 }' \
-            | awk '{ print $2; exit }')
-          if ! [[ "$SIGNING_IDENTITY_SHA1" =~ ^[0-9A-F]{40}$ ]]; then
-            echo "::error::Could not resolve the imported Apple Distribution identity"
-            exit 1
-          fi
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
-          echo "IOS_SIGNING_IDENTITY_SHA1=$SIGNING_IDENTITY_SHA1" >> "$GITHUB_ENV"
+          certificate-p12-base64: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
+          certificate-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
 
       - name: Install provisioning profile
         env:
           IOS_PROVISIONING_PROFILE: ${{ secrets.IOS_PROVISIONING_PROFILE }}
         run: |
-          # Create Provisioning Profiles directory
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-
-          # Decode and install provisioning profile
-          PROFILE_PATH=~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-          echo -n "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
-
-          # Extract UUID and rename
-          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$PROFILE_PATH"))
-          mv "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
-
-          # Extract profile name for Fastlane
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print Name" /dev/stdin <<< $(security cms -D -i ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision))
-          echo "PROVISIONING_PROFILE_NAME=$PROFILE_NAME" >> $GITHUB_ENV
+          PROFILE_PATH="$RUNNER_TEMP/codemonet.mobileprovision"
+          printf '%s' "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          security cms -D -i "$PROFILE_PATH" >/dev/null
+          echo "IOS_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
 
       - name: Build and upload to TestFlight
         working-directory: app
@@ -236,6 +206,18 @@ jobs:
           name: CodeMonet-${{ steps.version.outputs.version }}.ipa
           path: app/build/CodeMonet.ipa
           retention-days: 30
+
+      - name: Clean up shared iOS signing
+        if: always()
+        uses: dmfenton/platform.dmfenton.net/.github/actions/isolated-ios-signing@7c5b9b0e57bbcba96f4ded32623c589314b4ddf4
+        with:
+          mode: cleanup
+          keychain-path: ${{ env.FENTON_IOS_KEYCHAIN_PATH }}
+          search-list-path: ${{ env.FENTON_IOS_SEARCH_LIST_PATH }}
+
+      - name: Clean up provisioning profile
+        if: always()
+        run: rm -f "$RUNNER_TEMP/codemonet.mobileprovision"
 
   skip-report:
     name: Report Skipped Build
