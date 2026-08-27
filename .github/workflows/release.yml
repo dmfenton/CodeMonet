@@ -125,6 +125,7 @@ jobs:
             --build-arg APP_VERSION="$VERSION" \
             --build-arg APP_COMMIT="$COMMIT_SHA" \
             --build-arg APP_BUILD_TIME="$BUILD_TIME" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION \
             -f server/Dockerfile \
             .
@@ -138,9 +139,10 @@ jobs:
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA" >> $GITHUB_OUTPUT
 
       - name: Build, tag, and push SSR image to Amazon ECR
         id: build-ssr
@@ -151,6 +153,7 @@ jobs:
           # Build the SSR image
           docker build \
             --build-arg VERSION="$VERSION" \
+            -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$GITHUB_SHA \
             -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION \
             -f web/Dockerfile \
             .
@@ -164,9 +167,10 @@ jobs:
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
+          docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$GITHUB_SHA
           docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:latest
 
-          echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:$GITHUB_SHA" >> $GITHUB_OUTPUT
 
       - name: Sync web build to S3
         # nginx.conf, docker-compose.prod.yml, start-services.sh, otel-config.yaml
@@ -178,14 +182,12 @@ jobs:
           aws s3 sync web/dist/ "s3://${BUCKET}/deploy/web/" --delete
 
       - name: Run database migrations
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
           echo "Running database migrations with new image..."
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids i-0819504ca9b2d967b \
             --document-name "Compute-MigrateCodeMonet" \
-            --parameters "ImageTag=v$VERSION" \
+            --parameters "ImageTag=$GITHUB_SHA" \
             --query "Command.CommandId" \
             --output text)
 
@@ -288,7 +290,7 @@ jobs:
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids i-0819504ca9b2d967b \
             --document-name "Compute-DeployCodeMonet" \
-            --parameters "ImageTag=v$VERSION" \
+            --parameters "ImageTag=$GITHUB_SHA" \
             --query "Command.CommandId" \
             --output text)
 

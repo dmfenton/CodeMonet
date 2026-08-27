@@ -29,7 +29,6 @@ LABEL org.opencontainers.image.description="Code Monet - Autonomous AI artist"
 
 WORKDIR /app/server
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
@@ -40,7 +39,13 @@ COPY --from=build /app/server/.venv ./.venv
 RUN mkdir -p /app/server/data/logs
 
 # Remove the unused system package installer, then create the non-root runtime user.
-RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* /usr/local/bin/pip* \
+RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
+        /usr/local/lib/python3.12/site-packages/setuptools* \
+        /usr/local/lib/python3.12/site-packages/wheel* \
+        /usr/local/bin/pip* /usr/local/bin/wheel \
+    && test ! -e /usr/local/bin/uv \
+    && ! command -v pip \
+    && ! command -v wheel \
     && /bin/busybox adduser -D -u 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
@@ -60,4 +65,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
 # Run uvicorn directly (no reload in production)
-CMD ["uv", "run", "uvicorn", "code_monet.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/server/.venv/bin/uvicorn", "code_monet.main:app", "--host", "0.0.0.0", "--port", "8000"]
