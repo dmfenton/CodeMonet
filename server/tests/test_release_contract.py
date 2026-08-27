@@ -13,6 +13,10 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     assert "/usr/local/bin/pip*" in runtime
     assert "/usr/local/bin/wheel" in runtime
 
+    remote = (ROOT / "scripts/remote.py").read_text()
+    assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
+    assert '"uv run python -m alembic upgrade head"' not in remote
+
 
 def test_release_deploys_full_source_sha() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
