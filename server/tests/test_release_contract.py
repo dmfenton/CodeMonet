@@ -17,6 +17,14 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
     assert '"uv run python -m alembic upgrade head"' not in remote
 
+    web_dockerfile = (ROOT / "web/Dockerfile").read_text()
+    web_runtime = web_dockerfile.split("FROM node:24.18.0-alpine@sha256:", maxsplit=2)[2]
+    assert "RUN apk upgrade --no-cache" in web_runtime
+    assert (
+        "rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx"
+        in web_runtime
+    )
+
 
 def test_release_deploys_unique_artifact_from_exact_source() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
