@@ -76,8 +76,8 @@ ensure_platform_checkout() {
     echo "worktree-bootstrap: vendor/platform.dmfenton.net is not a checkout" >&2
     exit 1
   fi
-  if [[ -n "$(git -C "$platform_target" status --porcelain --untracked-files=no)" ]]; then
-    echo "worktree-bootstrap: vendor/platform.dmfenton.net has tracked changes" >&2
+  if [[ -n "$(git -C "$platform_target" status --porcelain)" ]]; then
+    echo "worktree-bootstrap: vendor/platform.dmfenton.net has changes" >&2
     exit 1
   fi
   if [[ "$platform_actual" != "$platform_pin" ]]; then
