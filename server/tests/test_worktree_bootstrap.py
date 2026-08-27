@@ -137,4 +137,16 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
             env=environment,
         )
         assert completed.returncode != 0
-        assert "has tracked changes" in completed.stderr
+        assert "has changes" in completed.stderr
+
+        _run("git", "restore", "python/version.txt", cwd=linked)
+        (linked / "python/untracked.py").write_text("extra\n", encoding="utf-8")
+        completed = subprocess.run(
+            ("bash", "scripts/worktree-bootstrap.sh"),
+            cwd=worktree,
+            capture_output=True,
+            text=True,
+            env=environment,
+        )
+        assert completed.returncode != 0
+        assert "has changes" in completed.stderr
