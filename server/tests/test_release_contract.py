@@ -18,10 +18,11 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     assert '"uv run python -m alembic upgrade head"' not in remote
 
 
-def test_release_deploys_full_source_sha() -> None:
+def test_release_deploys_unique_artifact_from_exact_source() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
-    assert workflow.count('--parameters "ImageTag=$GITHUB_SHA"') == 2
-    assert workflow.count(":$GITHUB_SHA") >= 6
+    assert workflow.count('--parameters "ImageTag=$ARTIFACT_TAG"') == 2
+    assert workflow.count(":$ARTIFACT_TAG") >= 6
+    assert "artifact_tag=v${VERSION}-${GITHUB_SHA}-run" in workflow
     assert "Require exact main release source" in workflow
     assert 'git rev-parse HEAD)" == "$(git rev-parse origin/main)' in workflow
