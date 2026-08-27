@@ -39,7 +39,8 @@ COPY --from=build /app/server/.venv ./.venv
 RUN mkdir -p /app/server/data/logs
 
 # Remove the unused system package installer, then create the non-root runtime user.
-RUN rm -rf /usr/local/lib/python3.12/site-packages/pip* \
+RUN apk upgrade --no-cache \
+    && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
         /usr/local/bin/pip* /usr/local/bin/wheel \

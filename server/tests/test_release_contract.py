@@ -9,6 +9,7 @@ def test_runtime_image_has_no_build_package_managers() -> None:
 
     assert "COPY --from=ghcr.io/astral-sh/uv" not in runtime
     assert 'CMD ["/app/server/.venv/bin/uvicorn",' in runtime
+    assert "RUN apk upgrade --no-cache" in runtime
     assert "/usr/local/bin/pip*" in runtime
     assert "/usr/local/bin/wheel" in runtime
 
