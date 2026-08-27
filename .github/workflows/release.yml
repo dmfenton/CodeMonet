@@ -38,6 +38,11 @@ jobs:
         id: platform
         run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
 
+      - name: Require exact main release source
+        run: |
+          git fetch origin main --no-tags
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+
       - uses: actions/checkout@v6
         with:
           repository: dmfenton/fenton-platform
@@ -69,6 +74,7 @@ jobs:
           {
             echo "version=$VERSION"
             echo "tag=v$VERSION"
+            echo "artifact_tag=v${VERSION}-${GITHUB_SHA}-run${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Install uv
@@ -115,6 +121,7 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
         run: |
           # Get build metadata
           COMMIT_SHA="${GITHUB_SHA:0:7}"
@@ -125,6 +132,7 @@ jobs:
             --build-arg APP_VERSION="$VERSION" \
             --build-arg APP_COMMIT="$COMMIT_SHA" \
             --build-arg APP_BUILD_TIME="$BUILD_TIME" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$ARTIFACT_TAG \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION \
             -f server/Dockerfile \
             .
@@ -138,19 +146,22 @@ jobs:
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$ARTIFACT_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$ARTIFACT_TAG" >> $GITHUB_OUTPUT
 
       - name: Build, tag, and push SSR image to Amazon ECR
         id: build-ssr
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
         run: |
           # Build the SSR image
           docker build \
             --build-arg VERSION="$VERSION" \
+            -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG \
             -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION \
             -f web/Dockerfile \
             .
@@ -164,9 +175,10 @@ jobs:
 
           # Push both tags
           docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
+          docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG
           docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:latest
 
-          echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION" >> $GITHUB_OUTPUT
+          echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG" >> $GITHUB_OUTPUT
 
       - name: Sync web build to S3
         # nginx.conf, docker-compose.prod.yml, start-services.sh, otel-config.yaml
@@ -179,13 +191,13 @@ jobs:
 
       - name: Run database migrations
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
         run: |
           echo "Running database migrations with new image..."
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids i-0819504ca9b2d967b \
             --document-name "Compute-MigrateCodeMonet" \
-            --parameters "ImageTag=v$VERSION" \
+            --parameters "ImageTag=$ARTIFACT_TAG" \
             --query "Command.CommandId" \
             --output text)
 
@@ -283,12 +295,13 @@ jobs:
       - name: Deploy to production
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
         run: |
           echo "Deploying v$VERSION to production..."
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids i-0819504ca9b2d967b \
             --document-name "Compute-DeployCodeMonet" \
-            --parameters "ImageTag=v$VERSION" \
+            --parameters "ImageTag=$ARTIFACT_TAG" \
             --query "Command.CommandId" \
             --output text)
 

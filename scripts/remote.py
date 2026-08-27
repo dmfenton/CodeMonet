@@ -85,7 +85,7 @@ def migrate():
     """Run database migrations."""
     print("Running migrations...")
     code, stdout, stderr = docker_exec(
-        "uv run python -m alembic upgrade head", timeout=60
+        "/app/server/.venv/bin/python -m alembic upgrade head", timeout=60
     )
     print(stdout)
     if stderr:
