@@ -9,7 +9,7 @@ RUN apk add --no-cache build-base
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
-COPY vendor/fenton-platform/python /app/vendor/fenton-platform/python
+COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 
 RUN uv sync --frozen --no-dev --no-cache
 
@@ -32,7 +32,7 @@ WORKDIR /app/server
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
-COPY vendor/fenton-platform/python /app/vendor/fenton-platform/python
+COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
 
 # Create logs directory for structured logging

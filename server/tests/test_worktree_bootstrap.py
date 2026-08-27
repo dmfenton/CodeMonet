@@ -35,7 +35,7 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
     with tempfile.TemporaryDirectory() as temporary_directory:
         repositories = Path(temporary_directory) / "repos"
         app = repositories / "CodeMonet"
-        platform = repositories / "fenton-platform"
+        platform = repositories / "platform.dmfenton.net"
         worktree = repositories / "codemonet-feature"
         tools = repositories / "tools"
         app.mkdir(parents=True)
@@ -115,7 +115,7 @@ def test_worktree_bootstrap_uses_locked_platform_commit() -> None:
         environment.pop("NPM_STARTED_FILE")
         environment.pop("NPM_SLEEP_SECONDS")
 
-        linked = worktree / "vendor/fenton-platform"
+        linked = worktree / "vendor/platform.dmfenton.net"
         assert linked.is_dir()
         assert not linked.is_symlink()
         assert locked == _run("git", "rev-parse", "HEAD", cwd=linked)
