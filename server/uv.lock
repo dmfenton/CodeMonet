@@ -627,7 +627,7 @@ requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.87" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "fenton-platform", directory = "../vendor/fenton-platform/python" },
+    { name = "fenton-platform", directory = "../vendor/platform.dmfenton.net/python" },
     { name = "google-genai", specifier = ">=1.52.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
@@ -912,7 +912,7 @@ wheels = [
 [[package]]
 name = "fenton-platform"
 version = "0.1.0"
-source = { directory = "../vendor/fenton-platform/python" }
+source = { directory = "../vendor/platform.dmfenton.net/python" }
 dependencies = [
     { name = "cryptography" },
 ]

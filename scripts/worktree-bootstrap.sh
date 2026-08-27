@@ -29,8 +29,9 @@ if [[ "$(node -p 'process.versions.node.split(".")[0]')" != "24" ]]; then
   exit 1
 fi
 
-platform_source="$(dirname "$main")/fenton-platform"
-platform_target="$root/vendor/fenton-platform"
+platform_source="$(dirname "$main")/platform.dmfenton.net"
+platform_target="$root/vendor/platform.dmfenton.net"
+platform_url="https://github.com/dmfenton/platform.dmfenton.net.git"
 platform_pin="$(tr -d '[:space:]' <"$root/fenton-platform.lock")"
 
 if [[ ! "$platform_pin" =~ ^[0-9a-f]{40}$ ]]; then
@@ -39,7 +40,7 @@ if [[ ! "$platform_pin" =~ ^[0-9a-f]{40}$ ]]; then
 fi
 
 if [[ ! -e "$platform_source/.git" ]]; then
-  echo "worktree-bootstrap: missing sibling fenton-platform checkout at $platform_source" >&2
+  echo "worktree-bootstrap: missing sibling platform.dmfenton.net checkout at $platform_source" >&2
   exit 1
 fi
 
@@ -59,6 +60,7 @@ ensure_platform_checkout() {
   fi
   if [[ ! -e "$platform_target" ]]; then
     if git clone --no-checkout "$platform_source" "$platform_target"; then
+      git -C "$platform_target" remote set-url origin "$platform_url"
       git -C "$platform_target" checkout --detach "$platform_pin"
     fi
   fi
@@ -71,16 +73,17 @@ ensure_platform_checkout() {
 
   platform_actual="$(git -C "$platform_target" rev-parse HEAD 2>/dev/null || true)"
   if [[ -z "$platform_actual" ]]; then
-    echo "worktree-bootstrap: vendor/fenton-platform is not a checkout" >&2
+    echo "worktree-bootstrap: vendor/platform.dmfenton.net is not a checkout" >&2
     exit 1
   fi
   if [[ -n "$(git -C "$platform_target" status --porcelain --untracked-files=no)" ]]; then
-    echo "worktree-bootstrap: vendor/fenton-platform has tracked changes" >&2
+    echo "worktree-bootstrap: vendor/platform.dmfenton.net has tracked changes" >&2
     exit 1
   fi
   if [[ "$platform_actual" != "$platform_pin" ]]; then
     if ! git -C "$platform_target" cat-file -e "${platform_pin}^{commit}" 2>/dev/null; then
-      git -C "$platform_target" fetch origin "$platform_pin" || true
+      git -C "$platform_target" fetch "$platform_source" "$platform_pin" || \
+        git -C "$platform_target" fetch origin "$platform_pin" || true
     fi
     git -C "$platform_target" checkout --detach "$platform_pin" || true
   fi
@@ -90,10 +93,10 @@ ensure_platform_checkout() {
     sleep 0.1
   done
   if [[ "$platform_actual" != "$platform_pin" ]]; then
-    echo "worktree-bootstrap: vendor/fenton-platform is not the locked commit" >&2
+    echo "worktree-bootstrap: vendor/platform.dmfenton.net is not the locked commit" >&2
     exit 1
   fi
-  echo "worktree-bootstrap: ready vendor/fenton-platform at ${platform_pin:0:12}"
+  echo "worktree-bootstrap: ready vendor/platform.dmfenton.net at ${platform_pin:0:12}"
 
   if [[ ! -d "$platform_target/python" ]]; then
     echo "worktree-bootstrap: locked platform checkout does not provide python/" >&2

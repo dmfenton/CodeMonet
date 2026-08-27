@@ -67,7 +67,7 @@ build-backend = "hatchling.build"
 packages = ["code_monet"]
 
 [tool.uv.sources]
-fenton-platform = { path = "../vendor/fenton-platform/python" }
+fenton-platform = { path = "../vendor/platform.dmfenton.net/python" }
 
 [tool.ruff]
 target-version = "py312"
