@@ -36,7 +36,8 @@ COPY web/package.json ./web/
 
 # Install only the server workspaces' production dependencies. Excluding the
 # React Native app keeps mobile packages and their install scripts out of SSR.
-RUN npm ci --omit=dev \
+RUN apk upgrade --no-cache \
+    && npm ci --omit=dev \
         --workspace @code-monet/web --workspace @code-monet/shared \
         --include-workspace-root=false \
     && npm cache clean --force \
