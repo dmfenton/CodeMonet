@@ -38,6 +38,11 @@ jobs:
         id: platform
         run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
 
+      - name: Require exact main release source
+        run: |
+          git fetch origin main --no-tags
+          [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
+
       - uses: actions/checkout@v6
         with:
           repository: dmfenton/fenton-platform

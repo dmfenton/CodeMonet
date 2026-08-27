@@ -18,3 +18,5 @@ def test_release_deploys_full_source_sha() -> None:
 
     assert workflow.count('--parameters "ImageTag=$GITHUB_SHA"') == 2
     assert workflow.count(":$GITHUB_SHA") >= 6
+    assert "Require exact main release source" in workflow
+    assert 'git rev-parse HEAD)" == "$(git rev-parse origin/main)' in workflow
