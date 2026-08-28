@@ -20,6 +20,7 @@ def _configure(monkeypatch: pytest.MonkeyPatch, token: Path) -> None:
     monkeypatch.setattr(settings, "anthropic_service_account_id", "svac_test")
     monkeypatch.setattr(settings, "anthropic_workspace_id", "wrkspc_test")
     monkeypatch.setattr(settings, "anthropic_identity_token_file", str(token))
+    monkeypatch.setattr(settings, "anthropic_config_directory", str(token.parent / "config"))
 
 
 def test_wif_environment_removes_static_credentials(
@@ -31,7 +32,10 @@ def test_wif_environment_removes_static_credentials(
 
     environment = anthropic_claude_environment()
 
-    assert environment["ANTHROPIC_FEDERATION_RULE_ID"] == "fdrl_test"
+    assert environment["ANTHROPIC_CONFIG_DIR"] == str(tmp_path / "config")
+    assert environment["CLAUDE_CONFIG_DIR"] == str(tmp_path / "config")
+    assert environment["ANTHROPIC_PROFILE"].startswith("fenton-wif-")
+    assert environment["ANTHROPIC_FEDERATION_RULE_ID"] == ""
     assert "ANTHROPIC_API_KEY" not in environment
     assert "ANTHROPIC_API_KEY" not in __import__("os").environ
     assert "CLAUDE_CODE_USE_BEDROCK" not in __import__("os").environ
