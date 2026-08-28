@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import stat
-import uuid
-from dataclasses import dataclass
 from pathlib import Path
+
+from fenton_agent import ClaudeFederationProfile, configure_claude_federation_profile
 
 from code_monet.config import settings
 
@@ -26,41 +26,7 @@ _SHADOW_CREDENTIALS = frozenset(
 )
 
 
-@dataclass(frozen=True, slots=True)
-class AnthropicWifConfiguration:
-    federation_rule_id: str
-    organization_id: str
-    service_account_id: str
-    identity_token_file: Path
-    workspace_id: str | None = None
-
-    def __post_init__(self) -> None:
-        if not self.federation_rule_id.startswith("fdrl_"):
-            raise ValueError("Anthropic federation rule ID must start with fdrl_")
-        try:
-            uuid.UUID(self.organization_id)
-        except ValueError as error:
-            raise ValueError("Anthropic organization ID must be a UUID") from error
-        if not self.service_account_id.startswith("svac_"):
-            raise ValueError("Anthropic service account ID must start with svac_")
-        if self.workspace_id is not None and not (
-            self.workspace_id == "default" or self.workspace_id.startswith("wrkspc_")
-        ):
-            raise ValueError("Anthropic workspace ID must be default or start with wrkspc_")
-        if not self.identity_token_file.is_absolute():
-            raise ValueError("Anthropic identity token file must be absolute")
-
-    def claude_environment(self) -> dict[str, str]:
-        values = {
-            "ANTHROPIC_FEDERATION_RULE_ID": self.federation_rule_id,
-            "ANTHROPIC_ORGANIZATION_ID": self.organization_id,
-            "ANTHROPIC_SERVICE_ACCOUNT_ID": self.service_account_id,
-            "ANTHROPIC_IDENTITY_TOKEN_FILE": str(self.identity_token_file),
-        }
-        if self.workspace_id is not None:
-            values["ANTHROPIC_WORKSPACE_ID"] = self.workspace_id
-        return values
-
+class AnthropicWifConfiguration(ClaudeFederationProfile):
     def identity_token_available(self) -> bool:
         try:
             token = self.identity_token_file.stat()
@@ -98,4 +64,9 @@ def anthropic_wif_configuration() -> AnthropicWifConfiguration | None:
 
 def anthropic_claude_environment() -> dict[str, str]:
     configuration = anthropic_wif_configuration()
-    return configuration.claude_environment() if configuration is not None else {}
+    if configuration is None:
+        return {}
+    return configure_claude_federation_profile(
+        configuration,
+        config_directory=Path(settings.anthropic_config_directory),
+    )
