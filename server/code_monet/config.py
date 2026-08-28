@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     anthropic_service_account_id: str = _ssm("anthropic_service_account_id")
     anthropic_workspace_id: str = _ssm("anthropic_workspace_id")
     anthropic_identity_token_file: str = "/run/secrets/anthropic/aws-identity-token"
-    anthropic_config_directory: str = "/run/secrets/anthropic-config"
+    anthropic_config_directory: str = "/app/data/anthropic-config"
 
     # Optional OpenAI backend. Set AGENT_PROVIDER=openai and OPENAI_API_KEY to use it.
     openai_api_key: str = _ssm("openai_api_key")

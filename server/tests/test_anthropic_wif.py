@@ -12,6 +12,10 @@ from code_monet.anthropic_wif import (
 from code_monet.config import settings
 
 
+def test_wif_cache_defaults_to_the_writable_data_volume() -> None:
+    assert settings.anthropic_config_directory == "/app/data/anthropic-config"
+
+
 def _configure(monkeypatch: pytest.MonkeyPatch, token: Path) -> None:
     monkeypatch.setattr(settings, "anthropic_federation_rule_id", "fdrl_test")
     monkeypatch.setattr(
