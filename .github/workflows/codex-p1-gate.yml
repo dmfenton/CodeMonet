@@ -44,6 +44,6 @@ jobs:
           (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
             (contains(github.event.comment.body, '@codex review') ||
               contains(github.event.changes.body.from, '@codex review')))))
-    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@824b85c74bd63c3246b117be8959ae27d0021f50
+    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@fa4f28c6c58875baa140c9a4f5163509e588ddd8
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || '0' }}
