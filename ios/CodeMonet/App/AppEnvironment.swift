@@ -17,6 +17,12 @@ public final class AppEnvironment {
     public let studio: StudioStore
     public let navigation = NavigationState()
 
+    /// A magic-link deep-link failure (ux spec §3's `magicLinkError` prop),
+    /// carried from `RootView`'s deep-link handling into `AuthView` without
+    /// AuthView needing to know about `DeepLinkCoordinator`. Cleared by
+    /// `AuthView` on any user interaction with the email field, per spec.
+    public var magicLinkError: String?
+
     public init(config: CodeMonetEnvironment = AppConfig.environment) {
         self.config = config
         let auth = AuthService(environment: config)
