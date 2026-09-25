@@ -6,6 +6,8 @@ export {
   canvasReducer,
   deriveAgentStatus,
   hasInProgressEvents,
+  hasPainting,
+  initialPaintingState,
   initialState,
   initialPerformanceState,
   MAX_MESSAGES,
@@ -19,5 +21,6 @@ export type {
   CanvasHookState,
   PerformanceAction,
   PerformanceItem,
+  PaintingState,
   PerformanceState,
 } from './reducer';

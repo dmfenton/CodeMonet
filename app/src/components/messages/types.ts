@@ -35,6 +35,7 @@ export const TOOL_ICONS: Record<
   imagine: { name: 'sparkles', activeIcon: 'sparkles-outline' },
   sign_canvas: { name: 'pencil', activeIcon: 'pencil-outline' },
   name_piece: { name: 'text', activeIcon: 'text-outline' },
+  paint: { name: 'color-palette', activeIcon: 'color-palette-outline' },
   unknown: { name: 'help-circle', activeIcon: 'help-circle-outline' },
 };
 

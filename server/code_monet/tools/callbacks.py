@@ -8,6 +8,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from code_monet.program_painting import PaintResult
     from code_monet.types import Path
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ GetCanvasCallback = Callable[[], bytes]
 AddStrokesCallback = Callable[["list[Path]"], Awaitable[None]]
 WorkspaceDirCallback = Callable[[], str]
 PieceTitleCallback = Callable[[str], Awaitable[None]]
+PaintCallback = Callable[[], "Awaitable[PaintResult]"]
 
 # Global callbacks - will be set by the agent
 _draw_callback: DrawCallback | None = None
@@ -25,6 +27,7 @@ _get_canvas_callback: GetCanvasCallback | None = None
 _add_strokes_callback: AddStrokesCallback | None = None
 _get_workspace_dir_callback: WorkspaceDirCallback | None = None
 _set_piece_title_callback: PieceTitleCallback | None = None
+_paint_callback: PaintCallback | None = None
 
 # Global canvas dimensions
 _canvas_width: int = 800
@@ -70,6 +73,16 @@ def set_piece_title_callback(callback: PieceTitleCallback | None) -> None:
     """Set the callback function for saving the piece title."""
     global _set_piece_title_callback
     _set_piece_title_callback = callback
+
+
+def set_paint_callback(callback: PaintCallback | None) -> None:
+    """Set the callback that runs the painting program and publishes the version."""
+    global _paint_callback
+    _paint_callback = callback
+
+
+def get_paint_callback() -> PaintCallback | None:
+    return _paint_callback
 
 
 def set_canvas_dimensions(width: int, height: int) -> None:

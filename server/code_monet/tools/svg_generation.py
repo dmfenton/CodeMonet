@@ -186,7 +186,7 @@ output_paths(paths)
 
 Example - oil painting with brush strokes (Paint mode):
 ```python
-colors = ["#e94560", "#7b68ee", "#4ecdc4", "#ffd93d"]
+colors = ["#b5562f", "#d9b56a", "#5f7f86", "#3b3a4a"]
 paths = []
 cx, cy = canvas_width / 2, canvas_height / 2
 for i in range(50):

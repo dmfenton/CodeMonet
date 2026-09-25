@@ -6,12 +6,20 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
+import type {
+  DrawingStyleConfig,
+  PaintingState,
+  Path,
+  Point,
+  RendererProps,
+  StrokeStyle,
+} from '@code-monet/shared';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 
 import { useRendererConfig } from '../context/RendererContext';
 import { SvgRenderer, FreehandSvgRenderer } from '../renderers';
 import { StampCanvasLayer } from '../renderers/StampCanvasLayer';
+import { RasterRevealLayer, type RevealPlaybackInfo } from '../renderers/RasterRevealLayer';
 
 interface CanvasProps {
   strokes: Path[];
@@ -25,6 +33,12 @@ interface CanvasProps {
   canvasHeight?: number;
   styleConfig?: DrawingStyleConfig; // Current drawing style (defaults to plotter)
   showIdleAnimation: boolean; // Whether to show idle particles
+  /** Program painting (paint mode); when present, replaces stroke rendering. */
+  painting?: PaintingState;
+  /** API base URL for painting assets. */
+  apiUrl?: string;
+  onPaintingPlaybackDone?: (assetBase: string) => void;
+  onPaintingProgress?: (info: RevealPlaybackInfo) => void;
   onStrokeStart: (x: number, y: number) => void;
   onStrokeMove: (x: number, y: number) => void;
   onStrokeEnd: () => void;
@@ -60,6 +74,10 @@ export function Canvas({
   canvasHeight = CANVAS_HEIGHT,
   styleConfig = PLOTTER_STYLE,
   showIdleAnimation,
+  painting,
+  apiUrl = '',
+  onPaintingPlaybackDone,
+  onPaintingProgress,
   onStrokeStart,
   onStrokeMove,
   onStrokeEnd,
@@ -144,19 +162,33 @@ export function Canvas({
     }
   }, [isDrawing, onStrokeEnd]);
 
-  // In paint mode, completed strokes render on a raster stamp layer
-  // (painterly, matches the server renderer); the SVG overlay keeps
-  // in-progress strokes, the pen indicator, and idle animation.
-  const useStampLayer = styleConfig.type === 'paint';
+  // Paint mode with a program painting: server-rendered versions revealed on
+  // a raster layer; only human strokes stay vector on top, and the agent
+  // pen/in-progress stroke visuals don't apply.
+  const useRasterLayer =
+    styleConfig.type === 'paint' &&
+    painting !== undefined &&
+    (painting.base !== null || painting.playing !== null);
+  // Paint mode without one (legacy stroke pieces): completed strokes render on
+  // a raster stamp layer (painterly, matches the server renderer); the SVG
+  // overlay keeps in-progress strokes, the pen indicator, and idle animation.
+  const useStampLayer = styleConfig.type === 'paint' && !useRasterLayer;
+
+  const vectorStrokes = useRasterLayer
+    ? // Server paths always carry an author; local strokes (pre-echo) have none.
+      strokes.filter((s) => s.author !== 'agent')
+    : useStampLayer
+      ? []
+      : strokes;
 
   // Build renderer props
   const rendererProps: RendererProps = {
-    strokes: useStampLayer ? [] : strokes,
+    strokes: vectorStrokes,
     currentStroke,
-    agentStroke,
+    agentStroke: useRasterLayer ? [] : agentStroke,
     agentStrokeStyle: agentStrokeStyle ?? null,
-    penPosition,
-    penDown,
+    penPosition: useRasterLayer ? null : penPosition,
+    penDown: useRasterLayer ? false : penDown,
     styleConfig,
     showIdleAnimation,
     width: canvasWidth,
@@ -191,6 +223,17 @@ export function Canvas({
           aspectRatio: `${canvasWidth} / ${canvasHeight}`,
         }}
       >
+        {useRasterLayer && (
+          <RasterRevealLayer
+            apiUrl={apiUrl}
+            base={painting.base}
+            playing={painting.playing}
+            width={canvasWidth}
+            height={canvasHeight}
+            onPlaybackDone={onPaintingPlaybackDone}
+            onProgress={onPaintingProgress}
+          />
+        )}
         {useStampLayer && (
           <StampCanvasLayer
             strokes={strokes}

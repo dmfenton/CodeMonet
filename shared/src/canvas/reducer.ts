@@ -8,6 +8,7 @@ import type {
   DrawingStyleConfig,
   DrawingStyleType,
   GalleryEntry,
+  PaintingVersionRef,
   Path,
   PendingStroke,
   Point,
@@ -106,6 +107,28 @@ export const initialPerformanceState: PerformanceState = {
 };
 
 /**
+ * Program-painting (paint mode) display state.
+ *
+ * `base` is the version whose final image is fully shown; `playing` is the
+ * version being revealed over it. When playback finishes (or another version
+ * arrives), `playing` becomes the new `base`.
+ */
+export interface PaintingState {
+  base: PaintingVersionRef | null;
+  playing: PaintingVersionRef | null;
+}
+
+export const initialPaintingState: PaintingState = { base: null, playing: null };
+
+/** Collapse any in-flight playback to its final image. */
+const settlePainting = (painting: PaintingState): PaintingState =>
+  painting.playing ? { base: painting.playing, playing: null } : painting;
+
+/** True when a program painting is displayed or being revealed. */
+export const hasPainting = (painting: PaintingState): boolean =>
+  painting.base !== null || painting.playing !== null;
+
+/**
  * Canvas state has two text representations:
  *   - thinking: Accumulates for archiving when iteration ends (legacy, used for history)
  *   - performance.revealedText: What's currently displayed (progressive animation)
@@ -140,6 +163,8 @@ export interface CanvasHookState {
   maxIterations: number;
   drawingStyle: DrawingStyleType; // Current drawing style
   styleConfig: DrawingStyleConfig; // Full style configuration
+  /** Program painting (paint mode): server-rendered versions */
+  painting: PaintingState;
   /** Saved canvas state before viewing a gallery piece (for restoring on exit) */
   savedCanvas: {
     strokes: Path[];
@@ -148,6 +173,7 @@ export interface CanvasHookState {
     pieceNumber: number;
     drawingStyle: DrawingStyleType;
     styleConfig: DrawingStyleConfig;
+    painting: PaintingState;
   } | null;
 }
 
@@ -225,8 +251,9 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   // Any in-progress event blocks drawing and shows as executing (legacy check)
   if (hasInProgressEvents(state.messages)) return 'executing';
 
-  // Drawing = strokes being animated or waiting
+  // Drawing = strokes being animated or waiting, or a painting version revealing
   if (hasStrokesOnStage || hasStrokesInBuffer) return 'drawing';
+  if (state.painting.playing !== null) return 'drawing';
 
   return 'idle';
 }
@@ -240,7 +267,8 @@ export function shouldShowIdleAnimation(state: CanvasHookState): boolean {
   return (
     state.strokes.length === 0 &&
     state.currentStroke.length === 0 &&
-    state.performance.agentStroke.length === 0
+    state.performance.agentStroke.length === 0 &&
+    !hasPainting(state.painting)
   );
 }
 
@@ -299,12 +327,17 @@ export type CanvasAction =
       paused: boolean;
       drawingStyle?: DrawingStyleType;
       styleConfig?: DrawingStyleConfig;
+      painting?: PaintingVersionRef | null;
     }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_ITERATION'; current: number; max: number }
   | { type: 'RESET_TURN' }
   | { type: 'CLEAR_VIEWING' }
   | { type: 'SET_STYLE'; drawingStyle: DrawingStyleType; styleConfig: DrawingStyleConfig }
+  // Program painting: a version arrived (guards applied in the reducer)
+  | { type: 'PAINTING_VERSION'; version: PaintingVersionRef }
+  // Program painting: the client finished revealing a version (matched by asset_base)
+  | { type: 'PAINTING_PLAYBACK_DONE'; assetBase: string }
   // Performance actions (merged into CanvasAction for single reducer)
   | PerformanceAction;
 
@@ -334,6 +367,7 @@ export const initialState: CanvasHookState = {
   maxIterations: 5,
   drawingStyle: 'plotter',
   styleConfig: PLOTTER_STYLE,
+  painting: initialPaintingState,
   savedCanvas: null,
 };
 
@@ -360,6 +394,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         savedCanvas: null,
         messages: [],
         thinking: '',
+        painting: initialPaintingState,
       };
 
     case 'START_STROKE':
@@ -436,6 +471,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         canvasHeight: action.canvasHeight || CANVAS_HEIGHT,
         drawingStyle: loadedStyle,
         styleConfig: loadedStyleConfig,
+        painting: initialPaintingState,
         // Save current canvas state so we can restore when exiting gallery view
         savedCanvas: state.viewingPiece === null ? {
           strokes: state.strokes,
@@ -444,6 +480,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           pieceNumber: state.pieceNumber,
           drawingStyle: state.drawingStyle,
           styleConfig: state.styleConfig,
+          painting: settlePainting(state.painting),
         } : state.savedCanvas,
       };
     }
@@ -461,6 +498,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
           pieceNumber: state.savedCanvas.pieceNumber,
           drawingStyle: state.savedCanvas.drawingStyle,
           styleConfig: state.savedCanvas.styleConfig,
+          painting: state.savedCanvas.painting,
           savedCanvas: null,
         };
       }
@@ -485,6 +523,8 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         savedCanvas: null,
         drawingStyle: initStyle,
         styleConfig: initStyleConfig,
+        // Current version is shown immediately (no reveal animation)
+        painting: { base: action.painting ?? null, playing: null },
         // Reset transient state on init
         messages: [],
         thinking: '',
@@ -498,6 +538,32 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         drawingStyle: action.drawingStyle,
         styleConfig: action.styleConfig,
       };
+
+    case 'PAINTING_VERSION': {
+      const incoming = action.version;
+      // Gallery guard: never animate over a gallery piece being viewed
+      if (state.viewingPiece !== null) return state;
+      // Stale piece guard
+      if (incoming.piece_number < state.pieceNumber) return state;
+
+      const current = settlePainting(state.painting).base;
+      const samePiece = current !== null && current.piece_number === incoming.piece_number;
+      // Duplicate / out-of-order version of the same piece
+      if (samePiece && incoming.version <= current.version) return state;
+
+      return {
+        ...state,
+        // Piece sync
+        pieceNumber: Math.max(state.pieceNumber, incoming.piece_number),
+        // A version arriving mid-playback finishes the current one (jump to its final);
+        // a version for a new piece starts from a blank base.
+        painting: { base: samePiece ? current : null, playing: incoming },
+      };
+    }
+
+    case 'PAINTING_PLAYBACK_DONE':
+      if (state.painting.playing?.asset_base !== action.assetBase) return state;
+      return { ...state, painting: settlePainting(state.painting) };
 
     case 'SET_PAUSED':
       return { ...state, paused: action.paused };

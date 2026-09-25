@@ -44,6 +44,25 @@ class CanvasState(BaseModel):
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER  # Active style
 
 
+class PaintingVersion(BaseModel):
+    """One rendered version of a program painting (paint mode).
+
+    Assets live in {user_dir}/paintings/{token}/ and are served at
+    /painting-assets/{user_id}/{token}/{file}; the random token is the capability.
+    """
+
+    piece_number: int
+    version: int
+    token: str
+    image_width: int
+    image_height: int
+    stages: list[str] = []
+    created_at: str
+
+    def asset_base(self, user_id: str) -> str:
+        return f"/painting-assets/{user_id}/{self.token}/"
+
+
 class AgentState(BaseModel):
     """Agent state."""
 
@@ -65,6 +84,7 @@ class GalleryEntry(BaseModel):
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER
     title: str | None = None  # Piece title (set by agent via name_piece tool)
     thumbnail_token: str | None = None  # Token for thumbnail URL (same as id)
+    format: str = "strokes"  # "strokes" (vector) or "raster" (program painting)
 
 
 class SavedCanvas(BaseModel):

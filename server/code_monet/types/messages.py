@@ -114,6 +114,18 @@ class AgentStrokesReadyMessage(BaseModel):
     piece_number: int  # Canvas/piece number to prevent cross-canvas rendering
 
 
+class PaintingVersionMessage(BaseModel):
+    """A program-painting version is rendered; clients reveal its keyframes."""
+
+    type: Literal["painting_version"] = "painting_version"
+    piece_number: int
+    version: int
+    asset_base: str
+    image_width: int
+    image_height: int
+    stages: list[str]
+
+
 # Client -> Server messages
 
 
@@ -169,6 +181,7 @@ ServerMessage = (
     | PieceStateMessage
     | IterationMessage
     | AgentStrokesReadyMessage
+    | PaintingVersionMessage
 )
 
 ClientMessage = (

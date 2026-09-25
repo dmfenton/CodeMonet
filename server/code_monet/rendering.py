@@ -86,6 +86,8 @@ class RenderOptions:
         scale_padding: Padding when scaling
         output_format: Return type - "image" (PIL), "bytes", or "base64"
     optimize_png: Enable PNG optimization (slower but smaller)
+        base_image: Rendered painting (program-painting final image) placed
+            under the strokes, filling the source canvas area
     """
 
     width: int = 800
@@ -99,6 +101,7 @@ class RenderOptions:
     scale_padding: int = 0
     output_format: Literal["image", "bytes", "base64"] = "bytes"
     optimize_png: bool = False
+    base_image: str | None = None
 
     def _parse_background(self) -> tuple[int, int, int, int]:
         """Parse background_color to RGBA tuple."""
@@ -151,6 +154,17 @@ def _render_filled_path(
     img.alpha_composite(layer)
 
 
+def _paste_base_image(
+    img: Image.Image, path: str, options: RenderOptions, transform: _ScaleTransform
+) -> None:
+    """Place a rendered painting over the background, filling the source canvas area."""
+    src_w, src_h = options.scale_from or (options.width, options.height)
+    size = (max(1, round(src_w * transform.scale)), max(1, round(src_h * transform.scale)))
+    with Image.open(path) as base:
+        layer = base.convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+    img.alpha_composite(layer, (round(transform.offset_x), round(transform.offset_y)))
+
+
 def render_strokes(
     strokes: list[Path],
     options: RenderOptions | None = None,
@@ -173,6 +187,8 @@ def render_strokes(
     # Create image with background
     bg_rgba = options._parse_background()
     img = Image.new("RGBA", (options.width, options.height), bg_rgba)
+    if options.base_image:
+        _paste_base_image(img, options.base_image, options, transform)
 
     # In paint mode, each stroke is stamped onto a PaintSurface so translucent
     # layers accumulate like paint. Plotter mode uses one shared layer.
@@ -301,12 +317,25 @@ def render_workspace(
     highlight_human: bool = True,
     output_format: Literal["image", "bytes", "base64"] = "bytes",
 ) -> Image.Image | bytes | str:
-    """Render a WorkspaceState's canvas to an image."""
-    return render_canvas(
-        state.canvas,
+    """Render a WorkspaceState's canvas (painting version + strokes) to an image."""
+    options = RenderOptions(
+        width=state.canvas.width,
+        height=state.canvas.height,
+        drawing_style=state.canvas.drawing_style,
         highlight_human=highlight_human,
         output_format=output_format,
+        base_image=painting_image_path(state),
     )
+    return render_strokes(state.canvas.strokes, options)
+
+
+def painting_image_path(state: WorkspaceState) -> str | None:
+    """Final image of the workspace's current painting version, if any."""
+    painting = state.painting
+    if painting is None:
+        return None
+    path = state.paintings_dir / painting.token / "final.png"
+    return str(path) if path.exists() else None
 
 
 async def render_workspace_async(

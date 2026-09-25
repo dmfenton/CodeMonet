@@ -23,6 +23,7 @@ from code_monet.types import (
     CanvasState,
     DrawingStyleType,
     GalleryEntry,
+    PaintingVersion,
     Path,
     PauseReason,
     PendingStrokeDict,
@@ -31,6 +32,7 @@ from code_monet.types import (
 from code_monet.workspace.gallery import (
     load_gallery_piece,
     parse_drawing_style,
+    read_gallery_piece_json,
     scan_gallery_entries,
     scan_gallery_with_strokes,
 )
@@ -80,6 +82,8 @@ class WorkspaceState:
         self._notes: str = ""
         self._monologue: str = ""
         self._current_piece_title: str | None = None  # Title for current piece
+        # Latest rendered version of the current program painting (paint mode)
+        self._painting: PaintingVersion | None = None
         self._loaded = False
 
         # Pending strokes for client-side rendering
@@ -146,6 +150,8 @@ class WorkspaceState:
             self._current_piece_title = data.get("current_piece_title")
             self._pending_strokes = data.get("pending_strokes", [])
             self._stroke_batch_id = data.get("stroke_batch_id", 0)
+            painting = data.get("painting")
+            self._painting = PaintingVersion.model_validate(painting) if painting else None
 
             logger.info(
                 f"Workspace loaded for user {self.user_id}: "
@@ -198,25 +204,18 @@ class WorkspaceState:
                 "current_piece_title": self._current_piece_title,
                 "pending_strokes": self._pending_strokes,
                 "stroke_batch_id": self._stroke_batch_id,
+                "painting": self._painting.model_dump() if self._painting else None,
                 "updated_at": datetime.now(UTC).isoformat(),
             }
 
-            # Serialize and check size
-            json_data = json.dumps(data, indent=2)
+            # Never drop strokes to fit a size budget: that silently erases the
+            # painting (and re-serializing per drop blocked the event loop).
+            json_data = json.dumps(data)
             if len(json_data) > app_settings.max_workspace_size_bytes:
                 logger.warning(
                     f"User {self.user_id}: workspace size ({len(json_data)} bytes) "
-                    f"exceeds limit ({app_settings.max_workspace_size_bytes} bytes), "
-                    "truncating old strokes"
+                    f"exceeds {app_settings.max_workspace_size_bytes} bytes"
                 )
-                # Remove oldest strokes until under limit
-                while (
-                    len(json_data) > app_settings.max_workspace_size_bytes
-                    and len(self._canvas.strokes) > 10
-                ):
-                    self._canvas.strokes = self._canvas.strokes[10:]
-                    data["canvas"] = self._canvas.model_dump()
-                    json_data = json.dumps(data, indent=2)
 
             await atomic_write(self._workspace_file, json_data)
 
@@ -273,6 +272,43 @@ class WorkspaceState:
     @current_piece_title.setter
     def current_piece_title(self, value: str | None) -> None:
         self._current_piece_title = value
+
+    @property
+    def painting(self) -> PaintingVersion | None:
+        """Latest rendered version of the current program painting."""
+        return self._painting
+
+    @property
+    def paintings_dir(self) -> FilePath:
+        """Directory holding rendered painting versions, one subdirectory per token."""
+        return self._user_dir / "paintings"
+
+    @property
+    def studio_program(self) -> FilePath:
+        """The agent's current painting program."""
+        return self._user_dir / "studio" / "painting.py"
+
+    async def record_painting_version(
+        self, token: str, image_width: int, image_height: int, stages: list[str]
+    ) -> PaintingVersion:
+        """Make a rendered version the current picture of this piece."""
+        version = PaintingVersion(
+            piece_number=self._piece_number,
+            version=(self._painting.version + 1) if self._painting else 1,
+            token=token,
+            image_width=image_width,
+            image_height=image_height,
+            stages=stages,
+            created_at=datetime.now(UTC).isoformat(),
+        )
+        self._painting = version
+        await self.save()
+        return version
+
+    def _reset_painting(self) -> None:
+        """Forget the current painting; the next program starts from scratch."""
+        self._painting = None
+        self.studio_program.unlink(missing_ok=True)
 
     @property
     def has_pending_strokes(self) -> bool:
@@ -333,13 +369,17 @@ class WorkspaceState:
 
     # --- Canvas Operations ---
 
-    async def add_stroke(self, path: Path) -> None:
-        """Add a stroke to the canvas.
+    async def add_strokes(self, paths: list[Path]) -> None:
+        """Append a batch of strokes and persist once.
 
-        Thread-safe: uses stroke lock to prevent race conditions.
+        A save serializes the whole canvas, so saving per stroke makes a batch
+        cost O(batch x canvas) and blocks the event loop for minutes on dense
+        paintings. Thread-safe: uses stroke lock to prevent race conditions.
         """
+        if not paths:
+            return
         async with self._stroke_lock:
-            self._canvas.strokes.append(path)
+            self._canvas.strokes.extend(paths)
         await self.save()
 
     async def clear_canvas(self) -> None:
@@ -349,12 +389,13 @@ class WorkspaceState:
         """
         async with self._stroke_lock:
             self._canvas.strokes = []
+            self._reset_painting()
         await self.save()
 
     async def save_to_gallery(self) -> str | None:
         """Save current canvas to gallery without clearing. Returns saved ID."""
         async with self._write_lock:
-            if not self._canvas.strokes:
+            if not self._canvas.strokes and self._painting is None:
                 return None
 
             # Save to gallery as JSON file (use 6 digits for scalability)
@@ -369,6 +410,11 @@ class WorkspaceState:
                 "drawing_style": self._canvas.drawing_style.value,
                 "title": self._current_piece_title,
             }
+            if self._painting is not None:
+                piece_data["format"] = "raster"
+                piece_data["image_token"] = self._painting.token
+                piece_data["image_width"] = self._painting.image_width
+                piece_data["image_height"] = self._painting.image_height
 
             await atomic_write(piece_file, json.dumps(piece_data, indent=2))
 
@@ -395,6 +441,7 @@ class WorkspaceState:
             self._monologue = ""  # Clear thinking for new piece
             self._notes = ""  # Clear notes for new piece
             self._current_piece_title = None  # Clear title for new piece
+            self._reset_painting()
 
         # Clear pending strokes from previous canvas to prevent them
         # from being rendered on the new canvas
@@ -405,6 +452,15 @@ class WorkspaceState:
         return saved_id
 
     # --- Gallery Operations ---
+
+    async def gallery_raster(self, piece_number: int) -> tuple[str, str] | None:
+        """(image_token, final image path) for a raster gallery piece, else None."""
+        data = await read_gallery_piece_json(self._gallery_dir, piece_number)
+        token = data.get("image_token") if data else None
+        if not isinstance(token, str):
+            return None
+        path = self.paintings_dir / token / "final.png"
+        return (token, str(path)) if path.exists() else None
 
     async def list_gallery(self) -> list[GalleryEntry]:
         """List gallery pieces by scanning piece files."""

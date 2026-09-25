@@ -39,6 +39,10 @@ export interface PieceStrokes {
   canvas_width?: number;
   canvas_height?: number;
   created_at: string;
+  /** 'raster' for program paintings: show image_url instead of strokes. */
+  format?: 'raster' | 'vector';
+  /** Absolute-path URL (relative to the API base) of the final image, raster pieces only. */
+  image_url?: string;
 }
 
 export interface SimulatedStroke {

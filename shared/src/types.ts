@@ -528,6 +528,53 @@ export interface InitMessage {
   monologue: string;
   drawing_style?: DrawingStyleType;
   style_config?: DrawingStyleConfig;
+  /** Current program-painting version (paint mode), shown immediately without animating. */
+  painting?: PaintingVersionRef | null;
+}
+
+// ============================================================================
+// Program painting (paint mode) — see docs/program-painting.md
+// ============================================================================
+
+/**
+ * A rendered painting version. Assets live at `${apiUrl}${asset_base}${file}`
+ * (capability URL, no auth header).
+ */
+export interface PaintingVersionRef {
+  piece_number: number;
+  version: number;
+  /** Path relative to the API base URL, ending in '/'. */
+  asset_base: string;
+  image_width: number;
+  image_height: number;
+}
+
+/** Server -> client: a new version is ready to reveal. */
+export interface PaintingVersionMessage extends PaintingVersionRef {
+  type: 'painting_version';
+  stages: string[];
+}
+
+/** Brush stroke footprint: polyline of `width` through [x0, y0, x1, y1, ...] (image px). */
+export type StrokeRevealOp = ['s', number, ...number[]];
+
+/** Area op (fill/wash/glaze/smear): reveal rect [x0, y0, x1, y1] (image px) with a wipe. */
+export type AreaRevealOp = ['a', number, number, number, number];
+
+export type RevealOp = StrokeRevealOp | AreaRevealOp;
+
+export interface RevealKeyframe {
+  label: string;
+  /** File name relative to the version's asset_base, e.g. 'kf_00.jpg'. */
+  image: string;
+  ops: RevealOp[];
+}
+
+/** reveal.json */
+export interface RevealManifest {
+  width: number;
+  height: number;
+  keyframes: RevealKeyframe[];
 }
 
 export interface PieceStateMessage {
@@ -551,7 +598,8 @@ export type ToolName =
   | 'mark_piece_done'
   | 'imagine'
   | 'sign_canvas'
-  | 'name_piece';
+  | 'name_piece'
+  | 'paint';
 
 /**
  * Human-readable display names for tools.
@@ -565,6 +613,7 @@ export const TOOL_DISPLAY_NAMES: Record<ToolName, string> = {
   imagine: 'imagining',
   sign_canvas: 'signing',
   name_piece: 'naming piece',
+  paint: 'painting',
 };
 
 export interface CodeExecutionMessage {
@@ -620,7 +669,8 @@ export type ServerMessage =
   | CodeExecutionMessage
   | ErrorMessage
   | IterationMessage
-  | AgentStrokesReadyMessage;
+  | AgentStrokesReadyMessage
+  | PaintingVersionMessage;
 
 // WebSocket messages - Client to Server
 export interface ClientStrokeMessage {

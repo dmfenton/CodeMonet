@@ -31,13 +31,15 @@ async def render_strokes_to_png(
     width: int = 800,
     height: int = 600,
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
+    base_image: str | None = None,
 ) -> bytes:
-    """Render strokes to PNG (async, non-blocking)."""
+    """Render strokes (over an optional painting image) to PNG (async, non-blocking)."""
     options = RenderOptions(
         width=width,
         height=height,
         drawing_style=drawing_style,
         output_format="bytes",
+        base_image=base_image,
     )
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)

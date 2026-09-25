@@ -31,6 +31,7 @@ async def get_gallery_piece_strokes(piece_number: int, user: CurrentUser) -> dic
         raise HTTPException(status_code=404, detail="Piece not found")
     strokes, drawing_style, width, height = result
     style_config = get_style_config(drawing_style)
+    raster = await state.gallery_raster(piece_number)
     return {
         "strokes": [s.model_dump() for s in strokes],
         "piece_number": piece_number,
@@ -38,6 +39,8 @@ async def get_gallery_piece_strokes(piece_number: int, user: CurrentUser) -> dic
         "canvas_height": height,
         "drawing_style": drawing_style.value,
         "style_config": style_config.model_dump(),
+        "format": "raster" if raster else "strokes",
+        "image_url": f"/painting-assets/{user.id}/{raster[0]}/final.png" if raster else None,
     }
 
 
@@ -65,11 +68,16 @@ async def get_gallery_thumbnail(piece_id: str, user: CurrentUser) -> Response:
         raise HTTPException(status_code=404, detail="Piece not found")
 
     strokes, style, width, height = result
-    if not strokes:
+    raster = await state.gallery_raster(piece_number)
+    if not strokes and raster is None:
         raise HTTPException(status_code=404, detail="Piece has no strokes")
 
     png_bytes = await render_strokes_to_png(
-        strokes, width=width, height=height, drawing_style=style
+        strokes,
+        width=width,
+        height=height,
+        drawing_style=style,
+        base_image=raster[1] if raster else None,
     )
     return Response(
         content=png_bytes,

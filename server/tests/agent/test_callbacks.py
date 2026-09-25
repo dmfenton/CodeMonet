@@ -15,7 +15,7 @@ class TestSetupToolCallbacks:
         """Create a mock workspace state."""
         state = MagicMock()
         state.workspace_dir = "/tmp/test-workspace"
-        state.add_stroke = AsyncMock()
+        state.add_strokes = AsyncMock()
         state.save = AsyncMock()
         state.current_piece_title = None
         return state
@@ -166,7 +166,7 @@ class TestSetupToolCallbacks:
         _mock_set_canvas: MagicMock,
         _mock_set_draw: MagicMock,
     ) -> None:
-        """Add strokes callback calls state.add_stroke for each path."""
+        """Add strokes callback persists the whole batch in one call."""
         state = self._create_mock_state()
         get_canvas_png = MagicMock(return_value=b"png data")
         on_paths_collected = AsyncMock()
@@ -191,8 +191,7 @@ class TestSetupToolCallbacks:
         # Call the callback
         await registered_callback(paths)
 
-        # Verify add_stroke was called for each path
-        assert state.add_stroke.call_count == 2
+        state.add_strokes.assert_awaited_once_with(paths)
 
     @patch("code_monet.agent.callbacks.set_draw_callback")
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")

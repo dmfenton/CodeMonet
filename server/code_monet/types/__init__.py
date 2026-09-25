@@ -41,6 +41,7 @@ from code_monet.types.messages import (
     IterationMessage,
     LoadCanvasMessage,
     NewCanvasMessage,
+    PaintingVersionMessage,
     PausedMessage,
     PieceStateMessage,
     ServerMessage,
@@ -54,6 +55,7 @@ from code_monet.types.state import (
     CanvasState,
     GalleryEntry,
     GalleryState,
+    PaintingVersion,
     PauseReason,
     SavedCanvas,
 )
@@ -96,6 +98,7 @@ __all__ = [
     "CanvasState",
     "GalleryEntry",
     "GalleryState",
+    "PaintingVersion",
     "PauseReason",
     "SavedCanvas",
     # Messages
@@ -116,6 +119,7 @@ __all__ = [
     "IterationMessage",
     "LoadCanvasMessage",
     "NewCanvasMessage",
+    "PaintingVersionMessage",
     "PausedMessage",
     "PieceStateMessage",
     "ServerMessage",
