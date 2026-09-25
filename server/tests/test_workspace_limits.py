@@ -134,13 +134,28 @@ class TestWorkspaceSizeLimits:
         # Run multiple operations concurrently
         async def add_strokes():
             for _ in range(10):
-                await workspace.add_stroke(path)
+                await workspace.add_strokes([path])
                 await asyncio.sleep(0.001)
 
         await asyncio.gather(add_strokes(), add_strokes())
 
         # Should have 20 strokes (no race conditions)
         assert len(workspace._canvas.strokes) == 20
+
+    @pytest.mark.asyncio
+    async def test_add_strokes_saves_once_per_batch(self, workspace: WorkspaceState) -> None:
+        """A batch of strokes is persisted with a single save, not one per stroke."""
+        from unittest.mock import AsyncMock, patch
+
+        paths = [
+            Path(type=PathType.LINE, points=[Point(x=i, y=0), Point(x=i, y=100)])
+            for i in range(500)
+        ]
+        with patch.object(workspace, "_do_save", new=AsyncMock()) as do_save:
+            await workspace.add_strokes(paths)
+
+        assert do_save.await_count == 1
+        assert len(workspace._canvas.strokes) == 500
 
     @pytest.mark.asyncio
     async def test_clear_canvas_thread_safe(self, workspace: WorkspaceState) -> None:

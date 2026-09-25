@@ -240,6 +240,21 @@ uv run python scripts/ws-client.py view output.png
 uv run python scripts/ws-client.py start "draw a cat"
 ```
 
+### Art Benchmark (`scripts/art-benchmark.py`)
+
+Runs fixed painter prompts (Turner storm, Hockney pool, Cézanne, Bruegel) through the
+live agent and saves each piece, every painting version, a full event trace, and a
+contact sheet to `screenshots/benchmarks/<label>-<timestamp>/`. Use it to measure any
+change to the paint prompt, library, or model:
+
+```bash
+cd server && uv run python ../scripts/art-benchmark.py --label my-change --timeout 1500
+```
+
+Iterate on the paint library itself by writing a painting program and running
+`python -m code_monet.tools.paint_runner --program p.py --out DIR --width 1600 --height 1200`
+(from `server/`), then look at `DIR/preview.jpg`.
+
 ### Render Studies (`scripts/render-study.py`)
 
 The fast iteration loop for renderer/visual work — sandbox code → paint render →
@@ -459,7 +474,11 @@ Web studio (port 5173, `/studio`):
 
 1. **WebSocket for real-time**: All drawing updates stream via WebSocket at 60fps
 2. **Claude Agent SDK sandbox**: Agent code executes in isolated sandbox
-3. **Path-based drawing**: Agent writes code that outputs path definitions, not pixel data
+3. **Paint mode is program painting**: the agent writes a Python painting program
+   (`studio/painting.py`) against `code_monet.paintlib` and runs it with the `paint`
+   tool; the server renders versions (keyframes + reveal log) and clients reveal them
+   stroke by stroke. See [docs/program-painting.md](docs/program-painting.md).
+   Plotter mode still uses path definitions (`draw_paths` / `generate_svg`).
 4. **Stateless agent turns**: Each agent turn receives full context (canvas image + notes)
 
 ## Testing Requirements
@@ -605,7 +624,10 @@ xcodebuild -workspace ios/CodeMonet.xcworkspace -scheme CodeMonet \
 
 ### Modifying the agent prompt
 
-Edit `server/code_monet/agent.py` - the `SYSTEM_PROMPT` constant
+- Paint mode: `server/code_monet/agent/paint_prompt.py`. Its library reference is the
+  module docstring of `server/code_monet/paintlib/canvas.py` — keep that docstring
+  accurate; it is what the agent learns the paint API from.
+- Plotter mode: `server/code_monet/agent/prompts.py`.
 
 ### Adding new path types
 

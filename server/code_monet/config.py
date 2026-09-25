@@ -109,8 +109,8 @@ class Settings(BaseSettings):
     quality_gate_auto_revision_turns: int = 3  # extra turns after failed visual critique
     agent_max_tokens: int = 8192  # max tokens for Claude response
     agent_provider: str = _ssm("agent_provider", "anthropic")  # anthropic or openai
-    agent_model: str = "claude-sonnet-4-5-20250929"  # Sonnet for visual planning in dev
-    agent_model_prod: str = "claude-opus-4-5-20251101"  # Production model
+    agent_model: str = "claude-opus-5-5"
+    agent_model_prod: str = "claude-opus-5-5"
     openai_agent_model: str = "gpt-5-mini"
     openai_agent_model_prod: str = "gpt-5"
 

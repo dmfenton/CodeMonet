@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 Verdict = Literal["PASS", "FAIL"]
@@ -19,7 +19,11 @@ class QualityGateState:
     drew_after_failure: bool = False
     mark_piece_done_accepted: bool = False
     consecutive_failures: int = 0
+    # Earlier critiques of this piece, oldest first, so the critic stays consistent
+    history: list[str] = field(default_factory=list)
 
+
+_CRITIQUE_HISTORY = 3
 
 _state = QualityGateState()
 
@@ -45,6 +49,12 @@ def reset_quality_gate() -> None:
     _state.drew_after_failure = False
     _state.mark_piece_done_accepted = False
     _state.consecutive_failures = 0
+    _state.history = []
+
+
+def critique_history() -> list[str]:
+    """Earlier critiques of the current piece, oldest first."""
+    return list(_state.history)
 
 
 def note_drawing(paths_count: int) -> None:
@@ -71,6 +81,7 @@ def record_critique_result(text: str) -> Verdict:
     verdict = parse_critique_verdict(text) or "FAIL"
     _state.last_verdict = verdict
     _state.last_critique = text[:2000]
+    _state.history = [*_state.history, text[:2000]][-_CRITIQUE_HISTORY:]
     _state.mark_piece_done_accepted = False
     if verdict == "FAIL":
         _state.blocked_by_failure = True

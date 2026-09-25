@@ -24,8 +24,8 @@ class FakeState:
         self.workspace_dir = "/tmp"
         self.current_piece_title = None
 
-    async def add_stroke(self, path: Any) -> None:
-        self.canvas.strokes.append(path)
+    async def add_strokes(self, paths: list[Any]) -> None:
+        self.canvas.strokes.extend(paths)
 
     async def save(self) -> None:
         return None

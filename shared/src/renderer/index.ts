@@ -43,3 +43,25 @@ export {
   mulberry32,
   strokeSeed,
 } from './stamping';
+
+// Program-painting reveal (server-rendered keyframes revealed along footprints)
+export type {
+  KeyframeSchedule,
+  RevealBounds,
+  RevealPacing,
+  RevealPathSink,
+  RevealProgress,
+  RevealSchedule,
+} from './reveal';
+export {
+  DEFAULT_REVEAL_PACING,
+  PAINTING_FINAL_FILE,
+  PAINTING_MANIFEST_FILE,
+  buildRevealSchedule,
+  paintingAssetUrl,
+  parseRevealManifest,
+  parseRevealOp,
+  revealOpBounds,
+  revealProgressAt,
+  traceRevealOp,
+} from './reveal';

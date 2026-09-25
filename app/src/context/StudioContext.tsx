@@ -3,7 +3,15 @@
  * Eliminates prop drilling by providing all studio-related state and actions via context.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { AppState, BackHandler, Platform } from 'react-native';
 
 import type {
@@ -11,7 +19,9 @@ import type {
   CanvasAction,
   CanvasHookState,
   ClientMessage,
+  DrawingStyleConfig,
   DrawingStyleType,
+  Path,
   PendingStroke,
   SavedCanvas,
   ServerMessage,
@@ -25,10 +35,12 @@ import {
 } from '@code-monet/shared';
 
 import { createApiClient, type ApiClient } from '../api';
-import { getWebSocketUrl } from '../config';
+import { getApiUrl, getWebSocketUrl } from '../config';
 import { useCanvas, useModals, useWebSocket } from '../hooks';
 import type { ModalType } from '../hooks';
 import { useTokenRefresh } from '../hooks/useTokenRefresh';
+import { galleryRasterImageUrl } from '../renderers/revealPlan';
+import type { GalleryStrokesFormat } from '../renderers/revealPlan';
 import { tracer } from '../utils/tracing';
 
 import { useAuth } from './AuthContext';
@@ -44,6 +56,16 @@ export type StudioAction =
   | { type: 'pause_toggle' }
   | { type: 'home' }
   | { type: 'gallery' };
+
+/** Response of GET /gallery/{n}/strokes. */
+interface GalleryStrokesResponse extends GalleryStrokesFormat {
+  strokes?: Path[] | null;
+  piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
+  drawing_style?: DrawingStyleType;
+  style_config?: DrawingStyleConfig;
+}
 
 interface CanvasDimensions {
   canvas_width: number;
@@ -73,6 +95,11 @@ export interface StudioContextValue {
 
   // API client
   api: ApiClient;
+  /** API base URL (painting assets are served relative to it). */
+  apiUrl: string;
+
+  /** Final image of the raster (program-painting) gallery piece being viewed, else null. */
+  viewingRasterImageUrl: string | null;
 
   // Actions - grouped by domain
   actions: {
@@ -99,6 +126,9 @@ export interface StudioContextValue {
     ) => void;
     handleGallerySelect: (pieceNumber: number) => void;
     handleGalleryToHome: () => void;
+
+    // Program painting: a version finished revealing on the canvas
+    handlePaintingPlaybackDone: (assetBase: string) => void;
   };
 }
 
@@ -119,6 +149,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
   const { screen, inStudio, enterStudio, exitStudio, setInStudio, openGallery, closeGallery, galleryToHome } = useNavigation();
 
   const api = useMemo(() => createApiClient(accessToken), [accessToken]);
+  const apiUrl = useMemo(() => getApiUrl(), []);
 
   // Core canvas state
   const canvas = useCanvas();
@@ -184,6 +215,13 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
 
         // Don't pass agent_strokes_ready to the reducer (no longer handled there)
         return;
+      }
+      if (message.type === 'painting_version') {
+        // Handled by the shared reducer (guards + piece sync); traced here.
+        tracer.recordEvent('painting.version', {
+          pieceNumber: message.piece_number,
+          version: message.version,
+        });
       }
       handleMessage(message);
     },
@@ -459,6 +497,17 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
     [send, canvas, enterStudio]
   );
 
+  // Raster gallery piece: its final image, keyed by piece so it only shows
+  // while that piece is being viewed.
+  const [galleryRaster, setGalleryRaster] = useState<{
+    pieceNumber: number;
+    imageUrl: string;
+  } | null>(null);
+  const viewingRasterImageUrl =
+    galleryRaster !== null && galleryRaster.pieceNumber === canvas.state.viewingPiece
+      ? galleryRaster.imageUrl
+      : null;
+
   const handleGallerySelect = useCallback(
     async (pieceNumber: number) => {
       // Navigate directly to studio (replacing gallery screen)
@@ -466,10 +515,12 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       try {
         const response = await api.fetch(`/gallery/${pieceNumber}/strokes`);
         if (response.ok) {
-          const data = await response.json();
+          const data = (await response.json()) as GalleryStrokesResponse;
+          const imageUrl = galleryRasterImageUrl(apiUrl, data);
+          setGalleryRaster(imageUrl ? { pieceNumber: data.piece_number, imageUrl } : null);
           dispatch({
             type: 'LOAD_CANVAS',
-            strokes: data.strokes,
+            strokes: data.strokes ?? [],
             pieceNumber: data.piece_number,
             canvasWidth: data.canvas_width,
             canvasHeight: data.canvas_height,
@@ -493,7 +544,15 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
         exitStudio();
       }
     },
-    [setInStudio, api, dispatch, canvas, send, exitStudio]
+    [setInStudio, api, apiUrl, dispatch, canvas, send, exitStudio]
+  );
+
+  const handlePaintingPlaybackDone = useCallback(
+    (assetBase: string) => {
+      tracer.recordEvent('painting.playback_done', { assetBase });
+      dispatch({ type: 'PAINTING_PLAYBACK_DONE', assetBase });
+    },
+    [dispatch]
   );
 
   // Navigate from gallery to home, pausing the agent if it was running
@@ -524,6 +583,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       handleNewCanvasStart,
       handleGallerySelect,
       handleGalleryToHome,
+      handlePaintingPlaybackDone,
     }),
     [
       handleStudioAction,
@@ -538,6 +598,7 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       handleNewCanvasStart,
       handleGallerySelect,
       handleGalleryToHome,
+      handlePaintingPlaybackDone,
     ]
   );
 
@@ -555,6 +616,8 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       closeModal,
       gallery: canvas.state.gallery,
       api,
+      apiUrl,
+      viewingRasterImageUrl,
       actions,
     }),
     [
@@ -568,6 +631,8 @@ export function StudioProvider({ children }: StudioProviderProps): React.JSX.Ele
       openModal,
       closeModal,
       api,
+      apiUrl,
+      viewingRasterImageUrl,
       actions,
     ]
   );

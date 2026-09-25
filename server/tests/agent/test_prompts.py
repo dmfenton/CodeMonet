@@ -16,22 +16,23 @@ class TestBuildSystemPrompt:
         assert "black" in prompt.lower()
         assert "blue" in prompt.lower()  # Human strokes appear blue
 
-    def test_paint_style_includes_color_palette(self) -> None:
-        """Paint style prompt includes color palette and brush presets."""
-        style_config = get_style_config(DrawingStyleType.PAINT)
-        prompt = build_system_prompt(style_config)
+    def test_paint_style_is_program_painting(self) -> None:
+        """Paint prompt teaches the program-painting loop and the library API."""
+        prompt = build_system_prompt(get_style_config(DrawingStyleType.PAINT))
 
-        assert "Paint" in prompt
-        assert "oil_round" in prompt
-        assert "watercolor" in prompt
-        assert "background_wash" in prompt
-        assert "mass_field" in prompt
-        assert "tapered_band" in prompt
-        assert "broken_edge" in prompt
-        assert "Painterly Intelligence" in prompt
-        assert "brush" in prompt.lower()
-        # Should include color references
-        assert "#" in prompt or "color" in prompt.lower()
+        assert "studio/painting.py" in prompt
+        assert "Paint From What You Know" in prompt
+        assert "`paint`" in prompt
+        for method in ("stroke(pts", "cv.paint_region(", "cv.fill(", "cv.stage(", "shape(polys"):
+            assert method in prompt
+        assert "cv.export(" not in prompt
+
+    def test_paint_style_omits_vector_tools(self) -> None:
+        """Paint mode no longer draws vector paths."""
+        prompt = build_system_prompt(get_style_config(DrawingStyleType.PAINT))
+
+        for tool in ("generate_svg", "draw_paths", "sign_canvas", "crescent_mass"):
+            assert tool not in prompt
 
     def test_paint_style_includes_human_color(self) -> None:
         """Paint style prompt mentions human stroke color (rose)."""
@@ -61,7 +62,7 @@ class TestBuildSystemPrompt:
 
     def test_prompt_includes_reference_translation_guidance(self) -> None:
         """Prompt encodes transferable reference translation instead of one-off recipes."""
-        style_config = get_style_config(DrawingStyleType.PAINT)
+        style_config = get_style_config(DrawingStyleType.PLOTTER)
         prompt = build_system_prompt(style_config)
 
         assert "Visual Reference Translation" in prompt
@@ -98,27 +99,16 @@ class TestBuildSystemPrompt:
 
     def test_prompt_includes_dense_batch_guidance(self) -> None:
         """Prompt tells the agent it can draw many intentional marks at once."""
-        style_config = get_style_config(DrawingStyleType.PAINT)
+        style_config = get_style_config(DrawingStyleType.PLOTTER)
         prompt = build_system_prompt(style_config)
 
         assert "large coherent batches" in prompt
         assert "Dozens or hundreds of `draw_paths` paths" in prompt
         assert "many timid trickle calls" in prompt
 
-    def test_prompt_includes_layering_guidance(self) -> None:
-        """Prompt tells the agent to establish a colored ground before details."""
-        style_config = get_style_config(DrawingStyleType.PAINT)
-        prompt = build_system_prompt(style_config)
-
-        assert "do not start on raw white" in prompt
-        assert "color-filled ground" in prompt
-        assert "Layer in this order" in prompt
-        assert "the painting is not layered yet" in prompt
-        assert "not compete with equal-detail background noise" in prompt
-
     def test_prompt_does_not_force_imagine_for_known_references(self) -> None:
         """Known references and small assets should start with drawing tools."""
-        style_config = get_style_config(DrawingStyleType.PAINT)
+        style_config = get_style_config(DrawingStyleType.PLOTTER)
         prompt = build_system_prompt(style_config)
 
         assert "Do not use `imagine` as a reflexive first move" in prompt

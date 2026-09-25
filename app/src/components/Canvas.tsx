@@ -11,7 +11,14 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { screenToCanvas } from '../hooks/useCanvas';
 import { SkiaRenderer } from '../renderers';
-import type { DrawingStyleConfig, Path, Point, RendererProps, StrokeStyle } from '@code-monet/shared';
+import type { SkiaRendererProps } from '../renderers';
+import type {
+  DrawingStyleConfig,
+  PaintingState,
+  Path,
+  Point,
+  StrokeStyle,
+} from '@code-monet/shared';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
 import { borderRadius, spacing, typography, useTheme } from '../theme';
 
@@ -27,6 +34,14 @@ interface CanvasProps {
   canvasHeight?: number;
   styleConfig?: DrawingStyleConfig; // Current drawing style (defaults to plotter)
   showIdleAnimation: boolean; // Whether to show idle particles
+  /** Program painting (paint mode); when present, replaces agent stroke rendering. */
+  painting?: PaintingState;
+  /** API base URL for painting assets. */
+  apiUrl?: string;
+  /** Called when a painting version finishes revealing. */
+  onPaintingPlaybackDone?: (assetBase: string) => void;
+  /** Final image of a raster gallery piece being viewed (absolute URL). */
+  rasterImageUrl?: string | null;
   onStrokeStart: (x: number, y: number) => void;
   onStrokeMove: (x: number, y: number) => void;
   onStrokeEnd: () => void;
@@ -44,6 +59,10 @@ export function Canvas({
   canvasHeight = CANVAS_HEIGHT,
   styleConfig = PLOTTER_STYLE,
   showIdleAnimation,
+  painting,
+  apiUrl,
+  onPaintingPlaybackDone,
+  rasterImageUrl = null,
   onStrokeStart,
   onStrokeMove,
   onStrokeEnd,
@@ -103,7 +122,7 @@ export function Canvas({
   );
 
   // Build renderer props
-  const rendererProps: RendererProps = {
+  const rendererProps: SkiaRendererProps = {
     strokes,
     currentStroke,
     agentStroke,
@@ -115,6 +134,10 @@ export function Canvas({
     width: canvasWidth,
     height: canvasHeight,
     primaryColor: colors.primary,
+    painting,
+    apiUrl,
+    onPaintingPlaybackDone,
+    rasterImageUrl,
   };
 
   return (

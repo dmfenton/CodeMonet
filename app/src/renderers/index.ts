@@ -5,3 +5,5 @@
  */
 
 export { SkiaRenderer } from './SkiaRenderer';
+export type { SkiaRendererProps } from './SkiaRenderer';
+export { RasterRevealLayer } from './RasterRevealLayer';

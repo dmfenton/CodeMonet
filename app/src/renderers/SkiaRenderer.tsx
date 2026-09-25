@@ -8,6 +8,10 @@
  * - Freehand/painterly: perfect-freehand outlines with bristle texture
  * - SVG paths: raw SVG d-string rendering (for bezier/arc strokes)
  * - Plotter mode: simple stroked paths (not filled outlines)
+ *
+ * Paint mode with a program painting (docs/program-painting.md) renders the
+ * server-rendered versions on a raster reveal layer instead; only human
+ * strokes stay vector on top.
  */
 
 import React, { useCallback, useMemo, memo, useState } from 'react';
@@ -19,12 +23,25 @@ import {
   Circle,
   Skia,
   BlurMask,
+  FilterMode,
+  Image as SkiaImage,
+  MipmapMode,
   fitbox,
   rect,
+  useImage,
 } from '@shopify/react-native-skia';
 
-import type { Path, Point, RendererProps, StrokeStyle, BrushName, DrawingStyleConfig } from '@code-monet/shared';
+import type {
+  Path,
+  PaintingState,
+  Point,
+  RendererProps,
+  StrokeStyle,
+  BrushName,
+  DrawingStyleConfig,
+} from '@code-monet/shared';
 import {
+  hasPainting,
   getEffectiveAgentStrokeStyle,
   getEffectiveStyle,
   getFreehandOutline,
@@ -38,10 +55,12 @@ import {
 } from '@code-monet/shared';
 
 import { SkiaIdleParticles } from '../components/SkiaIdleParticles';
+import { RasterRevealLayer } from './RasterRevealLayer';
 import { SkiaInProgressStroke } from './SkiaInProgressStroke';
 import { SkiaStampedStroke } from './SkiaStampedStroke';
 
 const DEFAULT_STROKE_COLOR = '#1a1a2e';
+const EMPTY_POINTS: Point[] = [];
 
 /**
  * Render a freehand stroke with painterly effects using Skia paths.
@@ -291,6 +310,48 @@ const CompletedStrokesLayer = memo(function CompletedStrokesLayer({
   );
 });
 
+const GALLERY_SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.None } as const;
+
+/**
+ * Static final image of a raster (program-painting) gallery piece.
+ */
+function GalleryRasterImage({
+  url,
+  width,
+  height,
+}: {
+  url: string;
+  width: number;
+  height: number;
+}): React.ReactElement | null {
+  const image = useImage(url, (error) => {
+    console.warn('[SkiaRenderer] gallery image failed:', error);
+  });
+  if (!image) return null;
+  return (
+    <SkiaImage
+      image={image}
+      x={0}
+      y={0}
+      width={width}
+      height={height}
+      fit="fill"
+      sampling={GALLERY_SAMPLING}
+    />
+  );
+}
+
+export interface SkiaRendererProps extends RendererProps {
+  /** Program painting (paint mode); when present, replaces agent stroke rendering. */
+  painting?: PaintingState;
+  /** API base URL for painting assets. */
+  apiUrl?: string;
+  /** Called when a painting version finishes revealing. */
+  onPaintingPlaybackDone?: (assetBase: string) => void;
+  /** Final image of a raster gallery piece being viewed (absolute URL). */
+  rasterImageUrl?: string | null;
+}
+
 /**
  * Skia-based renderer with GPU acceleration and painterly effects.
  */
@@ -306,8 +367,25 @@ export function SkiaRenderer({
   width,
   height,
   primaryColor,
-}: RendererProps): React.ReactElement {
+  painting,
+  apiUrl = '',
+  onPaintingPlaybackDone,
+  rasterImageUrl = null,
+}: SkiaRendererProps): React.ReactElement {
   const isPaintMode = styleConfig.type === 'paint';
+
+  // Raster views: a live program painting (paint mode) or a raster gallery
+  // piece. The agent's work is the image; only human strokes stay vector, and
+  // the agent pen/in-progress stroke visuals don't apply.
+  const useRevealLayer = isPaintMode && painting !== undefined && hasPainting(painting);
+  const rasterView = useRevealLayer || rasterImageUrl !== null;
+  const vectorStrokes = useMemo(
+    // Server paths always carry an author; local strokes (pre-echo) have none.
+    () => (rasterView ? strokes.filter((s) => s.author !== 'agent') : strokes),
+    [rasterView, strokes]
+  );
+  const visibleAgentStroke = rasterView ? EMPTY_POINTS : agentStroke;
+  const visiblePenPosition = rasterView ? null : penPosition;
 
   // Track actual layout size so we can map logical canvas coords to device points.
   // Skia Canvas renders in layout point space (unlike SVG which has viewBox).
@@ -330,11 +408,32 @@ export function SkiaRenderer({
     <View style={styles.canvas} onLayout={handleLayout}>
       <Canvas style={styles.canvas}>
         <Group transform={transform}>
+          {/* Program painting: server-rendered versions revealed along brush footprints */}
+          {useRevealLayer && painting && (
+            <RasterRevealLayer
+              apiUrl={apiUrl}
+              base={painting.base}
+              playing={painting.playing}
+              width={width}
+              height={height}
+              onPlaybackDone={onPaintingPlaybackDone}
+            />
+          )}
+
+          {/* Raster gallery piece */}
+          {!useRevealLayer && rasterImageUrl !== null && (
+            <GalleryRasterImage url={rasterImageUrl} width={width} height={height} />
+          )}
+
           {/* Idle animation particles */}
           <SkiaIdleParticles visible={showIdleAnimation} />
 
           {/* Completed strokes - memoized layer skips re-render during animation */}
-          <CompletedStrokesLayer strokes={strokes} styleConfig={styleConfig} isPaintMode={isPaintMode} />
+          <CompletedStrokesLayer
+            strokes={vectorStrokes}
+            styleConfig={styleConfig}
+            isPaintMode={isPaintMode}
+          />
 
           {/* Current human stroke */}
           {currentStroke.length > 0 &&
@@ -349,19 +448,19 @@ export function SkiaRenderer({
             ))}
 
           {/* Agent in-progress stroke - using optimized incremental renderer */}
-          {agentStroke.length > 0 &&
+          {visibleAgentStroke.length > 0 &&
             (() => {
               const style = getEffectiveAgentStrokeStyle(styleConfig, agentStrokeStyle);
-              return agentStroke.length === 1 ? (
-                <StrokeDot point={agentStroke[0]!} style={style} />
+              return visibleAgentStroke.length === 1 ? (
+                <StrokeDot point={visibleAgentStroke[0]!} style={style} />
               ) : (
-                <SkiaInProgressStroke points={agentStroke} style={style} blur={isPaintMode} />
+                <SkiaInProgressStroke points={visibleAgentStroke} style={style} blur={isPaintMode} />
               );
             })()}
 
           {/* Pen position indicator */}
-          {penPosition && (
-            <PenIndicator position={penPosition} penDown={penDown} color={primaryColor} />
+          {visiblePenPosition && (
+            <PenIndicator position={visiblePenPosition} penDown={penDown} color={primaryColor} />
           )}
         </Group>
       </Canvas>

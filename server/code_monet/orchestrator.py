@@ -22,6 +22,8 @@ from code_monet.types import (
     CodeExecutionMessage,
     ErrorMessage,
     IterationMessage,
+    PaintingVersion,
+    PaintingVersionMessage,
     Path,
     PausedMessage,
     PauseReason,
@@ -57,6 +59,12 @@ class DrawingAgentBackend(Protocol):
 
     def set_on_draw(self, callback: Callable[[list[Path]], Coroutine[Any, Any, None]]) -> None:
         """Set callback for animated paths."""
+        ...
+
+    def set_on_painting_version(
+        self, callback: Callable[[PaintingVersion], Coroutine[Any, Any, None]]
+    ) -> None:
+        """Set callback for rendered program-painting versions."""
         ...
 
     def set_on_tool_complete(
@@ -108,8 +116,24 @@ class AgentOrchestrator:
     def __post_init__(self) -> None:
         # Set up the agent's draw callback to use our _draw_paths method
         self.agent.set_on_draw(self._draw_paths)
+        # Broadcast each rendered program-painting version to viewers
+        self.agent.set_on_painting_version(self._publish_painting_version)
         # Set up tool completion callback to broadcast "completed" events
         self.agent.set_on_tool_complete(self._handle_tool_complete)
+
+    async def _publish_painting_version(self, version: PaintingVersion) -> None:
+        """Tell clients a painting version is ready to reveal (the agent does not wait)."""
+        state = self.agent.get_state()
+        await self.broadcaster.broadcast(
+            PaintingVersionMessage(
+                piece_number=version.piece_number,
+                version=version.version,
+                asset_base=version.asset_base(state.user_id),
+                image_width=version.image_width,
+                image_height=version.image_height,
+                stages=version.stages,
+            )
+        )
 
     def signal_animation_done(self, batch_id: int | None) -> None:
         """Signal that client has finished animating strokes.

@@ -32,11 +32,23 @@ from code_monet.agent.prompts import SYSTEM_PROMPT, build_system_prompt
 from code_monet.agent.renderer import image_to_base64
 from code_monet.anthropic_wif import anthropic_claude_environment
 from code_monet.config import settings
-from code_monet.rendering import image_to_jpeg_bytes, options_for_agent_view, render_strokes
+from code_monet.program_painting import (
+    RENDER_SCALE,
+    PaintResult,
+    PaintSuccess,
+    run_painting_program,
+)
+from code_monet.rendering import (
+    image_to_jpeg_bytes,
+    options_for_agent_view,
+    painting_image_path,
+    render_strokes,
+)
 from code_monet.tools import create_drawing_server
 from code_monet.tools.callbacks import get_active_reference_png, set_active_reference
 from code_monet.tools.quality_gate import (
     consume_mark_piece_done_accepted,
+    note_drawing,
     quality_gate_prompt_context,
     reset_quality_gate,
 )
@@ -46,6 +58,7 @@ from code_monet.types import (
     AgentTurnComplete,
     DrawingStyleConfig,
     DrawingStyleType,
+    PaintingVersion,
     Path,
     get_style_config,
 )
@@ -104,6 +117,59 @@ class AgentCallbacks:
 logger = logging.getLogger(__name__)
 
 
+_FILESYSTEM_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+
+# Paint mode is program painting: the agent edits studio/painting.py and runs it.
+_PAINT_TOOLS = [
+    "mcp__drawing__paint",
+    "mcp__drawing__view_canvas",
+    "mcp__drawing__critique_canvas",
+    "mcp__drawing__name_piece",
+    "mcp__drawing__mark_piece_done",
+]
+
+_PLOTTER_TOOLS = [
+    "mcp__drawing__draw_paths",
+    "mcp__drawing__mark_piece_done",
+    "mcp__drawing__generate_svg",
+    "mcp__drawing__view_canvas",
+    "mcp__drawing__critique_canvas",
+    "mcp__drawing__imagine",
+    "mcp__drawing__sign_canvas",
+    "mcp__drawing__name_piece",
+]
+
+
+def _allowed_tools(style_type: DrawingStyleType) -> list[str]:
+    drawing = _PAINT_TOOLS if style_type == DrawingStyleType.PAINT else _PLOTTER_TOOLS
+    return drawing + _FILESYSTEM_TOOLS
+
+
+def _painting_status(state: WorkspaceState) -> str:
+    """Turn context for program painting: image size, program, and current version."""
+    program = state.studio_program
+    lines = [
+        f"Image size: {state.canvas.width * RENDER_SCALE}x{state.canvas.height * RENDER_SCALE} "
+        "px (cv.W x cv.H)",
+        f"Piece number: {state.piece_number + 1}",
+    ]
+    if program.exists():
+        n = len(program.read_text().splitlines())
+        lines.append(f"Program: studio/painting.py ({n} lines)")
+    else:
+        lines.append("Program: studio/painting.py does not exist yet — this is a blank canvas.")
+    painting = state.painting
+    if painting is not None:
+        lines.append(
+            f"Current version: {painting.version} (stages: {', '.join(painting.stages)}), "
+            f"full image at paintings/{painting.token}/final.png"
+        )
+    human = sum(1 for s in state.canvas.strokes if s.author == "human")
+    if human:
+        lines.append(f"Human marks on the canvas: {human} (see HUMAN_STROKES)")
+    return "\n".join(lines)
+
+
 class DrawingAgent:
     """Agent that generates drawings using the Claude Agent SDK.
 
@@ -127,6 +193,10 @@ class DrawingAgent:
 
         # Drawing hook support - orchestrator sets this callback
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
+        # Painting-version hook - orchestrator broadcasts each rendered version
+        self._on_painting_version: Callable[[PaintingVersion], Coroutine[Any, Any, None]] | None = (
+            None
+        )
         # Tool completion callback - orchestrator sets this to broadcast completed events
         self._on_tool_complete: (
             Callable[
@@ -145,23 +215,6 @@ class DrawingAgent:
         # Build options (system prompt is set dynamically in _build_options)
         self._base_options: dict[str, Any] = {
             "mcp_servers": {"drawing": self._drawing_server},
-            "allowed_tools": [
-                # Drawing tools
-                "mcp__drawing__draw_paths",
-                "mcp__drawing__mark_piece_done",
-                "mcp__drawing__generate_svg",
-                "mcp__drawing__view_canvas",
-                "mcp__drawing__critique_canvas",
-                "mcp__drawing__imagine",
-                "mcp__drawing__sign_canvas",
-                "mcp__drawing__name_piece",
-                # Filesystem tools (scoped to workspace via working_directory)
-                "Read",
-                "Write",
-                "Glob",
-                "Grep",
-                "Bash",
-            ],
             "permission_mode": "acceptEdits",
             "model": settings.agent_model if settings.dev_mode else settings.agent_model_prod,
             "include_partial_messages": True,
@@ -169,6 +222,9 @@ class DrawingAgent:
             "max_buffer_size": 16 * 1024 * 1024,
             "hooks": {"PostToolUse": [HookMatcher(hooks=[self._post_tool_use_hook])]},
             "env": anthropic_claude_environment(),
+            # Only our drawing MCP server: never inherit MCP servers from the
+            # host's Claude config (a local CLI would otherwise load them).
+            "extra_args": {"strict-mcp-config": None},
         }
 
     def _build_options(
@@ -183,6 +239,7 @@ class DrawingAgent:
         style_config = get_style_config(style_type)
         options = {
             "system_prompt": build_system_prompt(style_config),
+            "allowed_tools": _allowed_tools(style_type),
             **self._base_options,
         }
         # Scope filesystem tools to user's workspace
@@ -199,6 +256,12 @@ class DrawingAgent:
     def set_on_draw(self, callback: Callable[[list[Path]], Coroutine[Any, Any, None]]) -> None:
         """Set the callback for drawing paths. Called by orchestrator."""
         self._on_draw = callback
+
+    def set_on_painting_version(
+        self, callback: Callable[[PaintingVersion], Coroutine[Any, Any, None]]
+    ) -> None:
+        """Set the callback for rendered painting versions. Called by orchestrator."""
+        self._on_painting_version = callback
 
     def set_on_tool_complete(
         self,
@@ -378,12 +441,18 @@ class DrawingAgent:
         parts: list[str] = []
 
         # Canvas info
-        parts.append(
-            f"Canvas size: {state.canvas.width}x{state.canvas.height}\n"
-            f"Existing strokes: {len(state.canvas.strokes)}\n"
-            f"Piece number: {state.piece_number + 1}"
-        )
-        if len(state.canvas.strokes) > 3000:
+        if state.canvas.drawing_style == DrawingStyleType.PAINT:
+            parts.append(_painting_status(state))
+        else:
+            parts.append(
+                f"Canvas size: {state.canvas.width}x{state.canvas.height}\n"
+                f"Existing strokes: {len(state.canvas.strokes)}\n"
+                f"Piece number: {state.piece_number + 1}"
+            )
+        if (
+            state.canvas.drawing_style != DrawingStyleType.PAINT
+            and len(state.canvas.strokes) > 3000
+        ):
             parts.append(
                 "Warning: this canvas is heavily overworked. Do not add more texture "
                 "marks. If the image does not read, repaint failed regions with a few "
@@ -420,7 +489,7 @@ class DrawingAgent:
 
         state = self.get_state()
         canvas = state.canvas
-        options = options_for_agent_view(canvas)
+        options = replace(options_for_agent_view(canvas), base_image=painting_image_path(state))
         if not highlight_human:
             options = replace(options, highlight_human=False)
         return render_strokes(canvas.strokes, options)
@@ -527,6 +596,14 @@ class DrawingAgent:
             img = self._get_canvas_image(highlight_human=True)
             return image_to_jpeg_bytes(img)
 
+        async def run_paint() -> PaintResult:
+            result = await run_painting_program(state)
+            if isinstance(result, PaintSuccess):
+                note_drawing(result.ops)
+                if self._on_painting_version:
+                    await self._on_painting_version(result.version)
+            return result
+
         # Set up callbacks
         setup_tool_callbacks(
             state=state,
@@ -534,6 +611,7 @@ class DrawingAgent:
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
             on_paths_collected=on_draw,
+            run_paint=run_paint,
         )
 
         try:

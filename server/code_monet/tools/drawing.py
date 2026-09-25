@@ -255,7 +255,7 @@ In Paint mode, you can specify a brush preset for realistic paint effects:
                         },
                         "color": {
                             "type": "string",
-                            "description": "Hex color for the path (Paint mode only). Example: '#e94560'",
+                            "description": "Hex color for the path (Paint mode only). Example: '#b5562f'",
                         },
                         "stroke_width": {
                             "type": "number",

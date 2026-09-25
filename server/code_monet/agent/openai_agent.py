@@ -38,6 +38,7 @@ from code_monet.types import (
     AgentTurnComplete,
     DrawingStyleConfig,
     DrawingStyleType,
+    PaintingVersion,
     Path,
     get_style_config,
 )
@@ -236,6 +237,11 @@ class OpenAIDrawingAgent:
 
     def set_on_draw(self, callback: Callable[[list[Path]], Coroutine[Any, Any, None]]) -> None:
         self._on_draw = callback
+
+    def set_on_painting_version(
+        self, callback: Callable[[PaintingVersion], Coroutine[Any, Any, None]]
+    ) -> None:
+        """The OpenAI backend draws vector paths only; program painting is Claude-only."""
 
     def set_on_tool_complete(
         self,

@@ -13,7 +13,7 @@ from code_monet.anthropic_wif import anthropic_claude_environment
 from code_monet.config import settings
 
 from .callbacks import get_active_reference_png, get_canvas_callback
-from .quality_gate import critique_gate_message, record_critique_result
+from .quality_gate import critique_gate_message, critique_history, record_critique_result
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,10 @@ CRITIQUE_PROMPT = """\
 You are a strict painting critic for an autonomous artist. The first image is the
 actual rendered canvas. Judge only what is visibly there. Do not reward intention.
 Lead with failures. Be concrete and visual.
+
+Judge the canvas against the painter or tradition named in the brief. That
+style's own conventions (flat fills, hard contours, bare canvas, a restricted
+palette, dense small figures) override the generic defaults below.
 
 Critique like a painter, in this order:
 1. Value structure: squint. Do two or three big light/dark masses read at thumbnail
@@ -30,7 +34,7 @@ Critique like a painter, in this order:
 3. Subject: every required subject noun present and readable as a silhouette with
    ground contact — not a stick, dot, or disconnected mark.
 4. Color: warm/cool relationships, shadows with color (not gray/black), a restrained
-   high-chroma accent. Flat local-color filling is a failure.
+   high-chroma accent. Unintended flat local-color filling is a failure.
 5. Edges and marks: variety of hard/soft/lost edges, directional brushwork that
    describes form, no mechanical repetition, no accidental scaffold lines or long
    straight closure edges, no white canvas left by omission.
@@ -69,11 +73,23 @@ def _image_block(image_bytes: bytes) -> dict[str, Any]:
     }
 
 
+HISTORY_NOTE = """\
+Your earlier critiques of this same piece follow (oldest first). Be consistent with
+them: judge whether their required revisions were made, and do not reverse a
+requirement you set (e.g. ask for the opposite composition) unless following it
+visibly made the painting worse — say so explicitly if you do.
+"""
+
+
 async def _critique_prompt(
-    brief: str, canvas: bytes, reference: bytes | None
+    brief: str, canvas: bytes, reference: bytes | None, history: list[str]
 ) -> AsyncGenerator[dict[str, Any], None]:
+    text = f"{CRITIQUE_PROMPT}\n\nBRIEF:\n{brief}"
+    if history:
+        earlier = "\n\n".join(f"--- critique {i + 1} ---\n{h}" for i, h in enumerate(history))
+        text += f"\n\n{HISTORY_NOTE}\n{earlier}"
     content = [
-        {"type": "text", "text": f"{CRITIQUE_PROMPT}\n\nBRIEF:\n{brief}"},
+        {"type": "text", "text": text},
         _image_block(canvas),
     ]
     if reference is not None:
@@ -98,12 +114,15 @@ async def _run_critique(brief: str, canvas: bytes, reference: bytes | None) -> s
         permission_mode="dontAsk",
         model=settings.agent_model if settings.dev_mode else settings.agent_model_prod,
         env=anthropic_claude_environment(),
+        extra_args={"strict-mcp-config": None},
         max_turns=1,
         setting_sources=[],
         skills=[],
     )
     text_parts: list[str] = []
-    async for message in query(prompt=_critique_prompt(brief, canvas, reference), options=options):
+    async for message in query(
+        prompt=_critique_prompt(brief, canvas, reference, critique_history()), options=options
+    ):
         if isinstance(message, AssistantMessage):
             text_parts.extend(
                 block.text
