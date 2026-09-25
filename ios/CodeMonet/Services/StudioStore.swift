@@ -144,6 +144,19 @@ public final class StudioStore {
         apply(.addPoint(point))
     }
 
+    /// Local-only "leave gallery-view mode" event (protocol-state spec
+    /// §5.4 `CLEAR_VIEWING`, ux spec §1.1's Gallery/Studio -> Home
+    /// transitions). Added post-hoc to close a gap both the Studio and
+    /// Home+Gallery UI packages flagged: they had no public way to
+    /// dispatch a client-only `StudioEvent` (`viewingPiece`/`savedCanvas`
+    /// are shared, authoritative state only `StudioStore` can mutate).
+    /// `StudioReducer.reduce`'s `.clearViewing` case is a no-op when
+    /// `viewingPiece` is already `nil`, so this is safe to call
+    /// unconditionally.
+    public func clearViewing() {
+        apply(.clearViewing)
+    }
+
     /// Finishes the in-progress human stroke (ux spec §6.2: a tap/no-drag,
     /// fewer than 2 points, is discarded — nothing is dispatched or sent).
     ///

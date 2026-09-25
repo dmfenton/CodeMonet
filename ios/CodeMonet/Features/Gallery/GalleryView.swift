@@ -120,19 +120,16 @@ struct GalleryView: View {
         environment.navigation.screen = .studio
     }
 
-    /// ux spec §1.1 "Gallery -> Home" row: pause-if-running, then always
-    /// land on Home (not "wherever the gallery was opened from" — that's
-    /// `closeGallery()`'s job, used by the header's X instead). Restoring
-    /// the saved live canvas (`CLEAR_VIEWING`) when leaving a viewed piece
-    /// is not reachable from here: `StudioStore` only applies `StudioEvent`s
-    /// it produces itself from server messages or its own stroke-input
-    /// methods, with no public hook for a client-only event like
-    /// `clearViewing`. Flagged as a follow-up for whichever package extends
-    /// `StudioStore`'s public surface next (see PR notes).
+    /// ux spec §1.1 "Gallery -> Home" row: pause-if-running, restore the
+    /// saved live canvas (`CLEAR_VIEWING`, protocol-state spec §5.4) if a
+    /// piece was being viewed, then always land on Home (not "wherever the
+    /// gallery was opened from" — that's `closeGallery()`'s job, used by
+    /// the header's X instead).
     private func goHome() {
         if !environment.studio.state.paused {
             environment.studio.send(.pause)
         }
+        environment.studio.clearViewing()
         environment.navigation.screen = .home
     }
 

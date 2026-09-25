@@ -27,7 +27,16 @@ public final class AppEnvironment {
         self.config = config
         let auth = AuthService(environment: config)
         self.auth = auth
-        studio = StudioStore(environment: config, tokenProvider: AuthServiceTokenProvider(auth: auth))
+        let studio = StudioStore(environment: config, tokenProvider: AuthServiceTokenProvider(auth: auth))
+        self.studio = studio
+        // Net-auth spec §9.2 point 2: a live 4001 close means the cached
+        // session is no longer valid server-side — sign the user out so
+        // RootView drops back to AuthView rather than sitting on a dead
+        // socket. StudioStore only knows `TokenProviding`, never the
+        // concrete `AuthService`, so this wiring has to happen here.
+        studio.onAuthenticationFailure = { [weak auth] in
+            await auth?.signOut()
+        }
     }
 }
 

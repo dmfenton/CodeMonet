@@ -8,15 +8,12 @@ import SwiftUI
 /// `CanvasView`/`StudioPresentation.actionBarButtons` handle those internal
 /// gates; this view only handles the two whole-section hides.
 ///
-/// **Known gap** (see `CanvasView.drawingEnabled`'s doc comment): the
-/// ux spec's "Home" button behavior also clears gallery-view mode
+/// The ux spec's "Home" button behavior also clears gallery-view mode
 /// (`CLEAR_VIEWING`, protocol-state spec §5.4) so the live canvas
-/// reappears. `StudioStore` (networking+auth-owned) does not expose a way
-/// to dispatch that locally-only event, and unlike `drawingEnabled` it
-/// touches shared, authoritative state (`viewingPiece`/`savedCanvas`) that
-/// can't be shadowed view-locally — Home still pauses correctly, but while
-/// `viewingPiece != nil` it does not yet restore the live canvas. Flagged
-/// for a `StudioStore.clearViewing()` addition in a follow-up.
+/// reappears; `goHome()` does this via `StudioStore.clearViewing()`
+/// (added during integration to close a gap this package originally
+/// flagged — see `CanvasView.drawingEnabled`'s doc comment for the
+/// unrelated, still-open `drawingEnabled` gap).
 struct StudioView: View {
     @Environment(AppEnvironment.self) private var environment
 
@@ -68,7 +65,7 @@ struct StudioView: View {
             paused: state.paused,
             viewOnly: isViewOnly,
             drawingEnabled: drawingEnabled,
-            connected: true,
+            connected: environment.studio.connected,
             galleryCount: state.gallery.count
         )
     }
@@ -112,6 +109,7 @@ struct StudioView: View {
             environment.studio.send(.pause)
         }
         drawingEnabled = false
+        environment.studio.clearViewing()
         environment.navigation.screen = .home
     }
 

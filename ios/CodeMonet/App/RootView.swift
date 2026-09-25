@@ -101,13 +101,20 @@ struct RootView: View {
         if !environment.studio.state.paused {
             environment.studio.send(.pause)
         }
+        // Net-auth spec §8.1: flush any buffered trace spans immediately on
+        // backgrounding rather than waiting for the next 10s auto-flush tick.
+        Task { await environment.studio.handleAppDidEnterBackground() }
     }
 
     private func handleWillEnterForeground() {
-        // Net-auth spec §9.2 step 1: proactively catch a near-expiry token
-        // before it causes a live 401/4001. Silent thanks to `hasSignedInOnce`
-        // above — no spinner flash for an already-signed-in session.
-        Task { await environment.auth.start() }
+        // Net-auth spec §9.2: proactively catch a near-expiry token before it
+        // causes a live 401/4001, then open a fresh socket on the (possibly
+        // rotated) token — silent thanks to `hasSignedInOnce` above, no
+        // spinner flash for an already-signed-in session.
+        Task {
+            await environment.auth.refreshSessionOnForeground()
+            environment.studio.handleAppWillEnterForeground()
+        }
 
         guard environment.navigation.screen == .studio else { return }
         environment.studio.startPlayback()
@@ -169,21 +176,21 @@ private struct LoadingScreen: View {
 /// §5-§8). Owned by the "app shell" package for the switch/plumbing; each
 /// case's view is owned by its own feature package.
 ///
-/// Also hosts the New Canvas sheet (ux spec §7.2, native improvement #1):
-/// `NewCanvasView` itself is the home+gallery+new-canvas UI package's file,
-/// but presenting it as a real `.sheet` with detents — and giving it a
-/// reachable entry point — is app-shell/navigation plumbing, so it lives
-/// here rather than inside `HomeView`.
+/// The New Canvas sheet (ux spec §7.2, native improvement #1) is presented
+/// by `HomeView` itself (home+gallery+new-canvas UI package), pre-seeded
+/// from Home's own style picker via `NewCanvasView(initialStyle:)` — not
+/// duplicated here. An earlier version of this file independently added a
+/// second entry point/sheet at this level (built in parallel, before
+/// `NewCanvasView` grew its `initialStyle` parameter); that duplicate had
+/// no style to seed, collided with `HomeView`'s identical
+/// `"home-new-canvas-button"` accessibility identifier, and failed to
+/// compile once merged — removed during integration in favor of the
+/// correctly-owned, richer implementation.
 private struct MainAppView: View {
     @Environment(AppEnvironment.self) private var environment
 
     var body: some View {
         screenContent
-            .sheet(isPresented: newCanvasSheetBinding) {
-                NewCanvasView()
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
             .sensoryFeedback(.selection, trigger: environment.navigation.activeModal)
     }
 
@@ -191,33 +198,11 @@ private struct MainAppView: View {
     private var screenContent: some View {
         switch environment.navigation.screen {
         case .home:
-            NavigationStack {
-                HomeView()
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button {
-                                environment.navigation.activeModal = .newCanvas
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                            }
-                            .accessibilityIdentifier("home-new-canvas-button")
-                            .accessibilityLabel("New Canvas")
-                        }
-                    }
-            }
+            HomeView()
         case .studio:
             StudioView()
         case .gallery:
             GalleryView()
         }
-    }
-
-    private var newCanvasSheetBinding: Binding<Bool> {
-        Binding(
-            get: { environment.navigation.activeModal == .newCanvas },
-            set: { isPresented in
-                if !isPresented { environment.navigation.activeModal = nil }
-            }
-        )
     }
 }
