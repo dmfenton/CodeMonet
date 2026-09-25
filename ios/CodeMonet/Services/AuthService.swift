@@ -29,14 +29,35 @@ public enum AppAuthState: Equatable, Sendable {
 public final class AuthService {
     public private(set) var state: AppAuthState = .restoring
 
+    private let environment: CodeMonetEnvironment
     private let controller: AuthenticationController
-    private let restClient: CodeMonetRESTClient
-    private let tokenBox: TokenBox
+    /// Deferred rather than built in `init` so its `TokenProviding`
+    /// conformance can reference `self` directly. This replaces an earlier
+    /// `TokenBox` seam that started with a `{ nil }` placeholder closure and
+    /// got "wired up" to the real token accessor after `init` returned —
+    /// `lazy var` gets the same "only usable after full initialization"
+    /// guarantee for free (a lazy initializer only ever runs on first
+    /// access, and nothing in this class reads `restClient` before `init`
+    /// returns), with no placeholder step. `WeakTokenProvider` still holds
+    /// `self` weakly: an eager, strongly-self-capturing token provider
+    /// stored on `self` (via `restClient`) would be a retain cycle, since
+    /// `restClient` never leaves this instance.
+    ///
+    /// `@ObservationIgnored`: an implementation-detail dependency, not
+    /// UI-observable state — and required here regardless, since `@Observable`
+    /// rewrites tracked stored properties into macro-synthesized accessors
+    /// that `lazy` cannot attach to.
+    @ObservationIgnored
+    private lazy var restClient = CodeMonetRESTClient(
+        baseURL: environment.apiBaseURL,
+        tokenProvider: WeakTokenProvider(auth: self)
+    )
     /// DEBUG-only, never persisted (net-auth spec §4) — never routed through
     /// `AuthenticationController`'s refresh machinery.
     private var debugToken: String?
 
     public init(environment: CodeMonetEnvironment) {
+        self.environment = environment
         let identityAPI = MobileAPIClient(baseURL: CodeMonetEnvironment.identityBaseURL)
         let codeMonetAPI = MobileAPIClient(baseURL: environment.apiBaseURL)
         let client = CodeMonetIdentityClient(identityAPI: identityAPI, codeMonetAPI: codeMonetAPI)
@@ -47,13 +68,6 @@ public final class AuthService {
             pendingAuthorizationStore: stores.pendingAuthorization,
             refreshRotationStore: stores.refreshRotation
         )
-        let box = TokenBox { nil }
-        tokenBox = box
-        restClient = CodeMonetRESTClient(baseURL: environment.apiBaseURL, tokenProvider: box)
-        // Now that `self` is fully initialized, point the box at the real,
-        // still-current token on every call (debug token, if any, else the
-        // controller's platform session).
-        box.replace { [weak self] in await self?.bearerToken }
     }
 
     public var bearerToken: String? {
@@ -74,6 +88,33 @@ public final class AuthService {
                 await tryDevTokenBootstrap()
             }
         #endif
+    }
+
+    /// Call when the app returns to the foreground (ux spec §1.2, net-auth
+    /// spec §9.2 point 1): proactively re-validates/refreshes the cached
+    /// platform session so a near-expiry token gets rotated before it ever
+    /// causes a live WS `4001`/REST `401`. A genuine improvement over the RN
+    /// app, which has no foreground-refresh hook at all — this is safe
+    /// thanks to §3.3's `expiresAt` fix, which lets `AuthenticationController
+    /// .restoreSession()` skip the network round-trip whenever the cached
+    /// token is still comfortably valid.
+    ///
+    /// No-op when signed out/erroring (nothing to refresh) or when running
+    /// on the DEBUG dev-token session (net-auth spec §4): that token isn't
+    /// controller-backed and the server issues no refresh token for it, so
+    /// calling `controller.restoreSession()` here would just read the
+    /// *controller's* own (signed-out) state and incorrectly clobber
+    /// `state` back to `.signedOut`.
+    ///
+    /// After this returns, the app shell should call `StudioStore
+    /// .reconnectWithLatestToken()` so a rotated token opens a fresh socket
+    /// (net-auth spec §9.1) rather than leaving a live connection on a
+    /// now-stale one.
+    public func refreshSessionOnForeground() async {
+        guard debugToken == nil else { return }
+        guard case .signedIn = state else { return }
+        await controller.restoreSession()
+        await syncStateFromController()
     }
 
     public func requestMagicLink(email: String) async throws {
@@ -141,21 +182,15 @@ public final class AuthService {
     #endif
 }
 
-/// A `TokenProviding` box so `CodeMonetRESTClient` can read `AuthService`'s
-/// *current* token lazily (including a debug token set after construction)
-/// without `AuthService` and `CodeMonetRESTClient` depending on each other's
-/// concrete types.
-private final class TokenBox: TokenProviding, @unchecked Sendable {
-    private var provider: @Sendable () async -> String?
-    init(_ provider: @escaping @Sendable () async -> String?) {
-        self.provider = provider
-    }
-
+/// Reads `AuthService.bearerToken` (debug token, if any, else the
+/// controller's platform session) without retaining it — see the doc
+/// comment on `AuthService.restClient`. `@unchecked Sendable`: the only
+/// stored property is a `weak` reference, and the one method that reads it
+/// is `async`, so every call goes through the normal actor-hop Swift already
+/// inserts for a call into a `@MainActor` type — never a raw concurrent read.
+private struct WeakTokenProvider: TokenProviding, @unchecked Sendable {
+    weak var auth: AuthService?
     func currentToken() async -> String? {
-        await provider()
-    }
-
-    func replace(_ provider: @escaping @Sendable () async -> String?) {
-        self.provider = provider
+        await auth?.bearerToken
     }
 }
