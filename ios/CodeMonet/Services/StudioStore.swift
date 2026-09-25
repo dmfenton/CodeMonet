@@ -17,6 +17,12 @@ import QuartzCore
 @Observable
 public final class StudioStore {
     public private(set) var state = StudioState()
+    /// Whether the WebSocket is currently open (ux spec §1.3: gates
+    /// PromptInput submit, Surprise Me, the Continue card, and the Home
+    /// screen's "Connecting…" hint). Server-push-driven state has no
+    /// equivalent signal, so this mirrors `StudioSocketEvent.connected`/
+    /// `.disconnected` directly.
+    public private(set) var connected = false
 
     /// Fires on a live `4001`/auth-failure close (protocol-state spec §1.2,
     /// net-auth spec §9.2 point 2) — the app shell should wire this to
@@ -167,10 +173,12 @@ public final class StudioStore {
     private func handle(_ event: StudioSocketEvent) async {
         switch event {
         case .connected:
+            connected = true
             recordSpan(name: "ws.connected")
         case let .message(message):
             await route(message)
         case let .disconnected(reason):
+            connected = false
             switch reason {
             case .authenticationFailed:
                 recordSpan(name: "ws.auth_error")
