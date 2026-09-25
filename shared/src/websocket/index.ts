@@ -12,6 +12,7 @@ export {
   handleIteration,
   handleLoadCanvas,
   handleNewCanvas,
+  handlePaintingVersion,
   handlePaused,
   handlePieceState,
   handleThinkingDelta,

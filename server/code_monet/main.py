@@ -25,6 +25,7 @@ from code_monet.shutdown import shutdown_manager
 from code_monet.tracing import get_current_trace_id, setup_tracing
 from code_monet.types import AgentStatus, PausedMessage, PauseReason
 from code_monet.user_handlers import handle_user_message
+from code_monet.workspace import WorkspaceState
 
 # Configure logging based on environment
 if settings.dev_mode:
@@ -141,6 +142,20 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
     return JSONResponse(status_code=500, content=content)
 
 
+def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
+    """Current painting version for the init message (clients show its final image)."""
+    painting = state.painting
+    if painting is None:
+        return None
+    return {
+        "piece_number": painting.piece_number,
+        "version": painting.version,
+        "asset_base": painting.asset_base(state.user_id),
+        "image_width": painting.image_width,
+        "image_height": painting.image_height,
+    }
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -236,6 +251,7 @@ async def websocket_endpoint(
                 "monologue": workspace.state.monologue or "",
                 "drawing_style": drawing_style.value,
                 "style_config": style_config.model_dump(),
+                "painting": _painting_ref(workspace.state),
             },
         )
         logger.info(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path as FilePath
+from typing import Any
 
 import aiofiles
 import aiofiles.os
@@ -60,6 +61,7 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
                     drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),
                     title=data.get("title"),
                     thumbnail_token=piece_id,
+                    format=data.get("format", "strokes"),
                 )
             )
         except (json.JSONDecodeError, OSError):
@@ -151,4 +153,21 @@ async def load_gallery_piece(
                 logger.warning(f"Failed to load gallery piece {piece_number}: {e}")
                 return None
 
+    return None
+
+
+async def read_gallery_piece_json(
+    gallery_dir: FilePath, piece_number: int
+) -> dict[str, Any] | None:
+    """Raw gallery piece JSON (6- or 3-digit filename), or None if missing/corrupt."""
+    for fmt in [f"piece_{piece_number:06d}.json", f"piece_{piece_number:03d}.json"]:
+        piece_file = gallery_dir / fmt
+        if await aiofiles.os.path.exists(piece_file):
+            try:
+                async with aiofiles.open(piece_file) as f:
+                    data: dict[str, Any] = json.loads(await f.read())
+                return data
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Failed to read gallery piece {piece_number}: {e}")
+                return None
     return None

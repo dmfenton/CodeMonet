@@ -19,6 +19,7 @@ from .callbacks import (
     set_canvas_dimensions,
     set_draw_callback,
     set_get_canvas_callback,
+    set_paint_callback,
     set_piece_title_callback,
     set_workspace_dir_callback,
 )
@@ -33,6 +34,7 @@ from .drawing import (
 )
 from .image_generation import handle_imagine, imagine
 from .naming import handle_name_piece, name_piece
+from .paint import handle_paint, paint
 from .path_parsing import parse_path_data
 from .quality_gate import (
     consume_mark_piece_done_accepted,
@@ -65,6 +67,7 @@ def create_drawing_server():
             imagine,
             sign_canvas,
             name_piece,
+            paint,
         ],
     )
 
@@ -78,6 +81,8 @@ __all__ = [
     "set_add_strokes_callback",
     "set_workspace_dir_callback",
     "set_piece_title_callback",
+    "set_paint_callback",
+    "handle_paint",
     "set_canvas_dimensions",
     "_inject_canvas_image",
     # Path parsing

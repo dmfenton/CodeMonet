@@ -57,6 +57,8 @@ function MainApp(): React.JSX.Element {
     activeModal,
     closeModal,
     api,
+    apiUrl,
+    viewingRasterImageUrl,
     actions,
   } = useStudio();
 
@@ -111,6 +113,9 @@ function MainApp(): React.JSX.Element {
               onStrokeStart={actions.handleStrokeStart}
               onStrokeMove={actions.handleStrokeMove}
               onStrokeEnd={actions.handleStrokeEnd}
+              apiUrl={apiUrl}
+              rasterImageUrl={viewingRasterImageUrl}
+              onPaintingPlaybackDone={actions.handlePaintingPlaybackDone}
             />
           ) : (
             <HomeScreen

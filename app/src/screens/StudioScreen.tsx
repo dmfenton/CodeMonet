@@ -34,6 +34,12 @@ export interface StudioScreenProps {
   onStrokeMove: (x: number, y: number) => void;
   /** Callback for stroke end */
   onStrokeEnd: () => void;
+  /** API base URL (program-painting assets) */
+  apiUrl: string;
+  /** Final image of the raster gallery piece being viewed, else null */
+  rasterImageUrl: string | null;
+  /** Program painting: a version finished revealing */
+  onPaintingPlaybackDone: (assetBase: string) => void;
 }
 
 export function StudioScreen({
@@ -47,6 +53,9 @@ export function StudioScreen({
   onStrokeStart,
   onStrokeMove,
   onStrokeEnd,
+  apiUrl,
+  rasterImageUrl,
+  onPaintingPlaybackDone,
 }: StudioScreenProps): React.JSX.Element {
   const isViewOnly = viewingPiece !== null;
   // Action bar callbacks
@@ -95,6 +104,10 @@ export function StudioScreen({
           canvasHeight={canvasState.canvasHeight}
           styleConfig={canvasState.styleConfig}
           showIdleAnimation={!isViewOnly && shouldShowIdleAnimation(canvasState)}
+          painting={canvasState.painting}
+          apiUrl={apiUrl}
+          onPaintingPlaybackDone={onPaintingPlaybackDone}
+          rasterImageUrl={rasterImageUrl}
           onStrokeStart={onStrokeStart}
           onStrokeMove={onStrokeMove}
           onStrokeEnd={onStrokeEnd}

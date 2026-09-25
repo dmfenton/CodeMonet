@@ -20,6 +20,8 @@ interface StatusOverlayProps {
   status: AgentStatus;
   performance: PerformanceState;
   messages: AgentMessage[];
+  /** Program painting: label of the keyframe being revealed ('' when none). */
+  stageLabel?: string;
 }
 
 /**
@@ -75,6 +77,7 @@ export function StatusOverlay({
   status,
   performance,
   messages,
+  stageLabel = '',
 }: StatusOverlayProps): React.ReactElement | null {
   const lastTool = getLastToolCall(messages);
 
@@ -97,7 +100,7 @@ export function StatusOverlay({
         return (
           <div className="status-badge drawing">
             <span className="drawing-icon">✏</span>
-            <span>Drawing</span>
+            <span>{stageLabel ? `Painting · ${stageLabel}` : 'Drawing'}</span>
           </div>
         );
       default:

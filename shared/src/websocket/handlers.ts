@@ -16,6 +16,7 @@ import type {
   IterationMessage,
   LoadCanvasMessage,
   NewCanvasMessage,
+  PaintingVersionMessage,
   PausedMessage,
   PieceStateMessage,
   ServerMessage,
@@ -68,6 +69,7 @@ const TOOL_LABELS: Record<string, { started: string; completed: string }> = {
   imagine: { started: 'Imagining...', completed: 'Imagined' },
   sign_canvas: { started: 'Signing canvas...', completed: 'Canvas signed' },
   name_piece: { started: 'Naming piece...', completed: 'Piece named' },
+  paint: { started: 'Painting...', completed: 'Painted' },
 };
 
 // Get path count from tool input for draw_paths
@@ -226,6 +228,27 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
     paused: message.paused,
     drawingStyle: message.drawing_style,
     styleConfig: message.style_config,
+    painting: message.painting ?? null,
+  });
+};
+
+/**
+ * Program painting version ready. Gallery/stale-piece guards and piece sync
+ * (same rules as agent_strokes_ready) are applied by the reducer.
+ */
+export const handlePaintingVersion: MessageHandler<PaintingVersionMessage> = (
+  message,
+  dispatch
+) => {
+  dispatch({
+    type: 'PAINTING_VERSION',
+    version: {
+      piece_number: message.piece_number,
+      version: message.version,
+      asset_base: message.asset_base,
+      image_width: message.image_width,
+      image_height: message.image_height,
+    },
   });
 };
 
@@ -243,6 +266,7 @@ const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessa
   gallery_update: handleGalleryUpdate as MessageHandler<ServerMessage>,
   load_canvas: handleLoadCanvas as MessageHandler<ServerMessage>,
   init: handleInit as MessageHandler<ServerMessage>,
+  painting_version: handlePaintingVersion as MessageHandler<ServerMessage>,
 };
 
 /**

@@ -2,6 +2,7 @@
 
 import html
 import secrets
+from dataclasses import replace
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -122,8 +123,8 @@ async def delete_share(token: str, user: CurrentUser) -> dict[str, str]:
 
 async def load_shared_canvas(
     token: str,
-) -> tuple[CanvasShare, list[Path], DrawingStyleType, int, int]:
-    """Load share info, canvas strokes, drawing style, and dimensions."""
+) -> tuple[CanvasShare, list[Path], DrawingStyleType, int, int, str | None]:
+    """Load share info, canvas strokes, drawing style, dimensions, and raster image path."""
     async with get_session() as session:
         share = await repository.get_canvas_share(session, token)
         if share is None:
@@ -136,15 +137,16 @@ async def load_shared_canvas(
             raise HTTPException(status_code=404, detail="Artwork no longer exists")
 
         strokes, drawing_style, width, height = result
-        return share, strokes, drawing_style, width, height
+        raster = await state.gallery_raster(share.piece_number)
+        return share, strokes, drawing_style, width, height, raster[1] if raster else None
 
 
 @router.get("/{token}/preview.png")
 async def get_share_preview_image(token: str) -> Response:
     """Get preview image for social media sharing (no auth required)."""
-    _share, strokes, drawing_style, width, height = await load_shared_canvas(token)
+    _share, strokes, drawing_style, width, height, raster = await load_shared_canvas(token)
 
-    options = options_for_share_preview(drawing_style, width, height)
+    options = replace(options_for_share_preview(drawing_style, width, height), base_image=raster)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 
@@ -160,7 +162,7 @@ async def get_share_preview_image(token: str) -> Response:
 @router.get("/{token}", response_class=HTMLResponse)
 async def get_share_page(token: str) -> HTMLResponse:
     """Serve SSR HTML page with Open Graph meta tags for social sharing."""
-    share, strokes, drawing_style, width, height = await load_shared_canvas(token)
+    share, strokes, drawing_style, width, height, raster = await load_shared_canvas(token)
     style_config = get_style_config(drawing_style)
 
     # Build meta info - escape user-provided content to prevent XSS
@@ -171,9 +173,12 @@ async def get_share_page(token: str) -> HTMLResponse:
     preview_url = f"{share_url}/preview.png"
     app_store_url = "https://apps.apple.com/app/monet-ai-art/id6740019844"
 
-    # Render SVG inline for the page - escape path data to prevent injection
+    # Render SVG inline for the page - escape path data to prevent injection.
+    # Program paintings are raster: show the rendered preview (it includes strokes).
     svg_paths = ""
-    for path in strokes:
+    if raster:
+        svg_paths = f'<image href="{html.escape(preview_url, quote=True)}" width="{width}" height="{height}"/>'
+    for path in [] if raster else strokes:
         d = render_path_to_svg_d(path)
         if d:
             effective_style = path.get_effective_style(style_config)
@@ -358,7 +363,7 @@ async def get_share_page(token: str) -> HTMLResponse:
 @router.get("/{token}/api", response_model=dict[str, Any])
 async def get_share_api(token: str) -> dict[str, Any]:
     """Get share metadata as JSON (for programmatic access, no auth required)."""
-    share, strokes, _drawing_style, width, height = await load_shared_canvas(token)
+    share, strokes, _drawing_style, width, height, _raster = await load_shared_canvas(token)
 
     return {
         "token": share.token,

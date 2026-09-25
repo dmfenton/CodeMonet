@@ -29,6 +29,16 @@ export const getApiUrl = (): string => {
   return '/api';
 };
 
+/**
+ * Browser-facing URL for an API asset path (e.g. a gallery image_url).
+ * Identical during SSR and on the client, so it is safe in rendered markup.
+ */
+export const getPublicAssetUrl = (path: string): string => {
+  if (/^https?:\/\//.test(path)) return path;
+  const base = import.meta.env.VITE_API_URL || '/api';
+  return `${base.replace(/\/$/, '')}${path}`;
+};
+
 export const getWebSocketUrl = (): string => {
   // Server-side: WebSocket URLs aren't needed for SSR
   if (isServer) {

@@ -5,7 +5,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { pathToSvgDScaled, type Path } from '@code-monet/shared';
-import { getApiUrl } from '../config';
+import { getApiUrl, getPublicAssetUrl } from '../config';
 import type { GalleryPiece, PieceStrokes } from '../components/homepage/types';
 
 interface GalleryPiecePageProps {
@@ -13,6 +13,12 @@ interface GalleryPiecePageProps {
   pieceId: string;
   initialPiece?: GalleryPiece;
   initialStrokes?: PieceStrokes;
+}
+
+/** Raster (program-painting) pieces carry a final image instead of strokes. */
+function rasterImageUrl(data: PieceStrokes | undefined): string | null {
+  if (data?.format !== 'raster' || !data.image_url) return null;
+  return getPublicAssetUrl(data.image_url);
 }
 
 export function GalleryPiecePage({
@@ -27,6 +33,7 @@ export function GalleryPiecePage({
     width: initialStrokes?.canvas_width ?? initialPiece?.width ?? 800,
     height: initialStrokes?.canvas_height ?? initialPiece?.height ?? 600,
   });
+  const [imageUrl, setImageUrl] = useState<string | null>(rasterImageUrl(initialStrokes));
   const [loading, setLoading] = useState(!initialStrokes);
   const navigate = useNavigate();
 
@@ -39,6 +46,7 @@ export function GalleryPiecePage({
         if (response.ok) {
           const data: PieceStrokes = await response.json();
           setStrokes((data.strokes ?? []) as Path[]);
+          setImageUrl(rasterImageUrl(data));
           setCanvasSize({
             width: data.canvas_width ?? 800,
             height: data.canvas_height ?? 600,
@@ -94,7 +102,7 @@ export function GalleryPiecePage({
           <div className="piece-loading">
             <div className="auth-spinner" />
           </div>
-        ) : strokes.length === 0 ? (
+        ) : strokes.length === 0 && !imageUrl ? (
           <div className="piece-not-found">
             <h2>Artwork not found</h2>
             <p>This piece may have been removed or doesn&apos;t exist.</p>
@@ -106,37 +114,48 @@ export function GalleryPiecePage({
           <article className="piece-content">
             <div className="piece-canvas-container">
               <div className="piece-frame">
-                <svg
-                  viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
-                  className="piece-artwork"
-                  aria-label={title}
-                >
-                  <rect width={canvasSize.width} height={canvasSize.height} fill="#fffdf8" />
-                  {strokes.map((stroke, i) => {
-                    const strokeWidth = stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3);
-                    const strokeColor =
-                      strokeWidth > 0
-                        ? (stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34'))
-                        : 'none';
-                    const fill = stroke.fill ?? 'none';
-                    const fillOpacity = stroke.fill
-                      ? (stroke.fill_opacity ?? stroke.opacity ?? 0.85)
-                      : undefined;
-                    return (
-                      <path
-                        key={i}
-                        d={pathToSvgDScaled(stroke, 1)}
-                        fill={fill}
-                        fillOpacity={fillOpacity}
-                        stroke={strokeColor}
-                        strokeWidth={strokeWidth}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeOpacity={stroke.opacity ?? 0.85}
-                      />
-                    );
-                  })}
-                </svg>
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    className="piece-artwork"
+                    alt={title}
+                    width={canvasSize.width}
+                    height={canvasSize.height}
+                  />
+                ) : (
+                  <svg
+                    viewBox={`0 0 ${canvasSize.width} ${canvasSize.height}`}
+                    className="piece-artwork"
+                    aria-label={title}
+                  >
+                    <rect width={canvasSize.width} height={canvasSize.height} fill="#fffdf8" />
+                    {strokes.map((stroke, i) => {
+                      const strokeWidth =
+                        stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3);
+                      const strokeColor =
+                        strokeWidth > 0
+                          ? (stroke.color ?? (stroke.author === 'human' ? '#5a9a70' : '#1f4d34'))
+                          : 'none';
+                      const fill = stroke.fill ?? 'none';
+                      const fillOpacity = stroke.fill
+                        ? (stroke.fill_opacity ?? stroke.opacity ?? 0.85)
+                        : undefined;
+                      return (
+                        <path
+                          key={i}
+                          d={pathToSvgDScaled(stroke, 1)}
+                          fill={fill}
+                          fillOpacity={fillOpacity}
+                          stroke={strokeColor}
+                          strokeWidth={strokeWidth}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeOpacity={stroke.opacity ?? 0.85}
+                        />
+                      );
+                    })}
+                  </svg>
+                )}
               </div>
             </div>
 
@@ -149,12 +168,14 @@ export function GalleryPiecePage({
                 </div>
                 <div className="meta-item">
                   <dt>Medium</dt>
-                  <dd>Digital / SVG</dd>
+                  <dd>{imageUrl ? 'Digital / Oil' : 'Digital / SVG'}</dd>
                 </div>
-                <div className="meta-item">
-                  <dt>Strokes</dt>
-                  <dd>{strokes.length}</dd>
-                </div>
+                {!imageUrl && (
+                  <div className="meta-item">
+                    <dt>Strokes</dt>
+                    <dd>{strokes.length}</dd>
+                  </div>
+                )}
                 {createdDate && (
                   <div className="meta-item">
                     <dt>Created</dt>

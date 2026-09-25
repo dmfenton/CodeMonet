@@ -10,11 +10,13 @@ from code_monet.tools import (
     set_canvas_dimensions,
     set_draw_callback,
     set_get_canvas_callback,
+    set_paint_callback,
     set_piece_title_callback,
     set_workspace_dir_callback,
 )
 
 if TYPE_CHECKING:
+    from code_monet.program_painting import PaintResult
     from code_monet.types import Path
     from code_monet.workspace import WorkspaceState
 
@@ -25,6 +27,7 @@ def setup_tool_callbacks(
     canvas_width: int,
     canvas_height: int,
     on_paths_collected: Callable[[list[Path], bool], Coroutine[Any, Any, None]],
+    run_paint: Callable[[], Coroutine[Any, Any, PaintResult]] | None = None,
 ) -> None:
     """Set up all tool callbacks for an agent turn.
 
@@ -34,7 +37,10 @@ def setup_tool_callbacks(
         canvas_width: Canvas width in pixels
         canvas_height: Canvas height in pixels
         on_paths_collected: Callback when paths are drawn (paths, done_flag)
+        run_paint: Runs the painting program and publishes the version (paint mode)
     """
+    set_paint_callback(run_paint)
+
     # Set up draw callback to collect paths for the PostToolUse hook (animation)
     set_draw_callback(on_paths_collected)
 
@@ -43,11 +49,7 @@ def setup_tool_callbacks(
 
     # Set up add_strokes callback to update state immediately (before tool returns)
     # This allows the canvas image to include new strokes in the tool result
-    async def add_strokes_to_state(paths: list[Path]) -> None:
-        for path in paths:
-            await state.add_stroke(path)
-
-    set_add_strokes_callback(add_strokes_to_state)
+    set_add_strokes_callback(state.add_strokes)
 
     # Set up workspace directory callback for generate_image tool
     def get_workspace_dir() -> str:

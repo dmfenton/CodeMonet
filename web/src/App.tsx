@@ -2,7 +2,7 @@
  * Drawing Agent Web App - Studio View
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { DrawingStyleType, PendingStroke, ServerMessage } from '@code-monet/shared';
 import {
   deriveAgentStatus,
@@ -20,6 +20,7 @@ import { MessageStream } from './components/MessageStream';
 import { DebugPanel } from './components/DebugPanel';
 import { ActionBar } from './components/ActionBar';
 import { StatusOverlay } from './components/StatusOverlay';
+import type { RevealPlaybackInfo } from './renderers/RasterRevealLayer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useDebug } from './hooks/useDebug';
 import { useAuth } from './context/AuthContext';
@@ -35,7 +36,22 @@ interface DevState {
   revealedChars: number;
   paused: boolean;
   pieceNumber: number;
+  /** Program painting: version shown or being revealed (null = none). */
+  paintingVersion: number | null;
+  /** Keyframe being revealed (-1 when not playing). */
+  revealKeyframe: number;
+  /** Ops of that keyframe revealed so far. */
+  revealOpsDone: number;
+  revealPlaying: boolean;
 }
+
+const IDLE_REVEAL: RevealPlaybackInfo = {
+  version: null,
+  keyframe: -1,
+  label: '',
+  opsDone: 0,
+  playing: false,
+};
 
 declare global {
   interface Window {
@@ -129,6 +145,25 @@ function App(): React.ReactElement {
     sendRef.current?.({ type: 'animation_done', batch_id: batchId });
   }, []);
 
+  // Program painting playback (paint mode). Progress fires per frame, so it
+  // lives in a ref; only the stage label is state (changes per keyframe).
+  const revealRef = useRef<RevealPlaybackInfo>(IDLE_REVEAL);
+  const [revealStage, setRevealStage] = useState('');
+  const handlePaintingProgress = useCallback((info: RevealPlaybackInfo) => {
+    revealRef.current = info;
+    setRevealStage(info.playing ? info.label : '');
+    const dev = window.__CM_DEV_STATE__;
+    if (import.meta.env.DEV && dev) {
+      dev.revealKeyframe = info.keyframe;
+      dev.revealOpsDone = info.opsDone;
+      dev.revealPlaying = info.playing;
+    }
+  }, []);
+  const handlePaintingPlaybackDone = useCallback(
+    (assetBase: string) => dispatch({ type: 'PAINTING_PLAYBACK_DONE', assetBase }),
+    [dispatch]
+  );
+
   // Performance animation loop
   usePerformer({
     performance: state.performance,
@@ -178,6 +213,10 @@ function App(): React.ReactElement {
       revealedChars: state.performance.revealedText.length,
       paused: state.paused,
       pieceNumber: state.pieceNumber,
+      paintingVersion: (state.painting.playing ?? state.painting.base)?.version ?? null,
+      revealKeyframe: revealRef.current.keyframe,
+      revealOpsDone: revealRef.current.opsDone,
+      revealPlaying: revealRef.current.playing,
     };
   });
 
@@ -218,7 +257,12 @@ function App(): React.ReactElement {
       />
 
       <div className="thinking-strip" data-testid="thinking-strip">
-        <StatusOverlay status={agentStatus} performance={state.performance} messages={state.messages} />
+        <StatusOverlay
+          status={agentStatus}
+          performance={state.performance}
+          messages={state.messages}
+          stageLabel={revealStage}
+        />
       </div>
 
       <div className="canvas-container">
@@ -234,6 +278,10 @@ function App(): React.ReactElement {
           canvasHeight={state.canvasHeight}
           styleConfig={state.styleConfig}
           showIdleAnimation={shouldShowIdleAnimation(state)}
+          painting={state.painting}
+          apiUrl={getApiUrl()}
+          onPaintingPlaybackDone={handlePaintingPlaybackDone}
+          onPaintingProgress={handlePaintingProgress}
           onStrokeStart={startStroke}
           onStrokeMove={addPoint}
           onStrokeEnd={handleStrokeEnd}

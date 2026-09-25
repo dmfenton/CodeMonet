@@ -2,6 +2,7 @@
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path as FilePath
 from typing import Any
 
@@ -24,9 +25,18 @@ _UUID_PATTERN = re.compile(
 )
 
 
+def _raster_image(workspace_base: FilePath, user_id: str, data: dict[str, Any]) -> str | None:
+    """Final image path of a raster (program-painting) piece, if present."""
+    token = data.get("image_token")
+    if not isinstance(token, str) or not token.isalnum():
+        return None
+    path = workspace_base / user_id / "paintings" / token / "final.png"
+    return str(path) if path.exists() else None
+
+
 async def _load_public_piece(
     user_id: str, piece_id: str
-) -> tuple[list[Path], DrawingStyleType, int, int]:
+) -> tuple[list[Path], DrawingStyleType, int, int, str | None]:
     """Load strokes and style for a public gallery piece with validation.
 
     Args:
@@ -34,7 +44,7 @@ async def _load_public_piece(
         piece_id: Piece identifier (e.g., "piece_000001")
 
     Returns:
-        Tuple of (strokes list, drawing style, width, height)
+        Tuple of (strokes list, drawing style, width, height, raster image path)
 
     Raises:
         HTTPException: For invalid input, unauthorized access, or missing pieces
@@ -72,7 +82,13 @@ async def _load_public_piece(
             drawing_style = DrawingStyleType(style_str)
         except ValueError:
             drawing_style = DrawingStyleType.PLOTTER
-        return strokes, drawing_style, data.get("width", 800), data.get("height", 600)
+        return (
+            strokes,
+            drawing_style,
+            data.get("width", 800),
+            data.get("height", 600),
+            _raster_image(workspace_base, user_id, data),
+        )
     except (json.JSONDecodeError, OSError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load piece: {e}") from e
 
@@ -168,8 +184,13 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
 
     try:
         data = json.loads(piece_file.read_text())
+        raster = _raster_image(workspace_base, user_id, data)
         return {
             "id": piece_id,
+            "format": "raster" if raster else "strokes",
+            "image_url": (
+                f"/painting-assets/{user_id}/{data['image_token']}/final.png" if raster else None
+            ),
             "strokes": data.get("strokes", []),
             "piece_number": data.get("piece_number", 0),
             "canvas_width": data.get("width", 800),
@@ -187,9 +208,9 @@ async def get_public_piece_thumbnail(user_id: str, piece_id: str) -> Response:
     Renders gallery piece strokes to PNG using the saved canvas dimensions.
     Only returns image if user has opted into public gallery.
     """
-    strokes, drawing_style, width, height = await _load_public_piece(user_id, piece_id)
+    strokes, drawing_style, width, height, raster = await _load_public_piece(user_id, piece_id)
 
-    options = options_for_thumbnail(drawing_style, width, height)
+    options = replace(options_for_thumbnail(drawing_style, width, height), base_image=raster)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 
@@ -207,9 +228,9 @@ async def get_public_piece_og_image(user_id: str, piece_id: str) -> Response:
     Renders gallery piece strokes to 1200x630 PNG (optimal OG image size).
     Only returns image if user has opted into public gallery.
     """
-    strokes, drawing_style, width, height = await _load_public_piece(user_id, piece_id)
+    strokes, drawing_style, width, height, raster = await _load_public_piece(user_id, piece_id)
 
-    options = options_for_og_image(drawing_style, width, height)
+    options = replace(options_for_og_image(drawing_style, width, height), base_image=raster)
     result = await render_strokes_async(strokes, options)
     assert isinstance(result, bytes)
 
