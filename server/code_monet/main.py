@@ -13,10 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from code_monet.anthropic_wif import anthropic_wif_configuration
-from code_monet.auth import auth_router
-from code_monet.auth.jwt import TokenError, get_user_id_from_token
+from code_monet.auth import auth_router, dependencies
 from code_monet.config import settings
-from code_monet.db import get_session, repository
 from code_monet.logging_config import setup_dev_logging, setup_production_logging
 from code_monet.registry import workspace_registry
 from code_monet.routes import create_api_router
@@ -190,23 +188,19 @@ async def websocket_endpoint(
         return
 
     try:
-        user_id = get_user_id_from_token(token, expected_type="access")
-    except TokenError as e:
-        await websocket.close(code=4001, reason=str(e))
+        user = await dependencies.authenticate_access_token(token)
+    except Exception:
+        # Identity unavailable is not an auth failure: 1011 lets clients retry
+        # instead of discarding a valid session.
+        logger.exception("WebSocket auth could not reach the token authority")
+        await websocket.close(code=1011, reason="Authentication unavailable")
         return
-    except Exception as e:
-        logger.warning(f"WebSocket auth failed with unexpected error: {e}")
-        await websocket.close(code=4001, reason="Invalid token")
-        return
-
-    # Verify user exists and is active
-    async with get_session() as session:
-        user = await repository.get_user_by_id(session, user_id)
 
     if user is None or not user.is_active:
-        await websocket.close(code=4001, reason="User not found or inactive")
+        await websocket.close(code=4001, reason="Invalid or expired token")
         return
 
+    user_id = user.id
     logger.info(f"WebSocket authenticated: user {user.email} (id={user_id})")
 
     # Record client trace ID for distributed tracing correlation

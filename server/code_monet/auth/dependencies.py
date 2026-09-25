@@ -23,7 +23,7 @@ async def get_current_user(
     Raises:
         HTTPException: 401 if token is invalid or user not found
     """
-    user = await _authenticated_user(credentials.credentials)
+    user = await authenticate_access_token(credentials.credentials)
 
     if user is None:
         raise HTTPException(
@@ -52,7 +52,7 @@ async def get_optional_user(
     if credentials is None:
         return None
 
-    user = await _authenticated_user(credentials.credentials)
+    user = await authenticate_access_token(credentials.credentials)
 
     if user is None or not user.is_active:
         return None
@@ -60,7 +60,13 @@ async def get_optional_user(
     return user
 
 
-async def _authenticated_user(token: str) -> User | None:
+async def authenticate_access_token(token: str) -> User | None:
+    """Resolve an access token to its user; the single authority for REST and WebSocket.
+
+    Production accepts only Fenton Identity platform tokens. Dev mode accepts the
+    legacy HS256 tokens issued by /auth/dev-token. Returns None for any token
+    that does not resolve; infrastructure failures (e.g. JWKS fetch) propagate.
+    """
     if not settings.dev_mode:
         return await user_for_platform_token(token)
     try:
