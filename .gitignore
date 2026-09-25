@@ -77,3 +77,11 @@ screenshots/
 # Scratch/experiment directories
 scratch/
 server/scratch/
+
+# iOS (Swift/Xcode)
+ios/MonetKit/.build/
+ios/MonetKit/.swiftpm/
+ios/**/DerivedData/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+ios/*.xcworkspace/xcuserdata/

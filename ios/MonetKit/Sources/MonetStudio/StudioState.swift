@@ -1,0 +1,112 @@
+import MonetProtocol
+
+/// One item in the performance/animation buffer (protocol-state spec §4,
+/// "PerformanceItem"). Enqueued by message routing, drained one at a time
+/// onto `stage` by `MonetPerformer`.
+public enum PerformanceItem: Equatable, Sendable, Identifiable {
+    case words(id: String, text: String)
+    case event(id: String, message: AgentMessage)
+    case strokes(id: String, strokes: [PendingStroke])
+
+    public var id: String {
+        switch self {
+        case let .words(id, _), let .event(id, _), let .strokes(id, _): id
+        }
+    }
+}
+
+/// The stroke/text/pen playback pipeline's state (protocol-state spec §4
+/// `PerformanceState`). Pure value type; advanced only via
+/// `MonetStudio.reduce` and `MonetPerformer`'s tick events, never mutated
+/// directly by UI code.
+public struct PerformanceState: Equatable, Sendable {
+    public var buffer: [PerformanceItem] = []
+    public var onStage: PerformanceItem?
+    public var history: [PerformanceItem] = []
+    public var wordIndex: Int = 0
+    public var strokeIndex: Int = 0
+    public var strokeProgress: Double = 0
+    public var revealedText: String = ""
+    public var penPosition: Point?
+    public var penDown: Bool = false
+    public var agentStroke: [Point] = []
+    public var agentStrokeStyle: PartialStrokeStyle?
+    public var travelTarget: Point?
+
+    public init() {}
+
+    /// Oldest-dropped bound for `history` (protocol-state spec §4, `MAX_HISTORY`).
+    public static let maxHistory = 100
+}
+
+/// A per-field-optional style override, captured from a stroke's first
+/// point/batch (protocol-state spec §5.5 `STROKE_PROGRESS_BATCH`). Mirrors
+/// the TS `Partial<StrokeStyle>`.
+public struct PartialStrokeStyle: Equatable, Sendable {
+    public var color: String?
+    public var strokeWidth: Double?
+    public var opacity: Double?
+
+    public init(color: String? = nil, strokeWidth: Double? = nil, opacity: Double? = nil) {
+        self.color = color
+        self.strokeWidth = strokeWidth
+        self.opacity = opacity
+    }
+}
+
+/// A snapshot of the live canvas, taken when entering gallery-view mode, so
+/// "back to studio" can restore it exactly (protocol-state spec §5.4).
+public struct SavedCanvas: Equatable, Sendable {
+    public var strokes: [Path]
+    public var canvasWidth: Int
+    public var canvasHeight: Int
+    public var pieceNumber: Int
+    public var drawingStyle: DrawingStyleType
+    public var styleConfig: DrawingStyleConfig
+
+    public init(
+        strokes: [Path],
+        canvasWidth: Int,
+        canvasHeight: Int,
+        pieceNumber: Int,
+        drawingStyle: DrawingStyleType,
+        styleConfig: DrawingStyleConfig
+    ) {
+        self.strokes = strokes
+        self.canvasWidth = canvasWidth
+        self.canvasHeight = canvasHeight
+        self.pieceNumber = pieceNumber
+        self.drawingStyle = drawingStyle
+        self.styleConfig = styleConfig
+    }
+}
+
+/// The full reproducible client state (protocol-state spec §4
+/// `CanvasHookState`). A pure value type: every transition is
+/// `StudioState.reduce(state, event) -> state`. `StudioStore` (app target)
+/// is the only thing that owns a live, mutable instance of this.
+public struct StudioState: Equatable, Sendable {
+    public var performance = PerformanceState()
+    public var strokes: [Path] = []
+    public var currentStroke: [Point] = []
+    public var thinking: String = ""
+    public var messages: [AgentMessage] = []
+    public var canvasWidth: Int = CanvasDefaults.width
+    public var canvasHeight: Int = CanvasDefaults.height
+    public var pieceNumber: Int = 0
+    public var viewingPiece: Int?
+    public var drawingEnabled: Bool = false
+    public var gallery: [GalleryEntry] = []
+    /// Client assumes paused until the server says otherwise.
+    public var paused: Bool = true
+    public var currentIteration: Int = 0
+    public var maxIterations: Int = 5
+    public var drawingStyle: DrawingStyleType = .plotter
+    public var styleConfig: DrawingStyleConfig = .plotter
+    public var savedCanvas: SavedCanvas?
+
+    public init() {}
+
+    /// `MAX_MESSAGES` bound on `messages` (protocol-state spec §4).
+    public static let maxMessages = 50
+}

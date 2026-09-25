@@ -1,0 +1,3 @@
+// Release (TestFlight/App Store) build configuration — see net-auth spec §1.
+CODE_MONET_API_BASE_URL = https:/$()/monet.dmfenton.net/api
+CODE_MONET_WS_BASE_URL = wss:/$()/monet.dmfenton.net/ws

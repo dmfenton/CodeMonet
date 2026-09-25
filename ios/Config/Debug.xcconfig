@@ -1,0 +1,10 @@
+// Debug build configuration. `CODE_MONET_API_BASE_URL`/`CODE_MONET_WS_BASE_URL`
+// are the single source of truth for the app's server hosts (net-auth spec
+// §1, §7) — `CodeMonetEnvironment.resolve` reads them back out of
+// Info.plist at launch. `$()` splits "//" so xcconfig doesn't treat it as a
+// line comment.
+//
+// A developer testing against a physical device (not the simulator) edits
+// these two lines locally to their machine's LAN IP — see net-auth spec §1.
+CODE_MONET_API_BASE_URL = http:/$()/localhost:8000
+CODE_MONET_WS_BASE_URL = ws:/$()/localhost:8000/ws

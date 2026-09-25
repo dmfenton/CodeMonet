@@ -1,0 +1,813 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */; };
+		12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */; };
+		1981E79F549C22B21554CC5B /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488E8004DCBEBAB3333BB48C /* HomeView.swift */; };
+		1C62016F7C82F1CB6FA3F3C2 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */; };
+		22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */; };
+		2B74D0691CE6B72A70C92872 /* StudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF72546FBFC9133172136F1B /* StudioStore.swift */; };
+		466C8B81C8862BFB109AE648 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22EBD765435D2E439AA9DE0 /* AuthService.swift */; };
+		4F5CC55FA4AE9C5260EB80EB /* MonetPerformer in Frameworks */ = {isa = PBXBuildFile; productRef = 2B76A6096ECD10C0841D7D44 /* MonetPerformer */; };
+		563C995260FFA885A18E0D78 /* StudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7734D18A173A15DE0904EB0E /* StudioView.swift */; };
+		587FB805A51C21177B1132A4 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4AC184270F76BB400398C13 /* Navigation.swift */; };
+		5CAB7C9FA43579647CFEEE3D /* CodeMonetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F335A83678298111142386B /* CodeMonetTests.swift */; };
+		62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 669B99ED0E92CCD268014A1B /* GalleryView.swift */; };
+		66C00DCA9EA9160B7DE335A5 /* CodeMonetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */; };
+		71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 742F14BA4DE4303242B3F0F9 /* SplashView.swift */; };
+		8309978B3205E4CE361EC262 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80AA7293B1AC8B23B70DE4F7 /* AuthView.swift */; };
+		8ABFBB052D39D873F97A9E41 /* FentonMobileCore in Frameworks */ = {isa = PBXBuildFile; productRef = D0CF2840DBD3FCF3EE28236E /* FentonMobileCore */; };
+		8BC739BA8A0E4815C77CE3F0 /* MonetProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 4F53B2E921E6A703DA2CDF4C /* MonetProtocol */; };
+		8E2107E1BB01E760F59CE15E /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E266E95B648C934E866D73 /* AppDelegate.swift */; };
+		9EDFA094FC48599B85E91FF6 /* MonetRender in Frameworks */ = {isa = PBXBuildFile; productRef = E379AD9D8DC88148531D636A /* MonetRender */; };
+		A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94A1ADB343BFCBF9580CFFA /* RootView.swift */; };
+		ADF3C2A714F02B1F9AE52442 /* FentonDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 65012A4E726A7B7A9C914DAC /* FentonDesignSystem */; };
+		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
+		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
+		E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12336794874A19B003081A3 /* CodeMonetApp.swift */; };
+		EB090629247AA21B7BA449D5 /* MonetNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = 97F3CD7501D5E62B871DB7CC /* MonetNetworking */; };
+		F95DD9D4FE5C88F906C0E22C /* MonetStudio in Frameworks */ = {isa = PBXBuildFile; productRef = 15B7043D6142FDEA8DD537B7 /* MonetStudio */; };
+		F9972B04273718665320F46B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A178E0739AE265CF31CAF184 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		534DA901B746AFE37BCBC491 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 03C522EA068FDC287B25A3C8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DAE85356B863FEBFB34CB672;
+			remoteInfo = CodeMonet;
+		};
+		9220AFE6D198972A21B6CC46 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 03C522EA068FDC287B25A3C8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DAE85356B863FEBFB34CB672;
+			remoteInfo = CodeMonet;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetUITests.swift; sourceTree = "<group>"; };
+		1F335A83678298111142386B /* CodeMonetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetTests.swift; sourceTree = "<group>"; };
+		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
+		3C75594C9100EECCCD83DC47 /* CodeMonet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeMonet.entitlements; sourceTree = "<group>"; };
+		3CEBCE24B9CCAF6F2C71EE1C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewCanvasView.swift; sourceTree = "<group>"; };
+		488E8004DCBEBAB3333BB48C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		669B99ED0E92CCD268014A1B /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
+		679612E25876041328C74819 /* MonetKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonetKit; path = MonetKit; sourceTree = SOURCE_ROOT; };
+		6995E17497D3051AA88805D7 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		6D9DD7C940CF0BFFCE37D191 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../vendor/platform.dmfenton.net/swift; sourceTree = SOURCE_ROOT; };
+		742F14BA4DE4303242B3F0F9 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		7734D18A173A15DE0904EB0E /* StudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioView.swift; sourceTree = "<group>"; };
+		80AA7293B1AC8B23B70DE4F7 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetDesignSystem.swift; sourceTree = "<group>"; };
+		95E266E95B648C934E866D73 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetIdentityClient.swift; sourceTree = "<group>"; };
+		AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		B4E557AA1ADAAA86E5D6CC25 /* CodeMonetTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C12336794874A19B003081A3 /* CodeMonetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetApp.swift; sourceTree = "<group>"; };
+		C4AC184270F76BB400398C13 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
+		CF72546FBFC9133172136F1B /* StudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioStore.swift; sourceTree = "<group>"; };
+		D810FB72EA0A50E2B1123CCB /* CodeMonet.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CodeMonet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E22EBD765435D2E439AA9DE0 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		E94A1ADB343BFCBF9580CFFA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3CF8EDA39EFAA46547E38C5D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ADF3C2A714F02B1F9AE52442 /* FentonDesignSystem in Frameworks */,
+				8ABFBB052D39D873F97A9E41 /* FentonMobileCore in Frameworks */,
+				8BC739BA8A0E4815C77CE3F0 /* MonetProtocol in Frameworks */,
+				F95DD9D4FE5C88F906C0E22C /* MonetStudio in Frameworks */,
+				4F5CC55FA4AE9C5260EB80EB /* MonetPerformer in Frameworks */,
+				9EDFA094FC48599B85E91FF6 /* MonetRender in Frameworks */,
+				EB090629247AA21B7BA449D5 /* MonetNetworking in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01AAB2A799459AF9DC30A8C9 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				E22EBD765435D2E439AA9DE0 /* AuthService.swift */,
+				A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */,
+				CF72546FBFC9133172136F1B /* StudioStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		034B2D671448507823C3DE37 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				6995E17497D3051AA88805D7 /* AppConfig.swift */,
+				95E266E95B648C934E866D73 /* AppDelegate.swift */,
+				9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */,
+				C12336794874A19B003081A3 /* CodeMonetApp.swift */,
+				C4AC184270F76BB400398C13 /* Navigation.swift */,
+				E94A1ADB343BFCBF9580CFFA /* RootView.swift */,
+				742F14BA4DE4303242B3F0F9 /* SplashView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		104EB8B041E4D7EA2CCD195D /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				488E8004DCBEBAB3333BB48C /* HomeView.swift */,
+			);
+			path = Home;
+			sourceTree = "<group>";
+		};
+		1927B50E6983C5F3C5ED057E /* NewCanvas */ = {
+			isa = PBXGroup;
+			children = (
+				3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */,
+			);
+			path = NewCanvas;
+			sourceTree = "<group>";
+		};
+		1DAC9FF34C143FDD8319F83F /* CodeMonetUITests */ = {
+			isa = PBXGroup;
+			children = (
+				02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */,
+			);
+			path = CodeMonetUITests;
+			sourceTree = "<group>";
+		};
+		20F014ECA3FCA585E00C5958 /* CodeMonetTests */ = {
+			isa = PBXGroup;
+			children = (
+				1F335A83678298111142386B /* CodeMonetTests.swift */,
+			);
+			path = CodeMonetTests;
+			sourceTree = "<group>";
+		};
+		3A5D87C80C2D2A3C4106186B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D810FB72EA0A50E2B1123CCB /* CodeMonet.app */,
+				B4E557AA1ADAAA86E5D6CC25 /* CodeMonetTests.xctest */,
+				62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3B1292427EEDAEE6901817DF /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				679612E25876041328C74819 /* MonetKit */,
+				6D9DD7C940CF0BFFCE37D191 /* swift */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		3DAA83893754290BD69C2D26 /* CodeMonet */ = {
+			isa = PBXGroup;
+			children = (
+				034B2D671448507823C3DE37 /* App */,
+				78F12125EF83ABDD35CFE3A8 /* DesignSystem */,
+				C195FD2C1E34A82B8E153107 /* Features */,
+				5F9A674C9D6E605B00DAE226 /* Resources */,
+				01AAB2A799459AF9DC30A8C9 /* Services */,
+			);
+			path = CodeMonet;
+			sourceTree = "<group>";
+		};
+		5F9A674C9D6E605B00DAE226 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A178E0739AE265CF31CAF184 /* Assets.xcassets */,
+				3C75594C9100EECCCD83DC47 /* CodeMonet.entitlements */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		78F12125EF83ABDD35CFE3A8 /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */,
+			);
+			path = DesignSystem;
+			sourceTree = "<group>";
+		};
+		7AAC607E46D32D3F472591BD = {
+			isa = PBXGroup;
+			children = (
+				3DAA83893754290BD69C2D26 /* CodeMonet */,
+				20F014ECA3FCA585E00C5958 /* CodeMonetTests */,
+				1DAC9FF34C143FDD8319F83F /* CodeMonetUITests */,
+				FB1DBAC48F74370B15476D51 /* Config */,
+				3B1292427EEDAEE6901817DF /* Packages */,
+				3A5D87C80C2D2A3C4106186B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		9F72A74656181F3406F645E2 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				80AA7293B1AC8B23B70DE4F7 /* AuthView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		A4C3C6B736C4A4AB47AF0849 /* Gallery */ = {
+			isa = PBXGroup;
+			children = (
+				669B99ED0E92CCD268014A1B /* GalleryView.swift */,
+			);
+			path = Gallery;
+			sourceTree = "<group>";
+		};
+		BCD9F2FAF99C4E3FE88CDEC5 /* Studio */ = {
+			isa = PBXGroup;
+			children = (
+				2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */,
+				7734D18A173A15DE0904EB0E /* StudioView.swift */,
+			);
+			path = Studio;
+			sourceTree = "<group>";
+		};
+		C195FD2C1E34A82B8E153107 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				9F72A74656181F3406F645E2 /* Auth */,
+				A4C3C6B736C4A4AB47AF0849 /* Gallery */,
+				104EB8B041E4D7EA2CCD195D /* Home */,
+				1927B50E6983C5F3C5ED057E /* NewCanvas */,
+				BCD9F2FAF99C4E3FE88CDEC5 /* Studio */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		FB1DBAC48F74370B15476D51 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */,
+				3CEBCE24B9CCAF6F2C71EE1C /* Release.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A95C6EC8E579CF1B2BAB860F /* CodeMonetTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0F8495EEE80F093D7FCA9B81 /* Build configuration list for PBXNativeTarget "CodeMonetTests" */;
+			buildPhases = (
+				3DDCE7E1CD76F457D6F9DCB6 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4F6629AB5A39841EF6616271 /* PBXTargetDependency */,
+			);
+			name = CodeMonetTests;
+			packageProductDependencies = (
+			);
+			productName = CodeMonetTests;
+			productReference = B4E557AA1ADAAA86E5D6CC25 /* CodeMonetTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		D0D30FCFFB027B7BDDD562C0 /* CodeMonetUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6756A796F2E196BBE8D93DDD /* Build configuration list for PBXNativeTarget "CodeMonetUITests" */;
+			buildPhases = (
+				20096C4118E5941056B13831 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				01B5203E8A3DE2E5A8EA26F1 /* PBXTargetDependency */,
+			);
+			name = CodeMonetUITests;
+			packageProductDependencies = (
+			);
+			productName = CodeMonetUITests;
+			productReference = 62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		DAE85356B863FEBFB34CB672 /* CodeMonet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 225AAE8B02ABA171B08D1DC1 /* Build configuration list for PBXNativeTarget "CodeMonet" */;
+			buildPhases = (
+				584F831F9899D842BF891129 /* SwiftLint */,
+				44CA3CA56D02745F82E95F3C /* Sources */,
+				B4EBD50C639FD6E771A9DE39 /* Resources */,
+				3CF8EDA39EFAA46547E38C5D /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CodeMonet;
+			packageProductDependencies = (
+				65012A4E726A7B7A9C914DAC /* FentonDesignSystem */,
+				D0CF2840DBD3FCF3EE28236E /* FentonMobileCore */,
+				4F53B2E921E6A703DA2CDF4C /* MonetProtocol */,
+				15B7043D6142FDEA8DD537B7 /* MonetStudio */,
+				2B76A6096ECD10C0841D7D44 /* MonetPerformer */,
+				E379AD9D8DC88148531D636A /* MonetRender */,
+				97F3CD7501D5E62B871DB7CC /* MonetNetworking */,
+			);
+			productName = CodeMonet;
+			productReference = D810FB72EA0A50E2B1123CCB /* CodeMonet.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		03C522EA068FDC287B25A3C8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					A95C6EC8E579CF1B2BAB860F = {
+						DevelopmentTeam = PG5D259899;
+						ProvisioningStyle = Automatic;
+					};
+					D0D30FCFFB027B7BDDD562C0 = {
+						DevelopmentTeam = PG5D259899;
+						ProvisioningStyle = Automatic;
+						TestTargetID = DAE85356B863FEBFB34CB672;
+					};
+					DAE85356B863FEBFB34CB672 = {
+						DevelopmentTeam = PG5D259899;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 4C88803F1FE5B29268CFBD26 /* Build configuration list for PBXProject "CodeMonet" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7AAC607E46D32D3F472591BD;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3ABC7D8C4F909F2877F0D7C9 /* XCLocalSwiftPackageReference "../vendor/platform.dmfenton.net/swift" */,
+				FCCE629A144A19E6CCA8E29C /* XCLocalSwiftPackageReference "MonetKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3A5D87C80C2D2A3C4106186B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DAE85356B863FEBFB34CB672 /* CodeMonet */,
+				A95C6EC8E579CF1B2BAB860F /* CodeMonetTests */,
+				D0D30FCFFB027B7BDDD562C0 /* CodeMonetUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B4EBD50C639FD6E771A9DE39 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F9972B04273718665320F46B /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		584F831F9899D842BF891129 /* SwiftLint */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = SwiftLint;
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if which swiftlint >/dev/null; then\n  swiftlint --quiet --config \"${SRCROOT}/.swiftlint.yml\"\nelse\n  echo \"warning: SwiftLint not installed — brew install swiftlint\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		20096C4118E5941056B13831 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				66C00DCA9EA9160B7DE335A5 /* CodeMonetUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3DDCE7E1CD76F457D6F9DCB6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5CAB7C9FA43579647CFEEE3D /* CodeMonetTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		44CA3CA56D02745F82E95F3C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */,
+				8E2107E1BB01E760F59CE15E /* AppDelegate.swift in Sources */,
+				1C62016F7C82F1CB6FA3F3C2 /* AppEnvironment.swift in Sources */,
+				466C8B81C8862BFB109AE648 /* AuthService.swift in Sources */,
+				8309978B3205E4CE361EC262 /* AuthView.swift in Sources */,
+				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
+				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
+				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
+				BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */,
+				62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */,
+				1981E79F549C22B21554CC5B /* HomeView.swift in Sources */,
+				587FB805A51C21177B1132A4 /* Navigation.swift in Sources */,
+				0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */,
+				A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */,
+				71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */,
+				2B74D0691CE6B72A70C92872 /* StudioStore.swift in Sources */,
+				563C995260FFA885A18E0D78 /* StudioView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		01B5203E8A3DE2E5A8EA26F1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DAE85356B863FEBFB34CB672 /* CodeMonet */;
+			targetProxy = 9220AFE6D198972A21B6CC46 /* PBXContainerItemProxy */;
+		};
+		4F6629AB5A39841EF6616271 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DAE85356B863FEBFB34CB672 /* CodeMonet */;
+			targetProxy = 534DA901B746AFE37BCBC491 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		2E3E462814DC6C19278F728F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CodeMonet/Resources/CodeMonet.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PG5D259899;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = CodeMonet/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		516BA662D1D3E2182D9CD2E4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = CodeMonet/Resources/CodeMonet.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = PG5D259899;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = CodeMonet/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		5AD77BF5A3540BC2F570E46F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 3CEBCE24B9CCAF6F2C71EE1C /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_BITCODE = NO;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8E134F08B8BF052498CF1A7D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PG5D259899;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeMonet.app/CodeMonet";
+			};
+			name = Debug;
+		};
+		97D40EC46058ED575418F651 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_BITCODE = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_TREAT_WARNINGS_AS_ERRORS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 5.10;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9BA6AC37476378D401675290 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PG5D259899;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodeMonet.app/CodeMonet";
+			};
+			name = Release;
+		};
+		B381AFC2BE6694F86A1E6B30 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PG5D259899;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodeMonet;
+			};
+			name = Release;
+		};
+		E922A63E4916B7D769DE6B50 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = PG5D259899;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = net.dmfenton.sketchpad.uitests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodeMonet;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0F8495EEE80F093D7FCA9B81 /* Build configuration list for PBXNativeTarget "CodeMonetTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E134F08B8BF052498CF1A7D /* Debug */,
+				9BA6AC37476378D401675290 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		225AAE8B02ABA171B08D1DC1 /* Build configuration list for PBXNativeTarget "CodeMonet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				516BA662D1D3E2182D9CD2E4 /* Debug */,
+				2E3E462814DC6C19278F728F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4C88803F1FE5B29268CFBD26 /* Build configuration list for PBXProject "CodeMonet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				97D40EC46058ED575418F651 /* Debug */,
+				5AD77BF5A3540BC2F570E46F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6756A796F2E196BBE8D93DDD /* Build configuration list for PBXNativeTarget "CodeMonetUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E922A63E4916B7D769DE6B50 /* Debug */,
+				B381AFC2BE6694F86A1E6B30 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3ABC7D8C4F909F2877F0D7C9 /* XCLocalSwiftPackageReference "../vendor/platform.dmfenton.net/swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../vendor/platform.dmfenton.net/swift;
+		};
+		FCCE629A144A19E6CCA8E29C /* XCLocalSwiftPackageReference "MonetKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = MonetKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		15B7043D6142FDEA8DD537B7 /* MonetStudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MonetStudio;
+		};
+		2B76A6096ECD10C0841D7D44 /* MonetPerformer */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MonetPerformer;
+		};
+		4F53B2E921E6A703DA2CDF4C /* MonetProtocol */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MonetProtocol;
+		};
+		65012A4E726A7B7A9C914DAC /* FentonDesignSystem */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FentonDesignSystem;
+		};
+		97F3CD7501D5E62B871DB7CC /* MonetNetworking */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MonetNetworking;
+		};
+		D0CF2840DBD3FCF3EE28236E /* FentonMobileCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FentonMobileCore;
+		};
+		E379AD9D8DC88148531D636A /* MonetRender */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MonetRender;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 03C522EA068FDC287B25A3C8 /* Project object */;
+}
