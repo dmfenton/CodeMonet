@@ -131,7 +131,7 @@ async def test_production_dependency_uses_platform_verifier(
     monkeypatch.setattr(settings, "dev_mode", False)
     monkeypatch.setattr(dependencies, "user_for_platform_token", resolver)
 
-    assert await dependencies._authenticated_user("token") is expected
+    assert await dependencies.authenticate_access_token("token") is expected
     resolver.assert_awaited_once_with("token")
 
 
