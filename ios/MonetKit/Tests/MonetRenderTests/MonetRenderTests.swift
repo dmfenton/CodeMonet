@@ -1,6 +1,6 @@
-import Testing
 @testable import MonetProtocol
 @testable import MonetRender
+import Testing
 
 @Suite("Mulberry32")
 struct Mulberry32Tests {
