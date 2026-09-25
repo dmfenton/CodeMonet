@@ -27,9 +27,21 @@ test-kit:
 
 # Full app-target test run (CodeMonetTests + CodeMonetUITests) on a booted
 # simulator. Slower than test-kit; run before a PR, not on every save.
+#
+# The target device varies per machine (a fixed "iPhone 16 Pro" simulator
+# doesn't exist everywhere), so this is parameterized two ways:
+#   make test-app SIMULATOR_ID=<udid>                 # exact simulator, by id
+#   make test-app DESTINATION='platform=iOS Simulator,name=iPhone 17'
+# SIMULATOR_ID wins if both are set. With neither, falls back to the old
+# by-name default (kept for machines where it still resolves).
+DESTINATION ?= platform=iOS Simulator,name=iPhone 16 Pro
+ifdef SIMULATOR_ID
+DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
+endif
+
 test-app: generate
 	xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
-		-destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+		-destination '$(DESTINATION)' \
 		test
 
 clean:
