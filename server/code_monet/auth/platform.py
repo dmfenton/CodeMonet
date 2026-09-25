@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
+import json
 from functools import lru_cache
 
 import httpx
@@ -56,6 +59,12 @@ def jwks_provider() -> HTTPJwksProvider:
 
 
 @lru_cache(maxsize=1)
+def jwks_cache() -> MemoryJwksCache:
+    """Process-local key cache shared with the verifier."""
+    return MemoryJwksCache()
+
+
+@lru_cache(maxsize=1)
 def access_token_verifier() -> RS256AccessTokenVerifier:
     """Build the process-local verifier and bounded JWKS cache."""
     return RS256AccessTokenVerifier(
@@ -64,9 +73,28 @@ def access_token_verifier() -> RS256AccessTokenVerifier:
             audience=settings.identity_audience,
             client_id=settings.identity_client_id,
         ),
-        jwks=MemoryJwksCache(),
+        jwks=jwks_cache(),
         provider=jwks_provider(),
     )
+
+
+def _signing_key_unavailable(token: str) -> bool:
+    """True when the token names a key we lack and the last attempt to fetch keys failed."""
+    kid = _header_kid(token)
+    return (
+        kid is not None and jwks_cache().key_for(kid) is None and jwks_provider().last_fetch_failed
+    )
+
+
+def _header_kid(token: str) -> str | None:
+    header_segment = token.split(".", 1)[0]
+    try:
+        padded = header_segment + "=" * (-len(header_segment) % 4)
+        header = json.loads(base64.urlsafe_b64decode(padded))
+    except (binascii.Error, ValueError):
+        return None
+    kid = header.get("kid") if isinstance(header, dict) else None
+    return kid if isinstance(kid, str) and kid else None
 
 
 def platform_subject_for_email(email: str) -> str:
@@ -79,15 +107,16 @@ def platform_subject_for_email(email: str) -> str:
 async def user_for_platform_token(token: str) -> User | None:
     """Verify a platform token and map its subject to the existing domain user.
 
-    Raises IdentityUnavailableError instead of rejecting while the authority's
-    last key fetch failed: the verifier reports fetch failures (and the unknown
-    keys during its refresh cooldown) as invalid tokens, and a rejection makes
-    clients discard valid sessions.
+    Raises IdentityUnavailableError instead of rejecting when this token's
+    signing key could not be obtained because the authority's key fetch failed:
+    the verifier reports that (and unknown keys during its refresh cooldown) as
+    an invalid token, and a rejection makes clients discard valid sessions.
+    Tokens that fail against a cached key are always rejected.
     """
     try:
         claims = await access_token_verifier().verify(token)
     except InvalidAccessToken as error:
-        if jwks_provider().last_fetch_failed:
+        if _signing_key_unavailable(token):
             raise IdentityUnavailableError("identity keys unavailable") from error
         return None
     if claims.household_id != settings.identity_household_id:

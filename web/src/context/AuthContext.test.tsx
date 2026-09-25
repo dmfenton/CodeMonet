@@ -9,9 +9,11 @@ function token(exp: number): string {
   return `${encode({ alg: 'RS256', typ: 'JWT' })}.${encode({ sub: 'owner-1', exp })}.signature`;
 }
 
-function response(ok: boolean, body: object): Response {
-  return { ok, json: async () => body } as Response;
+function response(ok: boolean, body: object, status = ok ? 200 : 400): Response {
+  return { ok, status, json: async () => body } as Response;
 }
+
+const unavailable = (): Response => response(false, { detail: 'unavailable' }, 503);
 
 describe('AuthContext', () => {
   const fetchMock = vi.fn<typeof fetch>();
@@ -76,6 +78,88 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('auth_access_token')).toBe(refreshed);
     expect(localStorage.getItem('auth_refresh_token')).toBe('refresh-2');
     expect(fetchMock.mock.calls[0]?.[0]).toBe('https://identity.dmfenton.net/v1/oauth/token');
+  });
+
+  it('keeps the stored session and retries when the server cannot give a verdict', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const accessToken = token(Math.floor(Date.now() / 1000) + 3600);
+    localStorage.setItem('auth_access_token', accessToken);
+    localStorage.setItem('auth_refresh_token', 'refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(unavailable())
+      .mockResolvedValueOnce(response(true, { id: 'user-1', email: 'owner@example.com' }));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(result.current.isLoading).toBe(true);
+    expect(localStorage.getItem('auth_access_token')).toBe(accessToken);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(localStorage.getItem('auth_refresh_token')).toBe('refresh-1');
+    vi.useRealTimers();
+  });
+
+  it('persists rotated tokens even when the user lookup is unavailable', async () => {
+    const refreshed = token(Math.floor(Date.now() / 1000) + 3600);
+    localStorage.setItem('auth_access_token', token(Math.floor(Date.now() / 1000) - 60));
+    localStorage.setItem('auth_refresh_token', 'refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(
+        response(true, {
+          access_token: refreshed,
+          refresh_token: 'refresh-2',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        })
+      )
+      .mockResolvedValueOnce(unavailable());
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isLoading).toBe(true);
+    expect(localStorage.getItem('auth_refresh_token')).toBe('refresh-2');
+  });
+
+  it('signs out when identity definitively rejects the refresh token', async () => {
+    localStorage.setItem('auth_access_token', token(Math.floor(Date.now() / 1000) - 60));
+    localStorage.setItem('auth_refresh_token', 'revoked');
+    fetchMock.mockResolvedValueOnce(response(false, { error: 'invalid_grant' }, 400));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(localStorage.getItem('auth_refresh_token')).toBeNull();
+  });
+
+  it('recovers a rejected socket token by refreshing the session', async () => {
+    const first = token(Math.floor(Date.now() / 1000) + 3600);
+    const refreshed = token(Math.floor(Date.now() / 1000) + 7200);
+    localStorage.setItem('auth_access_token', first);
+    localStorage.setItem('auth_refresh_token', 'refresh-1');
+    fetchMock
+      .mockResolvedValueOnce(response(true, { id: 'user-1', email: 'owner@example.com' }))
+      .mockResolvedValueOnce(
+        response(true, {
+          access_token: refreshed,
+          refresh_token: 'refresh-2',
+          expires_in: 3600,
+          token_type: 'Bearer',
+        })
+      )
+      .mockResolvedValueOnce(response(true, { id: 'user-1', email: 'owner@example.com' }));
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await waitFor(() => expect(result.current.accessToken).toBe(first));
+
+    act(() => result.current.recoverSession());
+
+    await waitFor(() => expect(result.current.accessToken).toBe(refreshed));
+    expect(result.current.isAuthenticated).toBe(true);
   });
 
   it('requests a PKCE authorization link from shared identity', async () => {
@@ -163,11 +247,21 @@ describe('AuthContext', () => {
     localStorage.setItem('auth_access_token', 'access');
     localStorage.setItem('auth_refresh_token', 'refresh');
     localStorage.setItem('auth_code_verifier', 'verifier');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    // No verdict from identity: recovery is retrying when the user signs out.
+    fetchMock.mockRejectedValue(new TypeError('network down'));
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
 
     act(() => result.current.signOut());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
 
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.isLoading).toBe(false);
+    vi.useRealTimers();
     expect(localStorage.getItem('auth_access_token')).toBeNull();
     expect(localStorage.getItem('auth_refresh_token')).toBeNull();
     expect(localStorage.getItem('auth_code_verifier')).toBeNull();

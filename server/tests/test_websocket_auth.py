@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from fenton_identity import RSAJsonWebKey
 from starlette.websockets import WebSocketDisconnect
 
 from code_monet import main
@@ -38,13 +39,18 @@ def client(activate: AsyncMock) -> TestClient:  # noqa: ARG001 - installs the ac
     return TestClient(main.app)
 
 
+def _clear_platform_caches() -> None:
+    platform.jwks_cache.cache_clear()
+    platform.jwks_provider.cache_clear()
+    platform.access_token_verifier.cache_clear()
+
+
 @pytest.fixture(autouse=True)
-def fresh_verifier() -> Iterator[None]:
-    platform.jwks_provider.cache_clear()
-    platform.access_token_verifier.cache_clear()
+def fresh_verifier(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setattr(settings, "jwt_secret", "test-secret-at-least-32-bytes-long")
+    _clear_platform_caches()
     yield
-    platform.jwks_provider.cache_clear()
-    platform.access_token_verifier.cache_clear()
+    _clear_platform_caches()
 
 
 class _SessionContext:
@@ -165,6 +171,16 @@ def test_identity_outage_is_not_a_rejection_through_real_verifier(client: TestCl
 
     response = client.get("/auth/me", headers={"Authorization": f"Bearer {_well_formed_token()}"})
     assert response.status_code == 503
+
+
+@pytest.mark.usefixtures("identity_down")
+def test_token_failing_against_cached_key_is_rejected_after_outage(client: TestClient) -> None:
+    # An outage leaves the provider's last fetch failed, but a token whose key is
+    # cached fails locally (bad signature) — that is a verdict, not an outage.
+    assert _close_code(client, f"/ws?token={_well_formed_token('rotated-key')}")[0] == 1011
+    platform.jwks_cache().replace([RSAJsonWebKey(kid="cached-key", n="AQAB", e="AQAB")])
+
+    assert _close_code(client, f"/ws?token={_well_formed_token('cached-key')}")[0] == 4001
 
 
 @pytest.mark.usefixtures("identity_down")

@@ -11,6 +11,8 @@ export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 interface UseWebSocketOptions {
   onMessage: (message: ServerMessage) => void;
   token: string | null;
+  /** Called when the server rejects the token (close 4001); a new token reconnects. */
+  onAuthError?: () => void;
   autoConnect?: boolean;
 }
 
@@ -24,6 +26,7 @@ interface UseWebSocketReturn {
 export function useWebSocket({
   onMessage,
   token,
+  onAuthError,
   autoConnect = true,
 }: UseWebSocketOptions): UseWebSocketReturn {
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
@@ -67,9 +70,10 @@ export function useWebSocket({
         setStatus('disconnected');
         wsRef.current = null;
 
-        // Auth error - don't auto-reconnect (user needs to re-authenticate)
+        // Token rejected: refresh it; the token change reconnects via connect's deps.
         if (event.code === 4001) {
-          console.log('[WebSocket] Auth error, not reconnecting');
+          console.log('[WebSocket] Auth error, refreshing session');
+          onAuthError?.();
           return;
         }
 
@@ -95,7 +99,7 @@ export function useWebSocket({
         connect();
       }, 3000);
     }
-  }, [token, onMessage]);
+  }, [token, onMessage, onAuthError]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
