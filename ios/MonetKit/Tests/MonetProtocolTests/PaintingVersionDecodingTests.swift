@@ -173,6 +173,14 @@ struct PaintingVersionDecodingTests {
         }
     }
 
+    @Test("stroke op with width <= 0 throws, mirroring parseRevealOp's rejection")
+    func nonPositiveWidthStrokeOpThrows() {
+        let json = Data(#"["s", 0, 1, 2, 3, 4]"#.utf8)
+        #expect(throws: RevealOpDecodingError.self) {
+            _ = try JSONDecoder().decode(RevealOp.self, from: json)
+        }
+    }
+
     @Test("gallery entry defaults format to strokes when absent")
     func galleryEntryDefaultsFormat() throws {
         let json = Data(#"{"id":"p1","created_at":"2026-01-01T00:00:00Z","piece_number":1,"stroke_count":3}"#.utf8)

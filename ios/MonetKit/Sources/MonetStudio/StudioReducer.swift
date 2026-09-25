@@ -185,7 +185,7 @@ public enum StudioReducer {
             s.performance.travelTarget = nil
         case .revealWord:
             if case let .words(_, text) = s.performance.onStage {
-                let words = text.split(separator: " ").map(String.init)
+                let words = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
                 let newIndex = min(s.performance.wordIndex + 1, words.count)
                 s.performance.wordIndex = newIndex
                 s.performance.revealedText = words.prefix(newIndex).joined(separator: " ")
@@ -272,7 +272,7 @@ public enum StudioReducer {
     private static let maxWordsPerChunk = 25
 
     private static func wordCount(_ text: String) -> Int {
-        text.split(separator: " ").count
+        text.split(whereSeparator: { $0.isWhitespace }).count
     }
 
     private static func distance(_ a: Point, _ b: Point) -> Double {

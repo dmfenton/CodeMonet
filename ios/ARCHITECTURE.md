@@ -295,15 +295,25 @@ work package must pick up before program painting is usable end to end):
   `ios/CodeMonet/Features/Gallery/`, `Home/`) — reads `GalleryPieceFormat`/
   `imageURL` are decoded and available, but nothing in the UI layer consumes
   them yet.
-- **`IncrementalCanvasRenderer` wiring.** `MonetRender/IncrementalCanvasRenderer.swift`
-  (baked-bitmap-plus-in-progress-stroke rendering, with its own committed-
-  count-independent-cost benchmark test) already exists but is not yet
-  referenced anywhere under `ios/CodeMonet` — the live `CanvasView` still
-  needs to be switched onto it. Not modified by this pass; flagged here so
-  the next pass doesn't assume it's already wired because the type exists.
-- **`TOOL_ICONS`** (SF Symbols for the message stream, ux spec, owned by
-  Studio UI) has no `paint` entry yet — only the `MonetStudio` text labels
-  (`ToolLabels.startedText`/`completedText`) were added.
-
 None of the above required touching a frozen public contract; they are
 purely additive follow-on work in packages 4/5/6.
+
+**Wired since the above was written:**
+
+- **`IncrementalCanvasRenderer` wiring.** `CodeMonet/Features/Studio/CanvasView.swift`
+  now drives `MonetRender.IncrementalCanvasRenderer` through a private
+  `IncrementalCanvasCache` held as `@State`: committed strokes are baked
+  once (only the newly-appended tail of `state.strokes` each frame, not a
+  full replay), and only the two in-progress strokes (human drag + agent
+  stroke) are redrawn on top per `TimelineView` tick — no longer
+  `CanvasRenderer.renderCommitted` over the full stroke history every
+  frame. The cache fully rebakes on a canvas-size change, a
+  `(pieceNumber, viewingPiece)` change (new/loaded/gallery canvas), or
+  whenever `state.strokes` is shorter than what's already baked (a
+  generic reset fallback, e.g. `.clear`). This still does **not** draw
+  `state.painting` (see "Drawing" above, still unbuilt) — only the
+  vector-stroke path.
+- **`TOOL_ICONS`.** `StudioPresentation.KnownTool` now has a `.paint` case
+  (`paintpalette.fill`/`paintpalette`), so a `paint` code-execution message
+  gets a real icon instead of falling through to the generic
+  "Running code" presentation.

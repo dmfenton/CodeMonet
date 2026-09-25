@@ -275,7 +275,13 @@ public func advanceRevealPlan(_ plan: RevealPlan, cursor: inout RevealCursor, el
     if done {
         target = nOps
     } else {
-        target = 0
+        // Resume from `cursor.op`, not 0: `elapsedMs` is monotonically
+        // increasing and `cursor.op` only moves forward, so the target can
+        // never regress. Starting from 0 every call would rescan every
+        // already-revealed op each frame (O(ops revealed so far) instead of
+        // O(newly revealed) bookkeeping), matching the TS reference
+        // (app/src/renderers/revealPlan.ts).
+        target = cursor.op
         while target < nOps, plan.opEndMs[target] <= elapsedMs {
             target += 1
         }

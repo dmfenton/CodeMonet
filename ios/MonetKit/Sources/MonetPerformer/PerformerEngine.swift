@@ -131,7 +131,7 @@ public final class PerformerEngine: @unchecked Sendable {
 
     private func tickWords(state: StudioState, now: TimeInterval) -> PerformerTickResult {
         guard case let .words(_, text) = state.performance.onStage else { return PerformerTickResult() }
-        let totalWords = text.split(separator: " ").count
+        let totalWords = text.split(whereSeparator: { $0.isWhitespace }).count
         if state.performance.wordIndex < totalWords {
             let elapsedMS = lastWordRevealTime.map { (now - $0) * 1000 } ?? .infinity
             if elapsedMS >= PerformerConstants.wordDelayMS {

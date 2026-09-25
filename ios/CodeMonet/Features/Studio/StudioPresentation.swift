@@ -22,6 +22,7 @@ enum StudioPresentation {
         case imagine
         case signCanvas = "sign_canvas"
         case namePiece = "name_piece"
+        case paint
     }
 
     /// A tool's accent color, expressed as a key rather than a `Color` so
@@ -68,6 +69,8 @@ enum StudioPresentation {
             return ToolPresentation(icon: "signature", activeIcon: "pencil.and.outline", displayName: "signing", colorKey: .primary)
         case .namePiece:
             return ToolPresentation(icon: "textformat", activeIcon: "character.cursor.ibeam", displayName: "naming piece", colorKey: .primary)
+        case .paint:
+            return ToolPresentation(icon: "paintpalette.fill", activeIcon: "paintpalette", displayName: "painting", colorKey: .primary)
         }
     }
 
@@ -225,7 +228,10 @@ enum StudioPresentation {
         if !paused, !viewOnly {
             buttons.append(ActionBarButton(
                 kind: .draw,
-                icon: drawingEnabled ? "pencil" : "pencil.slash",
+                // Not `.slash`: that glyph reads as "disabled/prohibited",
+                // but this button is always tappable — `active`/`accent`
+                // styling (ActionBarView) already distinguishes on vs off.
+                icon: "pencil",
                 label: "Draw",
                 active: drawingEnabled,
                 disabled: !connected

@@ -40,6 +40,12 @@ struct NewCanvasView: View {
                     suggestionChips(palette: palette)
 
                     StylePickerView(label: "Style", selection: $style, variant: .pills, testIDPrefix: "new-canvas-style")
+                        .onChange(of: style) { _, newValue in
+                            // Persist immediately (RN's `handleStyleChange` dispatches on
+                            // selection, not on submit) so the choice survives even if the
+                            // sheet is dismissed without starting a canvas.
+                            environment.studio.setStyle(newValue)
+                        }
 
                     sizeProfileChips(palette: palette)
 

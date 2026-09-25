@@ -123,8 +123,8 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
         app.buttons["home-gallery"].tap()
 
-        XCTAssertTrue(app.navigationBars["Gallery"].waitForExistence(timeout: 10))
-        app.buttons["Close"].tap()
+        XCTAssertTrue(app.staticTexts["Gallery"].waitForExistence(timeout: 10))
+        app.buttons["gallery-close-button"].tap()
 
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 10))
     }

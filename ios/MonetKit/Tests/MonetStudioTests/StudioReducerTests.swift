@@ -238,6 +238,22 @@ struct StudioReducerTests {
         #expect(state.performance.revealedText == "one two")
     }
 
+    @Test("revealWord splits on any whitespace run, not just the space character")
+    func revealWordSplitsOnNewlines() {
+        // Real agent thinking_delta text contains embedded newlines (paragraph
+        // breaks), e.g. "\n\nFirst", matching the TS reference's `/\s+/` split
+        // (shared/src/canvas/reducer.ts). A literal-space-only split would
+        // treat "one\n\ntwo" as a single word.
+        var state = StudioState()
+        state.performance.onStage = .words(id: "w", text: "one\n\ntwo\tthree")
+        state = StudioReducer.reduce(state, .revealWord)
+        #expect(state.performance.revealedText == "one")
+        state = StudioReducer.reduce(state, .revealWord)
+        #expect(state.performance.revealedText == "one two")
+        state = StudioReducer.reduce(state, .revealWord)
+        #expect(state.performance.revealedText == "one two three")
+    }
+
     @Test("revealWord is a no-op when onStage isn't a words item")
     func revealWordNoOpForNonWords() {
         var state = StudioState()

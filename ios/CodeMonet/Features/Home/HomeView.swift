@@ -14,8 +14,19 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
     @State private var prompt = ""
-    @State private var style: DrawingStyleType = .plotter
     @FocusState private var promptFocused: Bool
+
+    /// Reads/writes the canonical `StudioState.drawingStyle` (protocol-state
+    /// spec's "current style" slot) instead of a per-view `@State`, so the
+    /// user's Plotter/Paint choice survives Home being recreated on every
+    /// Home <-> Studio round trip (`RootView`'s `screenContent` switch
+    /// constructs a fresh `HomeView` each time `.home` is shown).
+    private var style: Binding<DrawingStyleType> {
+        Binding(
+            get: { environment.studio.state.drawingStyle },
+            set: { environment.studio.setStyle($0) }
+        )
+    }
 
     var body: some View {
         let state = environment.studio.state
@@ -47,7 +58,7 @@ struct HomeView: View {
         .background(palette.surface)
         .accessibilityIdentifier("home-panel")
         .sheet(isPresented: newCanvasPresented) {
-            NewCanvasView(initialStyle: style)
+            NewCanvasView(initialStyle: style.wrappedValue)
         }
     }
 
@@ -72,7 +83,7 @@ struct HomeView: View {
 
             promptInput(connected: connected)
 
-            StylePickerView(label: "Style", selection: $style, variant: .segmented, testIDPrefix: "style")
+            StylePickerView(label: "Style", selection: style, variant: .segmented, testIDPrefix: "style")
 
             surpriseMeButton(connected: connected)
         }
@@ -206,13 +217,13 @@ struct HomeView: View {
         guard HomeSelectors.canSubmit(prompt: prompt, connected: environment.studio.connected) else { return }
         prompt = ""
         promptFocused = false
-        environment.studio.send(.newCanvas(direction: trimmed, drawingStyle: style, canvasWidth: nil, canvasHeight: nil))
+        environment.studio.send(.newCanvas(direction: trimmed, drawingStyle: style.wrappedValue, canvasWidth: nil, canvasHeight: nil))
         environment.studio.send(.resume(direction: nil))
         environment.navigation.screen = .studio
     }
 
     private func startSurpriseMe() {
-        environment.studio.send(.newCanvas(direction: nil, drawingStyle: style, canvasWidth: nil, canvasHeight: nil))
+        environment.studio.send(.newCanvas(direction: nil, drawingStyle: style.wrappedValue, canvasWidth: nil, canvasHeight: nil))
         environment.studio.send(.resume(direction: nil))
         environment.navigation.screen = .studio
     }

@@ -79,7 +79,9 @@ extension RevealOp: Codable {
         case "s":
             // width + 1..N (x,y) pairs: numbers.count >= 3 and
             // (numbers.count - 1) is even (program-painting spec §3.3).
-            guard numbers.count >= 3, (numbers.count - 1).isMultiple(of: 2) else {
+            guard numbers.count >= 3, (numbers.count - 1).isMultiple(of: 2), numbers[0] > 0 else {
+                // Mirrors `parseRevealOp` (shared/src/renderer/reveal.ts),
+                // which also rejects width <= 0 rather than decoding it.
                 throw RevealOpDecodingError.malformedStroke(numberCount: numbers.count)
             }
             let width = numbers[0]

@@ -85,7 +85,7 @@ struct AuthView: View {
             .disabled(isSubmitting)
             .font(.system(size: fieldFontSize))
             .padding(.horizontal, 12)
-            .frame(height: 48)
+            .frame(minHeight: 48)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(palette.divider, lineWidth: 1)

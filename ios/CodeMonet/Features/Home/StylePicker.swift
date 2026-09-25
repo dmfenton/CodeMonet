@@ -31,7 +31,7 @@ struct StylePickerView: View {
                 .foregroundStyle(palette.tertiaryText)
 
             HStack(spacing: variant == .segmented ? 0 : FentonSpacing.small) {
-                option(.plotter, systemImage: "pencil.and.outline", title: "Plotter", palette: palette)
+                option(.plotter, systemImage: "pencil", title: "Plotter", palette: palette)
                 option(.paint, systemImage: "paintpalette", title: "Paint", palette: palette)
             }
             .padding(variant == .segmented ? FentonSpacing.extraSmall : 0)

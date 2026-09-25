@@ -97,8 +97,14 @@ public final class StudioStore {
             guard let token = await self.tokenProvider.currentToken() else { return }
             self.currentToken = token
             self.recordSpan(name: "ws.connect")
+            // Subscribe before opening the socket: `openSocket` yields `.connected`
+            // into the continuation synchronously after the task starts, and that
+            // continuation is only created by `events()`. Calling `connect` first
+            // would drop the very first `.connected` event, leaving `connected`
+            // false forever on a cold launch (see StudioStore tests).
+            let stream = await self.socket.events()
             await self.socket.connect(token: token, traceID: traceID)
-            for await event in await self.socket.events() {
+            for await event in stream {
                 await self.handle(event)
             }
         }
@@ -179,6 +185,17 @@ public final class StudioStore {
     /// unconditionally.
     public func clearViewing() {
         apply(.clearViewing)
+    }
+
+    /// Persists the user's Plotter/Paint choice into the shared,
+    /// session-lived `StudioState.drawingStyle` (protocol-state spec's
+    /// canonical "current style" slot, matching RN's
+    /// `canvasState.drawingStyle`) rather than a per-view `@State`, so the
+    /// choice survives Home <-> Studio round trips instead of resetting to
+    /// Plotter every time Home is recreated. Mirrors `clearViewing()`'s
+    /// pattern for exposing a client-only `StudioEvent` publicly.
+    public func setStyle(_ style: DrawingStyleType) {
+        apply(.setStyle(style, style == .paint ? .paint : .plotter))
     }
 
     /// Applies a gallery piece fetched via REST (`GalleryView.select`,

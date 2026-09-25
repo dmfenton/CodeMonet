@@ -72,6 +72,13 @@ struct MessageStreamView: View {
                             }
                         }
                     }
+                    // `MessageBubbleView`'s `.transition` (ux spec §6.3:
+                    // fade + slide-up on entrance) only takes effect inside
+                    // an active animation transaction; the message list is
+                    // driven by `StudioStore`'s reducer/performer tick, not
+                    // a SwiftUI-owned `@State` write, so nothing wrapped
+                    // insertions in `withAnimation` before this.
+                    .animation(.easeOut(duration: 0.3), value: messages.count)
                     .padding(FentonSpacing.small)
                     .background(
                         GeometryReader { geometry in

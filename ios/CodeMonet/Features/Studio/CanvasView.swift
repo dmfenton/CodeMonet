@@ -26,7 +26,7 @@ struct CanvasView: View {
     let drawingEnabled: Bool
 
     @Environment(AppEnvironment.self) private var environment
-    private let renderer: any CanvasRenderer = CoreGraphicsCanvasRenderer()
+    @State private var canvasCache = IncrementalCanvasCache()
 
     @State private var isDragging = false
 
@@ -73,38 +73,13 @@ struct CanvasView: View {
 
     @ViewBuilder
     private func frame(state: StudioState, canvasSize: CGSize) -> some View {
-        if let image = renderer.renderCommitted(strokes: renderPaths(state: state), styleConfig: state.styleConfig, size: canvasSize) {
+        if let image = canvasCache.frame(state: state, canvasSize: canvasSize) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .accessibilityHidden(true)
         } else {
             Color.white
         }
-    }
-
-    /// Committed strokes plus the two in-progress strokes, synthesized as
-    /// `Path` values so `CanvasRenderer` draws all three through the one
-    /// pipeline (performer-render spec §9's in-progress rendering is the
-    /// renderer package's job to make visually rich; here we just supply
-    /// the geometry it needs).
-    private func renderPaths(state: StudioState) -> [MonetProtocol.Path] {
-        var paths = state.strokes
-        if state.currentStroke.count >= 2 {
-            paths.append(MonetProtocol.Path(type: .polyline, points: state.currentStroke, author: .human))
-        }
-        let agentStroke = state.performance.agentStroke
-        if agentStroke.count >= 2 {
-            let style = state.performance.agentStrokeStyle
-            paths.append(MonetProtocol.Path(
-                type: .polyline,
-                points: agentStroke,
-                author: .agent,
-                color: style?.color,
-                strokeWidth: style?.strokeWidth,
-                opacity: style?.opacity
-            ))
-        }
-        return paths
     }
 
     private func isAnimating(_ state: StudioState) -> Bool {
@@ -192,5 +167,70 @@ struct CanvasView: View {
         case .thinking, .executing, .drawing:
             return "Canvas, agent is drawing"
         }
+    }
+}
+
+/// Wraps `MonetRender.IncrementalCanvasRenderer` behind a per-frame
+/// `frame(state:canvasSize:)` call so `CanvasView` never has to replay every
+/// committed stroke on every `TimelineView` tick (was `renderer.renderCommitted`
+/// over the full `state.strokes` array each frame — O(strokes-in-piece) per
+/// frame, exactly the cost `IncrementalCanvasRenderer`'s doc comment warns
+/// against). Held as a `@State` object reference on `CanvasView` so its
+/// identity — and the baked bitmap inside it — survives across frames;
+/// only its *internal* fields mutate per call, never the `@State` binding
+/// itself, so driving it from inside the `TimelineView` tick is safe.
+///
+/// Rebakes from scratch when the canvas size changes, when
+/// `(pieceNumber, viewingPiece)` changes (a new/loaded/gallery canvas —
+/// covers `NEW_CANVAS`/`LOAD_CANVAS`/`CLEAR_VIEWING`), or whenever
+/// `state.strokes` is shorter than what's already baked (a safety net for
+/// any other wholesale reset, e.g. `.clear`, without needing to enumerate
+/// every such `StudioEvent` here). Otherwise only the newly-appended tail
+/// of `state.strokes` is committed.
+@MainActor
+private final class IncrementalCanvasCache {
+    private var renderer: IncrementalCanvasRenderer?
+    private var bakedCanvasSize: CGSize = .zero
+    private var bakedEpoch = ""
+    private var bakedCount = 0
+
+    func frame(state: StudioState, canvasSize: CGSize) -> CGImage? {
+        let epoch = "\(state.pieceNumber)|\(state.viewingPiece.map(String.init) ?? "-")"
+        if renderer == nil || bakedCanvasSize != canvasSize || bakedEpoch != epoch || state.strokes.count < bakedCount {
+            let fresh = IncrementalCanvasRenderer(size: canvasSize, styleConfig: state.styleConfig)
+            fresh.commit(state.strokes)
+            renderer = fresh
+            bakedCanvasSize = canvasSize
+            bakedEpoch = epoch
+            bakedCount = state.strokes.count
+        } else if state.strokes.count > bakedCount {
+            renderer?.commit(Array(state.strokes[bakedCount...]))
+            bakedCount = state.strokes.count
+        }
+
+        return renderer?.renderFrame(inProgressStrokes: Self.inProgressPaths(state: state))
+    }
+
+    /// Synthesizes `Path` values for the two in-progress strokes (human
+    /// drag + agent's current stroke) so they draw through the same
+    /// pipeline as committed ones, without being baked/persisted.
+    private static func inProgressPaths(state: StudioState) -> [MonetProtocol.Path] {
+        var paths: [MonetProtocol.Path] = []
+        if state.currentStroke.count >= 2 {
+            paths.append(MonetProtocol.Path(type: .polyline, points: state.currentStroke, author: .human))
+        }
+        let agentStroke = state.performance.agentStroke
+        if agentStroke.count >= 2 {
+            let style = state.performance.agentStrokeStyle
+            paths.append(MonetProtocol.Path(
+                type: .polyline,
+                points: agentStroke,
+                author: .agent,
+                color: style?.color,
+                strokeWidth: style?.strokeWidth,
+                opacity: style?.opacity
+            ))
+        }
+        return paths
     }
 }

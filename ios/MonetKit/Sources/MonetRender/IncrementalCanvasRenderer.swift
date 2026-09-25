@@ -54,13 +54,21 @@ public final class IncrementalCanvasRenderer: @unchecked Sendable {
     /// never mutated by this call — cost is O(in-progress stroke), not
     /// O(strokes-in-piece).
     public func renderFrame(inProgress: Path? = nil) -> CGImage? {
+        renderFrame(inProgressStrokes: inProgress.map { [$0] } ?? [])
+    }
+
+    /// Same as `renderFrame(inProgress:)`, but composites several
+    /// in-progress strokes on top of the baked bitmap in one frame (e.g. the
+    /// human's current drag *and* the agent's current stroke at once) —
+    /// still O(in-progress strokes), never O(strokes-in-piece).
+    public func renderFrame(inProgressStrokes paths: [Path]) -> CGImage? {
         guard let baked = bakedContext?.makeImage() else { return nil }
         guard let frame = CanvasRendering.makeContext(width: width, height: height) else { return baked }
         let rect = CGRect(x: 0, y: 0, width: width, height: height)
         frame.draw(baked, in: rect)
-        if let inProgress {
-            let size = CGSize(width: width, height: height)
-            CanvasRendering.drawCompletedPath(inProgress, into: frame, styleConfig: styleConfig, canvasSize: size)
+        let size = CGSize(width: width, height: height)
+        for path in paths where path.points.count >= 2 {
+            CanvasRendering.drawCompletedPath(path, into: frame, styleConfig: styleConfig, canvasSize: size)
         }
         return frame.makeImage()
     }
