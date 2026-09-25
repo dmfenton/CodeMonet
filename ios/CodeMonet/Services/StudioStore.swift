@@ -17,6 +17,12 @@ import QuartzCore
 @Observable
 public final class StudioStore {
     public private(set) var state = StudioState()
+    /// Whether the WebSocket is currently open (ux spec §1.3: gates
+    /// PromptInput submit, Surprise Me, the Continue card, and the Home
+    /// screen's "Connecting…" hint). Server-push-driven state has no
+    /// equivalent signal, so this mirrors `StudioSocketEvent.connected`/
+    /// `.disconnected` directly.
+    public private(set) var connected = false
 
     private let socket: StudioWebSocketClient
     private let rest: CodeMonetRESTClient
@@ -81,11 +87,11 @@ public final class StudioStore {
     private func handle(_ event: StudioSocketEvent) async {
         switch event {
         case .connected:
-            break
+            connected = true
         case let .message(message):
             await route(message)
         case .disconnected:
-            break
+            connected = false
         case .decodeFailure:
             break
         }

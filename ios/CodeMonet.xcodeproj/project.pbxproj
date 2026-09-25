@@ -7,16 +7,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0577A6BAE0256D55C48BB321 /* WipPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69ECA128215DE3C5212546F /* WipPreview.swift */; };
+		0B282C422D4AA72C5DB1E7FF /* ThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */; };
 		0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */; };
 		12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */; };
 		1981E79F549C22B21554CC5B /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488E8004DCBEBAB3333BB48C /* HomeView.swift */; };
 		1C62016F7C82F1CB6FA3F3C2 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */; };
+		217A53C54D9CF3D198DC48A4 /* GalleryFormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE4E9C51B443F946BFE95703 /* GalleryFormattingTests.swift */; };
 		22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */; };
 		2B74D0691CE6B72A70C92872 /* StudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF72546FBFC9133172136F1B /* StudioStore.swift */; };
+		2CAC5C31442E586C578D013D /* AuthenticatedThumbnailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC89CDBDCF9286BCAC666312 /* AuthenticatedThumbnailView.swift */; };
+		2DC1362F53FD8B5D6D924AE7 /* StylePicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB6028F4BF86D455BE8AFF1 /* StylePicker.swift */; };
+		35BECCA1FA2E0615268B7023 /* HomeSelectorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */; };
 		466C8B81C8862BFB109AE648 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E22EBD765435D2E439AA9DE0 /* AuthService.swift */; };
+		4EF180A8912A12A0B93C3F4E /* ThumbnailCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 373D5E81A5A3E2F361A6A797 /* ThumbnailCache.swift */; };
 		4F5CC55FA4AE9C5260EB80EB /* MonetPerformer in Frameworks */ = {isa = PBXBuildFile; productRef = 2B76A6096ECD10C0841D7D44 /* MonetPerformer */; };
 		563C995260FFA885A18E0D78 /* StudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7734D18A173A15DE0904EB0E /* StudioView.swift */; };
 		587FB805A51C21177B1132A4 /* Navigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4AC184270F76BB400398C13 /* Navigation.swift */; };
+		588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5BE0E77B05628D4B9AFE7B /* GalleryFormatting.swift */; };
 		5CAB7C9FA43579647CFEEE3D /* CodeMonetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F335A83678298111142386B /* CodeMonetTests.swift */; };
 		62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 669B99ED0E92CCD268014A1B /* GalleryView.swift */; };
 		66C00DCA9EA9160B7DE335A5 /* CodeMonetUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */; };
@@ -28,10 +36,13 @@
 		9EDFA094FC48599B85E91FF6 /* MonetRender in Frameworks */ = {isa = PBXBuildFile; productRef = E379AD9D8DC88148531D636A /* MonetRender */; };
 		A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94A1ADB343BFCBF9580CFFA /* RootView.swift */; };
 		ADF3C2A714F02B1F9AE52442 /* FentonDesignSystem in Frameworks */ = {isa = PBXBuildFile; productRef = 65012A4E726A7B7A9C914DAC /* FentonDesignSystem */; };
+		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
+		D148D506115831798F412C22 /* CanvasSizeProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12336794874A19B003081A3 /* CodeMonetApp.swift */; };
 		EB090629247AA21B7BA449D5 /* MonetNetworking in Frameworks */ = {isa = PBXBuildFile; productRef = 97F3CD7501D5E62B871DB7CC /* MonetNetworking */; };
+		EFEB74A8F727EFD3DC54D8D9 /* CanvasSizeProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF81FFDD70A7EBB7EE730F6 /* CanvasSizeProfileTests.swift */; };
 		F95DD9D4FE5C88F906C0E22C /* MonetStudio in Frameworks */ = {isa = PBXBuildFile; productRef = 15B7043D6142FDEA8DD537B7 /* MonetStudio */; };
 		F9972B04273718665320F46B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A178E0739AE265CF31CAF184 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -56,11 +67,14 @@
 /* Begin PBXFileReference section */
 		02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetUITests.swift; sourceTree = "<group>"; };
 		1F335A83678298111142386B /* CodeMonetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetTests.swift; sourceTree = "<group>"; };
+		2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectorsTests.swift; sourceTree = "<group>"; };
 		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
+		373D5E81A5A3E2F361A6A797 /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
 		3C75594C9100EECCCD83DC47 /* CodeMonet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeMonet.entitlements; sourceTree = "<group>"; };
 		3CEBCE24B9CCAF6F2C71EE1C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewCanvasView.swift; sourceTree = "<group>"; };
 		488E8004DCBEBAB3333BB48C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		4E5BE0E77B05628D4B9AFE7B /* GalleryFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryFormatting.swift; sourceTree = "<group>"; };
 		62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		669B99ED0E92CCD268014A1B /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		679612E25876041328C74819 /* MonetKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonetKit; path = MonetKit; sourceTree = SOURCE_ROOT; };
@@ -70,18 +84,26 @@
 		7734D18A173A15DE0904EB0E /* StudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioView.swift; sourceTree = "<group>"; };
 		80AA7293B1AC8B23B70DE4F7 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetDesignSystem.swift; sourceTree = "<group>"; };
+		8DF81FFDD70A7EBB7EE730F6 /* CanvasSizeProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSizeProfileTests.swift; sourceTree = "<group>"; };
+		901C6365C3450B9C1BFB320B /* HomeSelectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectors.swift; sourceTree = "<group>"; };
 		95E266E95B648C934E866D73 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetIdentityClient.swift; sourceTree = "<group>"; };
 		AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		ABB6028F4BF86D455BE8AFF1 /* StylePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePicker.swift; sourceTree = "<group>"; };
 		B4E557AA1ADAAA86E5D6CC25 /* CodeMonetTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C12336794874A19B003081A3 /* CodeMonetApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetApp.swift; sourceTree = "<group>"; };
 		C4AC184270F76BB400398C13 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		CF72546FBFC9133172136F1B /* StudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioStore.swift; sourceTree = "<group>"; };
+		D69ECA128215DE3C5212546F /* WipPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WipPreview.swift; sourceTree = "<group>"; };
 		D810FB72EA0A50E2B1123CCB /* CodeMonet.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CodeMonet.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DC89CDBDCF9286BCAC666312 /* AuthenticatedThumbnailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedThumbnailView.swift; sourceTree = "<group>"; };
 		E22EBD765435D2E439AA9DE0 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSizeProfile.swift; sourceTree = "<group>"; };
 		E94A1ADB343BFCBF9580CFFA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCacheTests.swift; sourceTree = "<group>"; };
+		FE4E9C51B443F946BFE95703 /* GalleryFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryFormattingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -112,6 +134,14 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		023CA8593E656B3022625674 /* NewCanvas */ = {
+			isa = PBXGroup;
+			children = (
+				8DF81FFDD70A7EBB7EE730F6 /* CanvasSizeProfileTests.swift */,
+			);
+			path = NewCanvas;
+			sourceTree = "<group>";
+		};
 		034B2D671448507823C3DE37 /* App */ = {
 			isa = PBXGroup;
 			children = (
@@ -129,14 +159,27 @@
 		104EB8B041E4D7EA2CCD195D /* Home */ = {
 			isa = PBXGroup;
 			children = (
+				901C6365C3450B9C1BFB320B /* HomeSelectors.swift */,
 				488E8004DCBEBAB3333BB48C /* HomeView.swift */,
+				ABB6028F4BF86D455BE8AFF1 /* StylePicker.swift */,
+				D69ECA128215DE3C5212546F /* WipPreview.swift */,
 			);
 			path = Home;
+			sourceTree = "<group>";
+		};
+		12D69AB9AD0C767ABA637BE5 /* Gallery */ = {
+			isa = PBXGroup;
+			children = (
+				FE4E9C51B443F946BFE95703 /* GalleryFormattingTests.swift */,
+				F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */,
+			);
+			path = Gallery;
 			sourceTree = "<group>";
 		};
 		1927B50E6983C5F3C5ED057E /* NewCanvas */ = {
 			isa = PBXGroup;
 			children = (
+				E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */,
 				3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */,
 			);
 			path = NewCanvas;
@@ -154,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				1F335A83678298111142386B /* CodeMonetTests.swift */,
+				758DC3DD05175653BED85E86 /* Features */,
 			);
 			path = CodeMonetTests;
 			sourceTree = "<group>";
@@ -198,6 +242,16 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		758DC3DD05175653BED85E86 /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				12D69AB9AD0C767ABA637BE5 /* Gallery */,
+				E6BB07AB0CB03917516DF73A /* Home */,
+				023CA8593E656B3022625674 /* NewCanvas */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
 		78F12125EF83ABDD35CFE3A8 /* DesignSystem */ = {
 			isa = PBXGroup;
 			children = (
@@ -229,7 +283,10 @@
 		A4C3C6B736C4A4AB47AF0849 /* Gallery */ = {
 			isa = PBXGroup;
 			children = (
+				DC89CDBDCF9286BCAC666312 /* AuthenticatedThumbnailView.swift */,
+				4E5BE0E77B05628D4B9AFE7B /* GalleryFormatting.swift */,
 				669B99ED0E92CCD268014A1B /* GalleryView.swift */,
+				373D5E81A5A3E2F361A6A797 /* ThumbnailCache.swift */,
 			);
 			path = Gallery;
 			sourceTree = "<group>";
@@ -253,6 +310,14 @@
 				BCD9F2FAF99C4E3FE88CDEC5 /* Studio */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		E6BB07AB0CB03917516DF73A /* Home */ = {
+			isa = PBXGroup;
+			children = (
+				2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */,
+			);
+			path = Home;
 			sourceTree = "<group>";
 		};
 		FB1DBAC48F74370B15476D51 /* Config */ = {
@@ -425,7 +490,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				EFEB74A8F727EFD3DC54D8D9 /* CanvasSizeProfileTests.swift in Sources */,
 				5CAB7C9FA43579647CFEEE3D /* CodeMonetTests.swift in Sources */,
+				217A53C54D9CF3D198DC48A4 /* GalleryFormattingTests.swift in Sources */,
+				35BECCA1FA2E0615268B7023 /* HomeSelectorsTests.swift in Sources */,
+				0B282C422D4AA72C5DB1E7FF /* ThumbnailCacheTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -438,11 +507,15 @@
 				1C62016F7C82F1CB6FA3F3C2 /* AppEnvironment.swift in Sources */,
 				466C8B81C8862BFB109AE648 /* AuthService.swift in Sources */,
 				8309978B3205E4CE361EC262 /* AuthView.swift in Sources */,
+				2CAC5C31442E586C578D013D /* AuthenticatedThumbnailView.swift in Sources */,
+				D148D506115831798F412C22 /* CanvasSizeProfile.swift in Sources */,
 				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
 				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
 				BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */,
+				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
 				62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */,
+				B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */,
 				1981E79F549C22B21554CC5B /* HomeView.swift in Sources */,
 				587FB805A51C21177B1132A4 /* Navigation.swift in Sources */,
 				0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */,
@@ -450,6 +523,9 @@
 				71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */,
 				2B74D0691CE6B72A70C92872 /* StudioStore.swift in Sources */,
 				563C995260FFA885A18E0D78 /* StudioView.swift in Sources */,
+				2DC1362F53FD8B5D6D924AE7 /* StylePicker.swift in Sources */,
+				4EF180A8912A12A0B93C3F4E /* ThumbnailCache.swift in Sources */,
+				0577A6BAE0256D55C48BB321 /* WipPreview.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
