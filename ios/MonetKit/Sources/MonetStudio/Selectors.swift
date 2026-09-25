@@ -21,7 +21,7 @@ public enum StudioSelectors {
         if state.paused { return .paused }
         if state.messages.last?.type == .error { return .error }
         if hasWordsPending(state) { return .thinking }
-        if hasEventOnStage(state) || hasUnmatchedCodeExecutionStarted(state) { return .executing }
+        if hasEventOnStage(state) || hasInProgressEvents(state) { return .executing }
         if hasStrokesPending(state) { return .drawing }
         return .idle
     }
@@ -47,16 +47,32 @@ public enum StudioSelectors {
         return state.performance.buffer.contains { if case .strokes = $0 { true } else { false } }
     }
 
-    private static func hasUnmatchedCodeExecutionStarted(_ state: StudioState) -> Bool {
-        var started: Set<String> = []
-        for message in state.messages where message.type == .codeExecution {
+    /// `hasInProgressEvents` (protocol-state spec §8): builds the set of
+    /// `"{tool_name}_{iteration}"` keys for every completed
+    /// `code_execution` message, then checks whether any *started* message's
+    /// key is missing from that set. The key MUST include `iteration`, not
+    /// just `toolName` — otherwise a `completed` for the same tool in a
+    /// *later* iteration would incorrectly clear an unmatched `started` from
+    /// an *earlier* iteration (two-pass set-membership check, not a
+    /// running insert/remove counter, which conflates same-named tools
+    /// across iterations). Public (not just an `agentStatus` implementation
+    /// detail) because the spec names it as an independently-meaningful
+    /// selector and its own replay-test assertion checks it directly rather
+    /// than the folded-together `agentStatus` (protocol-state spec §10.1).
+    public static func hasInProgressEvents(_ state: StudioState) -> Bool {
+        var completedKeys: Set<String> = []
+        for message in state.messages
+            where message.type == .codeExecution && message.status == .completed {
             guard let tool = message.metadata?.toolName else { continue }
-            if message.status == .started {
-                started.insert(tool)
-            } else if message.status == .completed {
-                started.remove(tool)
+            completedKeys.insert("\(tool)_\(message.iteration ?? 0)")
+        }
+        for message in state.messages
+            where message.type == .codeExecution && message.status == .started {
+            guard let tool = message.metadata?.toolName else { continue }
+            if !completedKeys.contains("\(tool)_\(message.iteration ?? 0)") {
+                return true
             }
         }
-        return !started.isEmpty
+        return false
     }
 }

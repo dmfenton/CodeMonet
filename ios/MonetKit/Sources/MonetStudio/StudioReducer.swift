@@ -72,6 +72,11 @@ public enum StudioReducer {
             s.messages = []
             s.thinking = ""
         case let .loadCanvas(payload):
+            // ⚑ savedCanvas snapshot rule (protocol-state spec §5.4): only
+            // snapshot when we're currently on the live canvas
+            // (`viewingPiece == nil`). Navigating from one gallery piece
+            // straight to another must NOT overwrite the original live-canvas
+            // snapshot, or "back to studio" would restore the wrong thing.
             if s.viewingPiece == nil {
                 s.savedCanvas = SavedCanvas(
                     strokes: s.strokes,
@@ -88,8 +93,19 @@ public enum StudioReducer {
             s.viewingPiece = payload.pieceNumber
             s.canvasWidth = payload.canvasWidth
             s.canvasHeight = payload.canvasHeight
-            s.drawingStyle = payload.drawingStyle
-            s.styleConfig = payload.styleConfig ?? Self.defaultConfig(for: payload.drawingStyle)
+            // ⚑ drawingStyle = action.drawingStyle ?? state.drawingStyle
+            // (keep current if omitted — unlike INIT, this is NOT a reset to
+            // a fixed default). styleConfig = action.styleConfig ??
+            // (action.drawingStyle ? getStyleConfig(action.drawingStyle) :
+            // state.styleConfig) — i.e. if a style *name* arrives without a
+            // config object, derive the config from the name; if neither
+            // arrives, keep the current config untouched.
+            if let config = payload.styleConfig {
+                s.styleConfig = config
+            } else if let style = payload.drawingStyle {
+                s.styleConfig = Self.defaultConfig(for: style)
+            }
+            s.drawingStyle = payload.drawingStyle ?? s.drawingStyle
         case .clearViewing:
             if s.viewingPiece != nil {
                 if let saved = s.savedCanvas {

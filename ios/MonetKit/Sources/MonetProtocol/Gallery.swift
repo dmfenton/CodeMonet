@@ -45,6 +45,27 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
         case title
         case thumbnailToken = "thumbnail_token"
     }
+
+    /// Custom decode: `width`/`height`/`drawing_style` are documented as
+    /// "required, defaults ..." server-side (Pydantic field defaults), which
+    /// in practice means a recording made before the field existed omits the
+    /// key entirely. Confirmed concretely in `text_chunking_flow.json`'s
+    /// `init.gallery[]`/`gallery_update.canvases[]` entries, which carry
+    /// neither `width` nor `height` (protocol-state spec §2.2, §10). Decode
+    /// tolerantly and fall back to the same defaults the current server
+    /// schema declares, rather than throwing on an older fixture.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        createdAt = try container.decode(String.self, forKey: .createdAt)
+        pieceNumber = try container.decode(Int.self, forKey: .pieceNumber)
+        strokeCount = try container.decode(Int.self, forKey: .strokeCount)
+        width = try container.decodeIfPresent(Int.self, forKey: .width) ?? CanvasDefaults.width
+        height = try container.decodeIfPresent(Int.self, forKey: .height) ?? CanvasDefaults.height
+        drawingStyle = try container.decodeIfPresent(DrawingStyleType.self, forKey: .drawingStyle) ?? .plotter
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        thumbnailToken = try container.decodeIfPresent(String.self, forKey: .thumbnailToken)
+    }
 }
 
 /// A committed stroke queued for animated playback, fetched from

@@ -54,14 +54,45 @@ public struct InitPayload: Codable, Equatable, Sendable {
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
     }
+
+    /// Custom decode: `canvas_width`/`canvas_height` are documented as always
+    /// sent, but `text_chunking_flow.json` (recorded via the visual-flow-test
+    /// harness rather than the SDK-integration recorder) predates that and
+    /// omits both keys entirely (confirmed by inspection). Fall back to the
+    /// same 800x600 default the server/TS `?? 800`/`?? 600` fallback uses
+    /// (protocol-state spec §2.2, §10) instead of throwing on an older
+    /// recording.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        strokes = try container.decode([Path].self, forKey: .strokes)
+        gallery = try container.decode([GalleryEntry].self, forKey: .gallery)
+        status = try container.decode(String.self, forKey: .status)
+        paused = try container.decode(Bool.self, forKey: .paused)
+        pieceNumber = try container.decode(Int.self, forKey: .pieceNumber)
+        canvasWidth = try container.decodeIfPresent(Int.self, forKey: .canvasWidth) ?? CanvasDefaults.width
+        canvasHeight = try container.decodeIfPresent(Int.self, forKey: .canvasHeight) ?? CanvasDefaults.height
+        monologue = try container.decode(String.self, forKey: .monologue)
+        drawingStyle = try container.decode(DrawingStyleType.self, forKey: .drawingStyle)
+        styleConfig = try container.decode(DrawingStyleConfig.self, forKey: .styleConfig)
+    }
 }
 
+/// Protocol-state spec §2.2 documents `drawing_style`/`canvas_width`/
+/// `canvas_height` as always present on the wire (server-side Pydantic
+/// defaults), but §5.4's *reducer* contract for `LOAD_CANVAS` explicitly
+/// treats the action's `drawingStyle` as optional ("`action.drawingStyle ??
+/// state.drawingStyle` — keep current if omitted"), unlike `INIT`'s
+/// drawing-style handling which is a full reset to `.plotter` when absent.
+/// `drawingStyle` is therefore modeled as optional here — decode-tolerant
+/// for an older/partial payload, and the reducer applies the spec's
+/// keep-current fallback rather than a fixed default (`StudioReducer`'s
+/// `.loadCanvas` case).
 public struct LoadCanvasPayload: Codable, Equatable, Sendable {
     public var strokes: [Path]
     public var pieceNumber: Int
     public var canvasWidth: Int
     public var canvasHeight: Int
-    public var drawingStyle: DrawingStyleType
+    public var drawingStyle: DrawingStyleType?
     public var styleConfig: DrawingStyleConfig?
 
     enum CodingKeys: String, CodingKey {
@@ -78,7 +109,7 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         pieceNumber: Int,
         canvasWidth: Int,
         canvasHeight: Int,
-        drawingStyle: DrawingStyleType,
+        drawingStyle: DrawingStyleType?,
         styleConfig: DrawingStyleConfig?
     ) {
         self.strokes = strokes
@@ -87,6 +118,18 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         self.canvasHeight = canvasHeight
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
+    }
+
+    /// `canvas_width`/`canvas_height` default to 800/600 if the payload
+    /// omits them (protocol-state spec §2.2).
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        strokes = try container.decode([Path].self, forKey: .strokes)
+        pieceNumber = try container.decode(Int.self, forKey: .pieceNumber)
+        canvasWidth = try container.decodeIfPresent(Int.self, forKey: .canvasWidth) ?? CanvasDefaults.width
+        canvasHeight = try container.decodeIfPresent(Int.self, forKey: .canvasHeight) ?? CanvasDefaults.height
+        drawingStyle = try container.decodeIfPresent(DrawingStyleType.self, forKey: .drawingStyle)
+        styleConfig = try container.decodeIfPresent(DrawingStyleConfig.self, forKey: .styleConfig)
     }
 }
 
@@ -124,6 +167,21 @@ public struct CodeExecutionPayload: Codable, Equatable, Sendable {
         self.stderr = stderr
         self.returnCode = returnCode
         self.iteration = iteration
+    }
+
+    /// `iteration` is documented "required, defaults 1" (protocol-state spec
+    /// §2.2) — same defaults-applied-server-side pattern as the gallery/init
+    /// fields above. Decode tolerantly for consistency, even though every
+    /// fixture observed so far always includes it.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        status = try container.decode(ToolExecutionStatus.self, forKey: .status)
+        toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
+        toolInput = try container.decodeIfPresent(JSONValue.self, forKey: .toolInput)
+        stdout = try container.decodeIfPresent(String.self, forKey: .stdout)
+        stderr = try container.decodeIfPresent(String.self, forKey: .stderr)
+        returnCode = try container.decodeIfPresent(Int.self, forKey: .returnCode)
+        iteration = try container.decodeIfPresent(Int.self, forKey: .iteration) ?? 1
     }
 }
 

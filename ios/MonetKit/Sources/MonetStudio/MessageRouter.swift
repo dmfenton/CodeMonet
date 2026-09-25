@@ -46,6 +46,41 @@ public enum MessageRouter {
         case let .initial(payload):
             return [.initialize(payload)]
         case let .humanStroke(path):
+            // Self-echo decision (protocol-state spec §7.1): the RN app
+            // dispatches an OPTIMISTIC local `ADD_STROKE` when a human
+            // finishes a touch-stroke, then sends `{type:"stroke"}` to the
+            // server. Because `UserConnectionManager.broadcast` doesn't
+            // exclude the sender, the server's `human_stroke` reply lands
+            // back on the same socket and gets added a *second* time — every
+            // human-drawn stroke on the drawing device is double-counted.
+            //
+            // Fix, not port: `MessageRouter.route(.humanStroke)` is the
+            // ONLY place a human-authored `Path` is appended to
+            // `StudioState.strokes` (this line). The Swift caller
+            // (`StudioStore.endStroke()`, package 4) sends `.stroke(points:)`
+            // to the server and does NOT dispatch `.addStroke` itself first —
+            // it relies solely on this broadcast echo, so the duplicate is
+            // never created rather than being created-then-deduped. This is
+            // strictly simpler than tracking "pending self-sent stroke
+            // signatures" (the spec's other suggested fix) and produces the
+            // identical end state: `Path` is `Equatable`, so if a future
+            // caller adds optimistic local rendering for lower perceived
+            // latency, it must render through transient state
+            // (`currentStroke/performance.agentStroke`-style), not by
+            // appending directly to `strokes` — or it must dedupe by exact
+            // `Path` equality against a tracked pending-echo set before this
+            // event is applied, to preserve the "each stroke appended
+            // exactly once" invariant this function relies on.
+            //
+            // Multi-connection decision (protocol-state spec §7.2):
+            // `human_stroke` (and `load_canvas`, and the rate-limit `error`)
+            // are broadcast to every one of the user's connections, not just
+            // the sender — "your account, your canvas, synced everywhere".
+            // `MonetStudio` makes no attempt to distinguish "my device sent
+            // this" from "another of my devices sent this": every inbound
+            // message is processed identically regardless of origin, which
+            // is the correct behavior for that product decision (kept, not
+            // scoped down) and requires no extra state here.
             return [.addStroke(path)]
         case let .thinkingDelta(text, _):
             return [.enqueueWords(text), .appendThinking(text)]
