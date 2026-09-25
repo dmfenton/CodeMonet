@@ -20,6 +20,13 @@ public struct InitPayload: Codable, Equatable, Sendable {
     public var monologue: String
     public var drawingStyle: DrawingStyleType
     public var styleConfig: DrawingStyleConfig
+    /// The current program-painting version, if any (program-painting spec
+    /// §1.2) — omitted-as-null when `WorkspaceState.painting` is `None`
+    /// (new piece, plotter mode, or paint mode before the first `paint`
+    /// call). Unlike `painting_version`, this ref carries **no `stages`
+    /// field**. A client shows this version's `final.png` immediately, with
+    /// no reveal animation — `init` never replays history.
+    public var painting: PaintingVersionRef?
 
     enum CodingKeys: String, CodingKey {
         case strokes, gallery, status, paused
@@ -29,6 +36,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         case monologue
         case drawingStyle = "drawing_style"
         case styleConfig = "style_config"
+        case painting
     }
 
     public init(
@@ -41,7 +49,8 @@ public struct InitPayload: Codable, Equatable, Sendable {
         canvasHeight: Int,
         monologue: String,
         drawingStyle: DrawingStyleType,
-        styleConfig: DrawingStyleConfig
+        styleConfig: DrawingStyleConfig,
+        painting: PaintingVersionRef? = nil
     ) {
         self.strokes = strokes
         self.gallery = gallery
@@ -53,6 +62,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         self.monologue = monologue
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
+        self.painting = painting
     }
 
     /// Custom decode: `canvas_width`/`canvas_height` are documented as always
@@ -74,6 +84,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         monologue = try container.decode(String.self, forKey: .monologue)
         drawingStyle = try container.decode(DrawingStyleType.self, forKey: .drawingStyle)
         styleConfig = try container.decode(DrawingStyleConfig.self, forKey: .styleConfig)
+        painting = try container.decodeIfPresent(PaintingVersionRef.self, forKey: .painting)
     }
 }
 
@@ -204,6 +215,14 @@ public enum ServerMessage: Equatable, Sendable {
     case pieceState(number: Int, completed: Bool)
     case iteration(current: Int, max: Int)
     case agentStrokesReady(count: Int, batchID: Int, pieceNumber: Int)
+    /// Broadcast every time `run_painting_program` succeeds (program-painting
+    /// spec §1.1) — every successful `paint` tool call, not just "done"
+    /// pieces. No `animation_done`-style ack exists for this message; the
+    /// agent never waits for the client to finish revealing it. `stages` is
+    /// the deduplicated (consecutive-only), in-order list of `cv.stage(...)`
+    /// labels used so far in this program run — display-only, never routed
+    /// into reducer state (spec §4.2).
+    case paintingVersion(PaintingVersionRef, stages: [String])
     /// Any `type` this build doesn't recognize. Carries the raw type string
     /// so a caller can at least log what arrived.
     case unknown(type: String)
@@ -256,6 +275,9 @@ extension ServerMessage: Decodable {
                 batchID: envelope.batchID,
                 pieceNumber: envelope.pieceNumber
             )
+        case "painting_version":
+            let envelope = try PaintingVersionEnvelope(from: decoder)
+            self = .paintingVersion(envelope.ref, stages: envelope.stages)
         default:
             self = .unknown(type: type)
         }
@@ -289,5 +311,28 @@ private struct AgentStrokesReadyEnvelope: Decodable {
         case count
         case batchID = "batch_id"
         case pieceNumber = "piece_number"
+    }
+}
+private struct PaintingVersionEnvelope: Decodable {
+    let ref: PaintingVersionRef
+    let stages: [String]
+    enum CodingKeys: String, CodingKey {
+        case pieceNumber = "piece_number"
+        case version
+        case assetBase = "asset_base"
+        case imageWidth = "image_width"
+        case imageHeight = "image_height"
+        case stages
+    }
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        ref = PaintingVersionRef(
+            pieceNumber: try container.decode(Int.self, forKey: .pieceNumber),
+            version: try container.decode(Int.self, forKey: .version),
+            assetBase: try container.decode(String.self, forKey: .assetBase),
+            imageWidth: try container.decode(Int.self, forKey: .imageWidth),
+            imageHeight: try container.decode(Int.self, forKey: .imageHeight)
+        )
+        stages = try container.decode([String].self, forKey: .stages)
     }
 }

@@ -63,6 +63,11 @@ public struct SavedCanvas: Equatable, Sendable {
     public var pieceNumber: Int
     public var drawingStyle: DrawingStyleType
     public var styleConfig: DrawingStyleConfig
+    /// Already-settled (program-painting spec §4.1 `LOAD_CANVAS`): an
+    /// in-flight reveal interrupted by entering gallery view is snapshotted
+    /// via `settlePainting`, so `CLEAR_VIEWING` restores a finished picture,
+    /// never a mid-reveal one.
+    public var painting: PaintingState
 
     public init(
         strokes: [Path],
@@ -70,7 +75,8 @@ public struct SavedCanvas: Equatable, Sendable {
         canvasHeight: Int,
         pieceNumber: Int,
         drawingStyle: DrawingStyleType,
-        styleConfig: DrawingStyleConfig
+        styleConfig: DrawingStyleConfig,
+        painting: PaintingState = PaintingState()
     ) {
         self.strokes = strokes
         self.canvasWidth = canvasWidth
@@ -78,6 +84,7 @@ public struct SavedCanvas: Equatable, Sendable {
         self.pieceNumber = pieceNumber
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
+        self.painting = painting
     }
 }
 
@@ -104,6 +111,12 @@ public struct StudioState: Equatable, Sendable {
     public var drawingStyle: DrawingStyleType = .plotter
     public var styleConfig: DrawingStyleConfig = .plotter
     public var savedCanvas: SavedCanvas?
+    /// Program-painting version/reveal state (program-painting spec §4.1).
+    /// `PaintingState()` (both `nil`) means no program painting is active —
+    /// the true default for plotter mode and for paint-mode pieces the
+    /// agent hasn't called `paint` on yet (legacy stamped/freehand rendering
+    /// applies in that case instead, spec §6).
+    public var painting = PaintingState()
 
     public init() {}
 

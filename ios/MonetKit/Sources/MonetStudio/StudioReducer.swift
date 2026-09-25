@@ -71,6 +71,10 @@ public enum StudioReducer {
             s.savedCanvas = nil
             s.messages = []
             s.thinking = ""
+            // `clear` and `new_canvas` (routed through this same event, see
+            // `MessageRouter`) both reset painting to none (program-painting
+            // spec §1.3).
+            s.painting = PaintingState()
         case let .loadCanvas(payload):
             // ⚑ savedCanvas snapshot rule (protocol-state spec §5.4): only
             // snapshot when we're currently on the live canvas
@@ -84,9 +88,17 @@ public enum StudioReducer {
                     canvasHeight: s.canvasHeight,
                     pieceNumber: s.pieceNumber,
                     drawingStyle: s.drawingStyle,
-                    styleConfig: s.styleConfig
+                    styleConfig: s.styleConfig,
+                    // Settle any in-flight reveal before snapshotting — an
+                    // interrupted reveal must come back finished, not
+                    // resumed (program-painting spec §4.1 `LOAD_CANVAS`).
+                    painting: settlePainting(s.painting)
                 )
             }
+            // Live painting is hidden for the whole duration of gallery
+            // viewing, not just on first entry — navigating gallery piece
+            // to gallery piece must not resurrect it either.
+            s.painting = PaintingState()
             s.performance = PerformanceState()
             s.strokes = payload.strokes
             s.currentStroke = []
@@ -115,6 +127,10 @@ public enum StudioReducer {
                     s.pieceNumber = saved.pieceNumber
                     s.drawingStyle = saved.drawingStyle
                     s.styleConfig = saved.styleConfig
+                    // Restored verbatim — already settled by `.loadCanvas`,
+                    // so an interrupted reveal comes back finished, not
+                    // resumed (program-painting spec §4.1 `CLEAR_VIEWING`).
+                    s.painting = saved.painting
                     s.savedCanvas = nil
                 }
                 s.viewingPiece = nil
@@ -134,6 +150,11 @@ public enum StudioReducer {
             s.messages = []
             s.thinking = ""
             s.currentStroke = []
+            // Latest known version only, shown immediately with no reveal
+            // animation — `INIT` never starts a `playing` reveal, no matter
+            // how recent the version (program-painting spec §4.1 `INIT`,
+            // §4.6's reconnect row).
+            s.painting = PaintingState(base: payload.painting, playing: nil)
 
         // MARK: Performance / animation pipeline (§5.5)
         case let .enqueueWords(text):
@@ -214,8 +235,36 @@ public enum StudioReducer {
             s.performance.travelTarget = nil
         case .clearPerformance:
             s.performance = PerformanceState()
+
+        // MARK: Program painting (program-painting spec §4.1)
+        case let .paintingVersion(incoming):
+            Self.applyPaintingVersion(incoming, to: &s)
+        case let .paintingPlaybackDone(assetBase):
+            guard s.painting.playing?.assetBase == assetBase else { break }
+            s.painting = settlePainting(s.painting)
         }
         return s
+    }
+
+    /// The `PAINTING_VERSION` guard chain (program-painting spec §4.1),
+    /// factored out of `reduce` to keep that function's cyclomatic
+    /// complexity in line with the rest of the file — this is a single
+    /// reducer case, not a second entry point; it stays `private` and
+    /// mutates `state` in place exactly as its call site would inline.
+    private static func applyPaintingVersion(_ incoming: PaintingVersionRef, to state: inout StudioState) {
+        // Guard 1: gallery guard — live updates never interrupt gallery
+        // viewing.
+        guard state.viewingPiece == nil else { return }
+        // Guard 2: stale-piece guard — an out-of-order message about an
+        // older piece.
+        guard incoming.pieceNumber >= state.pieceNumber else { return }
+        // Collapse any in-flight reveal into `base` first, then read it.
+        let current = settlePainting(state.painting).base
+        let samePiece = current?.pieceNumber == incoming.pieceNumber
+        // Guard 3: duplicate/older-version guard.
+        if samePiece, let current, incoming.version <= current.version { return }
+        state.pieceNumber = max(state.pieceNumber, incoming.pieceNumber)
+        state.painting = PaintingState(base: samePiece ? current : nil, playing: incoming)
     }
 
     // MARK: - Helpers

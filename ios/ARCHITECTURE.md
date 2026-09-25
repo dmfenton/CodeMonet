@@ -232,3 +232,78 @@ code — they contain exact constants/formulas this document doesn't repeat.
   - `cd ios && make generate && make build`
   - `cd ios && make test-app`
   - `cd ios/MonetKit && swift build && swift test` (unaffected by your changes, but must still pass — you own `Package.swift`... no, you don't; if you ever touch it, flag it)
+
+## 7. Program painting (protocol/state/reveal-math landed; drawing/networking/UI outstanding)
+
+Program-painting support (`docs/program-painting.md`,
+`scratchpad/specs/program-painting.md` — the client contract for PR #313)
+has landed at the `MonetKit` layer only. No `Package.swift`/`project.yml`
+change was needed — every addition is new files or additive fields under
+already-listed `sources` paths.
+
+**Landed:**
+
+- `MonetProtocol` (`PaintingVersion.swift`): `PaintingVersionRef`,
+  `RevealOp`/`RevealKeyframe`/`RevealManifest` (custom `Codable` for the
+  heterogeneous `["s"|"a", ...]` wire arrays, including the single-point
+  "dot" stroke case). `ServerMessage` gained `.paintingVersion(ref,
+  stages:)`; `InitPayload` gained an optional `painting` field. `Gallery.swift`
+  gained `GalleryPieceFormat` (`GalleryEntry.format`,
+  `GalleryPieceStrokes.format`/`.imageURL` for `GET /gallery/{n}/strokes`).
+- `MonetStudio`: `PaintingState` (`base`/`playing`, `settlePainting`,
+  `hasPainting`) on `StudioState` and `SavedCanvas`. `StudioEvent` gained
+  `.paintingVersion`/`.paintingPlaybackDone`. `StudioReducer` implements the
+  full guard chain (gallery guard, stale-piece guard, duplicate/older-version
+  guard, settle-on-supersede) in `applyPaintingVersion`, plus painting resets
+  on `.clear`/`new_canvas`, `.initialize` (base only, never `playing` — no
+  reconnect replay), and settle-on-enter/restore-verbatim-on-exit for
+  `.loadCanvas`/`.clearViewing`. `MessageRouter` routes `painting_version`
+  (dropping `stages`) and adds `paint` to `ToolLabels`'
+  started/completed copy. `StudioSelectors.agentStatus`/
+  `shouldShowIdleAnimation` account for `painting.playing`/`hasPainting`.
+  Tests: `PaintingStateReducerTests.swift` mirrors every case in
+  `web/src/test/paintingReducer.test.ts`.
+- `MonetRender` (`RevealPlan.swift`): a from-scratch Swift port of
+  `shared/src/renderer/reveal.ts` + `app/src/renderers/revealPlan.ts` —
+  `RevealPacing`/`buildRevealSchedule`/`revealProgressAt` (the stateless
+  timing model) and `RevealPlan`/`RevealCursor`/`RevealSink`/
+  `advanceRevealPlan` (the flattened, stateful per-frame cursor), plus
+  `PaintingAssetURL.apiAssetUrl`/`paintingAssetUrl`/`galleryRasterImageUrl`.
+  Pure value types and free functions — no CoreGraphics/UIKit dependency, so
+  this is testable exactly like the TS original. `RevealPlanTests.swift`
+  reimplements every one of `revealPlan.test.ts`'s 11 assertions
+  (`buildRevealPlan`, `advanceRevealPlan`, gallery raster URLs) verbatim
+  against the same fixture manifest shape.
+
+**Deliberately not started** (flagging per §4 rule 1/rule-of-thumb — these
+are net-new subsystems, not edits to an existing public contract, so no
+signature changed underneath anyone, but they're real scope a future
+work package must pick up before program painting is usable end to end):
+
+- **Drawing.** No `RasterRevealLayer`/accumulation-`CGContext` driving loop
+  exists yet (spec §9: `CADisplayLink` → `advanceRevealPlan` → incremental
+  `CGContext` draw → `CALayer.contents`). `RevealSink` is defined and tested
+  against a recording stub only; a real CoreGraphics-backed conformer, and
+  its compositing into the Studio canvas (owned by work package 5,
+  `ios/CodeMonet/Features/Studio/`), is unbuilt.
+- **Networking.** No fetch/cache path exists for `reveal.json` or keyframe/
+  `final.png` images from a version's `asset_base` (`MonetNetworking`,
+  work package 4) — `PaintingAssetURL` only does the string joining `reveal.ts`'s
+  `paintingAssetUrl` does; the actual `URLSession` fetch, off-main JPEG/PNG
+  decode, and bounded `NSCache` are unbuilt.
+- **Gallery/Home raster thumbnails and detail view** (work package 6,
+  `ios/CodeMonet/Features/Gallery/`, `Home/`) — reads `GalleryPieceFormat`/
+  `imageURL` are decoded and available, but nothing in the UI layer consumes
+  them yet.
+- **`IncrementalCanvasRenderer` wiring.** `MonetRender/IncrementalCanvasRenderer.swift`
+  (baked-bitmap-plus-in-progress-stroke rendering, with its own committed-
+  count-independent-cost benchmark test) already exists but is not yet
+  referenced anywhere under `ios/CodeMonet` — the live `CanvasView` still
+  needs to be switched onto it. Not modified by this pass; flagged here so
+  the next pass doesn't assume it's already wired because the type exists.
+- **`TOOL_ICONS`** (SF Symbols for the message stream, ux spec, owned by
+  Studio UI) has no `paint` entry yet — only the `MonetStudio` text labels
+  (`ToolLabels.startedText`/`completedText`) were added.
+
+None of the above required touching a frozen public contract; they are
+purely additive follow-on work in packages 4/5/6.

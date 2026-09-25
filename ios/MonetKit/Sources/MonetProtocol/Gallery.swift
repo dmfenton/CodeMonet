@@ -12,6 +12,9 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
     public var drawingStyle: DrawingStyleType
     public var title: String?
     public var thumbnailToken: String?
+    /// `"strokes"` (vector) or `"raster"` (program painting). Server default
+    /// is `"strokes"` (program-painting spec §5, `GalleryEntry.format`).
+    public var format: GalleryPieceFormat
 
     public init(
         id: String,
@@ -22,7 +25,8 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
         height: Int,
         drawingStyle: DrawingStyleType,
         title: String?,
-        thumbnailToken: String?
+        thumbnailToken: String?,
+        format: GalleryPieceFormat = .strokes
     ) {
         self.id = id
         self.createdAt = createdAt
@@ -33,6 +37,7 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
         self.drawingStyle = drawingStyle
         self.title = title
         self.thumbnailToken = thumbnailToken
+        self.format = format
     }
 
     enum CodingKeys: String, CodingKey {
@@ -44,6 +49,7 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
         case drawingStyle = "drawing_style"
         case title
         case thumbnailToken = "thumbnail_token"
+        case format
     }
 
     /// Custom decode: `width`/`height`/`drawing_style` are documented as
@@ -65,6 +71,39 @@ public struct GalleryEntry: Codable, Equatable, Sendable, Identifiable {
         drawingStyle = try container.decodeIfPresent(DrawingStyleType.self, forKey: .drawingStyle) ?? .plotter
         title = try container.decodeIfPresent(String.self, forKey: .title)
         thumbnailToken = try container.decodeIfPresent(String.self, forKey: .thumbnailToken)
+        format = try container.decodeIfPresent(GalleryPieceFormat.self, forKey: .format) ?? .strokes
+    }
+}
+
+/// Whether a gallery piece's detail view is vector strokes the client
+/// renders itself, or a server-rasterized program-painting image
+/// (program-painting spec §5). Always present on current server responses;
+/// modeled as an unknown-tolerant enum (defaulting to `.strokes`, matching
+/// the server's own field default) rather than a plain `String` so callers
+/// get exhaustive-switch safety without a decode failure on a future value.
+public enum GalleryPieceFormat: Equatable, Sendable {
+    case strokes
+    case raster
+    case other(String)
+}
+
+extension GalleryPieceFormat: Codable {
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        switch raw {
+        case "strokes": self = .strokes
+        case "raster": self = .raster
+        default: self = .other(raw)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .strokes: try container.encode("strokes")
+        case .raster: try container.encode("raster")
+        case let .other(raw): try container.encode(raw)
+        }
     }
 }
 
@@ -116,6 +155,15 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
     public var canvasHeight: Int
     public var drawingStyle: DrawingStyleType
     public var styleConfig: DrawingStyleConfig?
+    /// Always present on current server responses; older recordings may
+    /// omit it, treated as `.strokes` for forward compat (program-painting
+    /// spec §2.2).
+    public var format: GalleryPieceFormat
+    /// Absolute-path URL of `final.png` (relative to the API origin),
+    /// present iff `format == .raster`. `strokes` may be non-empty even for
+    /// a raster piece (human vector strokes drawn on top) — both must be
+    /// rendered together, raster as the base layer.
+    public var imageURL: String?
 
     public init(
         strokes: [Path],
@@ -123,7 +171,9 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         canvasWidth: Int,
         canvasHeight: Int,
         drawingStyle: DrawingStyleType,
-        styleConfig: DrawingStyleConfig?
+        styleConfig: DrawingStyleConfig?,
+        format: GalleryPieceFormat = .strokes,
+        imageURL: String? = nil
     ) {
         self.strokes = strokes
         self.pieceNumber = pieceNumber
@@ -131,6 +181,8 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         self.canvasHeight = canvasHeight
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
+        self.format = format
+        self.imageURL = imageURL
     }
 
     enum CodingKeys: String, CodingKey {
@@ -140,5 +192,19 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         case canvasHeight = "canvas_height"
         case drawingStyle = "drawing_style"
         case styleConfig = "style_config"
+        case format
+        case imageURL = "image_url"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        strokes = try container.decode([Path].self, forKey: .strokes)
+        pieceNumber = try container.decode(Int.self, forKey: .pieceNumber)
+        canvasWidth = try container.decode(Int.self, forKey: .canvasWidth)
+        canvasHeight = try container.decode(Int.self, forKey: .canvasHeight)
+        drawingStyle = try container.decode(DrawingStyleType.self, forKey: .drawingStyle)
+        styleConfig = try container.decodeIfPresent(DrawingStyleConfig.self, forKey: .styleConfig)
+        format = try container.decodeIfPresent(GalleryPieceFormat.self, forKey: .format) ?? .strokes
+        imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
     }
 }

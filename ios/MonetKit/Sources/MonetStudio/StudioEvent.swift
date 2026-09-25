@@ -53,4 +53,18 @@ public enum StudioEvent: Equatable, Sendable {
     case penTravelComplete
     case stageComplete
     case clearPerformance
+
+    // Program painting (program-painting spec §4.1)
+    /// A `painting_version` message arrived (or `init.painting` was
+    /// non-nil, routed the same way minus the `INIT` guards — see
+    /// `.initialize`, which sets `painting` directly rather than going
+    /// through this event's guard chain). `stages` is intentionally not
+    /// carried here — it's dropped at message-routing time (spec §4.2),
+    /// never reaches reducer state.
+    case paintingVersion(PaintingVersionRef)
+    /// The reveal layer finished animating `playing` and drew its final
+    /// image. `assetBase` is the version that just finished, so a stale
+    /// completion (a newer version already superseded it) can be detected
+    /// and ignored (spec §4.1).
+    case paintingPlaybackDone(assetBase: String)
 }

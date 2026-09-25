@@ -125,6 +125,12 @@ public enum MessageRouter {
         case .agentStrokesReady:
             // Handled by `routeStrokesReady` — never reaches the reducer directly.
             return []
+        case let .paintingVersion(ref, _):
+            // `stages` is display-only and never reaches reducer state
+            // (program-painting spec §4.2) — a UI wanting to show it reads
+            // it directly off this `ServerMessage` case, or off a fetched
+            // `reveal.json`'s keyframe labels, not from `StudioState`.
+            return [.paintingVersion(ref)]
         case .unknown:
             return []
         }
@@ -165,6 +171,10 @@ public enum ToolLabels {
         case "imagine": return "Imagining..."
         case "sign_canvas": return "Signing..."
         case "name_piece": return "Naming piece..."
+        // Program painting (spec §7): rides the pre-existing generic
+        // `code_execution` message, not a new wire type — just another
+        // `tool_name` value with its own display copy.
+        case "paint": return "Painting..."
         default: return "Executing..."
         }
     }
@@ -186,6 +196,7 @@ public enum ToolLabels {
         case "imagine": return "Imagined"
         case "sign_canvas": return "Signed"
         case "name_piece": return "Piece named"
+        case "paint": return "Painted"
         default: return "Done"
         }
     }
