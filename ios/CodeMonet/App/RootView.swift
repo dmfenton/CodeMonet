@@ -50,7 +50,15 @@ struct RootView: View {
             if let url = activity.webpageURL { handleIncoming(url) }
         }
         .onChange(of: environment.auth.state) { _, newState in
-            if case .signedIn = newState { hasSignedInOnce = true }
+            if case .signedIn = newState {
+                hasSignedInOnce = true
+                // `StudioStore.connect()` (net-auth spec §9) is guarded to
+                // run once per app session — nothing here calls it before
+                // sign-in, and it no-ops on a repeat call, so re-entering
+                // `.signedIn` (e.g. after `refreshSessionOnForeground`'s
+                // silent `.restoring` pass) is safe to call unconditionally.
+                environment.studio.connect()
+            }
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             handleScenePhaseChange(from: oldPhase, to: newPhase)
@@ -99,6 +107,10 @@ struct RootView: View {
             environment.studio.stopPlayback()
         }
         if !environment.studio.state.paused {
+            // Ux spec §1.2: optimistic local update alongside the send, not
+            // only once the server's own `paused` broadcast round-trips
+            // back (see `StudioStore.setPausedLocally`'s doc comment).
+            environment.studio.setPausedLocally(true)
             environment.studio.send(.pause)
         }
         // Net-auth spec §8.1: flush any buffered trace spans immediately on
@@ -107,18 +119,24 @@ struct RootView: View {
     }
 
     private func handleWillEnterForeground() {
-        // Net-auth spec §9.2: proactively catch a near-expiry token before it
-        // causes a live 401/4001, then open a fresh socket on the (possibly
-        // rotated) token — silent thanks to `hasSignedInOnce` above, no
-        // spinner flash for an already-signed-in session.
-        Task {
-            await environment.auth.refreshSessionOnForeground()
-            environment.studio.handleAppWillEnterForeground()
+        if environment.navigation.screen == .studio {
+            environment.studio.startPlayback()
         }
-
-        guard environment.navigation.screen == .studio else { return }
-        environment.studio.startPlayback()
-        if wasRunningBeforeBackground {
+        Task {
+            // Net-auth spec §9.2: proactively catch a near-expiry token
+            // before it causes a live 401/4001, then open a fresh socket on
+            // the (possibly rotated) token — silent thanks to
+            // `hasSignedInOnce` above, no spinner flash for an
+            // already-signed-in session.
+            await environment.auth.refreshSessionOnForeground()
+            // Awaited to completion before `.resume` is ever sent: this is
+            // what fixes the reconnect/resume race — `.resume` sent before
+            // the fresh socket replaces the pre-background one would either
+            // reach a stale/dead task or be silently dropped (see
+            // `StudioStore.reconnectWithLatestToken`'s doc comment).
+            await environment.studio.handleAppWillEnterForeground()
+            guard environment.navigation.screen == .studio, wasRunningBeforeBackground else { return }
+            environment.studio.setPausedLocally(false)
             environment.studio.send(.resume(direction: nil))
         }
     }

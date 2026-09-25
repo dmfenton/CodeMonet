@@ -138,7 +138,7 @@ async def debug_new_canvas(
 @router.get("/debug/logs")
 async def get_debug_logs(_user: CurrentUser, lines: int = 100) -> dict[str, Any]:
     """Get recent server logs."""
-    log_path = Path(__file__).parent.parent / "logs" / "server.log"
+    log_path = Path(__file__).parent.parent.parent / "logs" / "server.log"
     if not log_path.exists():
         return {"error": "Log file not found. Use 'make server-bg' to start with logging."}
 

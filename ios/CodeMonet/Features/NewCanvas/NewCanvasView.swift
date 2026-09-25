@@ -60,7 +60,7 @@ struct NewCanvasView: View {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                actions(palette: palette)
+                actions(palette: palette, connected: environment.studio.connected)
             }
         }
         .presentationDetents([.medium, .large])
@@ -149,8 +149,9 @@ struct NewCanvasView: View {
     }
 
     @ViewBuilder
-    private func actions(palette: FentonTheme.Palette) -> some View {
+    private func actions(palette: FentonTheme.Palette, connected: Bool) -> some View {
         let hasText = !direction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let startEnabled = connected && hasText
         HStack(spacing: FentonSpacing.medium) {
             Button {
                 start(withDirection: false)
@@ -166,6 +167,8 @@ struct NewCanvasView: View {
                     )
             }
             .buttonStyle(.plain)
+            .disabled(!connected)
+            .opacity(connected ? 1 : 0.5)
 
             Button {
                 start(withDirection: true)
@@ -174,13 +177,14 @@ struct NewCanvasView: View {
                     .font(.system(.body, weight: .semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, FentonSpacing.medium)
-                    .foregroundStyle(hasText ? .white : palette.tertiaryText)
+                    .foregroundStyle(startEnabled ? .white : palette.tertiaryText)
                     .background(
                         RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous)
-                            .fill(hasText ? palette.accent : palette.subtleSurface)
+                            .fill(startEnabled ? palette.accent : palette.subtleSurface)
                     )
             }
             .buttonStyle(.plain)
+            .disabled(!connected)
             .accessibilityIdentifier("new-canvas-start-button")
         }
         .padding(FentonSpacing.large)

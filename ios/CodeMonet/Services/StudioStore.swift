@@ -24,16 +24,18 @@ public final class StudioStore {
     /// `.disconnected` directly.
     public private(set) var connected = false
 
-    /// Fires on a live `4001`/auth-failure close (protocol-state spec §1.2,
-    /// net-auth spec §9.2 point 2) — the app shell should wire this to
-    /// `AuthService.signOut()`. Not wired here: `StudioStore` only knows
-    /// `TokenProviding`, never the concrete `AuthService`, so it can't sign
-    /// anyone out itself. A plain closure (rather than a new delegate
-    /// protocol) since there is exactly one real consumer.
-    public var onAuthenticationFailure: (@Sendable () async -> Void)?
+    /// Fires on a live `4001`/auth-failure close, or a REST 401/403
+    /// (protocol-state spec §1.2, net-auth spec §9.2 point 2, §6) — the app
+    /// shell wires this to `AuthService.signOut(ifBearerTokenMatches:)`.
+    /// Not wired here: `StudioStore` only knows `TokenProviding`, never the
+    /// concrete `AuthService`. Carries the bearer token the failing
+    /// call/socket actually used, so a stale event from a connection already
+    /// superseded by a reconnect holding a freshly rotated token can't
+    /// incorrectly sign out a session that's actually fine.
+    public var onAuthenticationFailure: (@Sendable (String) async -> Void)?
 
     private let socket: StudioWebSocketClient
-    private let rest: CodeMonetRESTClient
+    private var rest: CodeMonetRESTClient
     private let traceBuffer: TraceSpanBuffer
     private let performer = PerformerEngine()
     private let tokenProvider: any TokenProviding
@@ -45,6 +47,10 @@ public final class StudioStore {
     /// automatic/foreground reconnects so server-side spans keep
     /// correlating with the same client session until the studio is left.
     private var currentTraceID: String?
+    /// The bearer token most recently handed to `socket.connect`/
+    /// `reconnectIfTokenChanged` — see `onAuthenticationFailure`'s doc
+    /// comment.
+    private var currentToken: String?
     /// Human strokes this device has sent but not yet seen echoed back
     /// (protocol-state spec §7.1). `endStroke()` draws the stroke locally
     /// immediately (no round-trip latency) and records its signature here;
@@ -57,12 +63,23 @@ public final class StudioStore {
     /// the socket wasn't open) would otherwise leak forever.
     private var pendingSelfStrokes: [Path] = []
     private static let maxPendingSelfStrokes = 32
+    /// Bound on `/strokes/pending` retry attempts — see `handleStrokesReady`.
+    private static let maxStrokesFetchAttempts = 10
 
     public init(environment: CodeMonetEnvironment, tokenProvider: any TokenProviding) {
         socket = StudioWebSocketClient(baseURL: environment.wsBaseURL)
         rest = CodeMonetRESTClient(baseURL: environment.apiBaseURL, tokenProvider: tokenProvider)
         traceBuffer = TraceSpanBuffer(baseURL: environment.apiBaseURL)
         self.tokenProvider = tokenProvider
+        // Net-auth spec §6: a 401/403 on `/strokes/pending` polling funnels
+        // into `onAuthenticationFailure`, same as a live WS 4001. Reassigned
+        // (not passed above) since the closure needs `self`, not fully
+        // initialized until every stored property has a value.
+        rest = CodeMonetRESTClient(
+            baseURL: environment.apiBaseURL,
+            tokenProvider: tokenProvider,
+            onUnauthorized: { [weak self] token in await self?.onAuthenticationFailure?(token) }
+        )
     }
 
     /// Opens the WebSocket and starts consuming its event stream. Safe to
@@ -78,6 +95,7 @@ public final class StudioStore {
         socketTask = Task { [weak self] in
             guard let self else { return }
             guard let token = await self.tokenProvider.currentToken() else { return }
+            self.currentToken = token
             self.recordSpan(name: "ws.connect")
             await self.socket.connect(token: token, traceID: traceID)
             for await event in await self.socket.events() {
@@ -103,14 +121,19 @@ public final class StudioStore {
     /// (net-auth spec §9.2 point 1). A no-op before the first `connect()`
     /// (nothing to reconnect yet); reuses the current trace session rather
     /// than starting a new one, since this is still the same studio visit.
-    public func reconnectWithLatestToken() {
+    ///
+    /// `async`, awaited all the way through by `handleAppWillEnterForeground`
+    /// — a prior version fired this as a detached `Task` and let the app
+    /// shell send `.resume` synchronously right after, racing the reconnect:
+    /// the resume could reach the stale pre-background socket (or be
+    /// silently dropped) before this method replaced it. Awaiting here
+    /// guarantees the fresh socket's task is in place first.
+    public func reconnectWithLatestToken() async {
         guard socketTask != nil else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            guard let token = await self.tokenProvider.currentToken() else { return }
-            self.recordSpan(name: "ws.connect")
-            await self.socket.connect(token: token, traceID: self.currentTraceID)
-        }
+        guard let token = await tokenProvider.currentToken() else { return }
+        currentToken = token
+        recordSpan(name: "ws.connect")
+        await socket.reconnectIfTokenChanged(token: token, traceID: currentTraceID)
     }
 
     /// Call from the app shell's background-transition hook (net-auth spec
@@ -123,11 +146,12 @@ public final class StudioStore {
     }
 
     /// Call from the app shell's foreground-transition hook, alongside (and
-    /// after) `AuthService.refreshSessionOnForeground()` — see
-    /// `reconnectWithLatestToken()`.
-    public func handleAppWillEnterForeground() {
+    /// after) `AuthService.refreshSessionOnForeground()`, and awaited to
+    /// completion *before* the caller sends anything else (e.g. `.resume`)
+    /// over the socket — see `reconnectWithLatestToken()`.
+    public func handleAppWillEnterForeground() async {
         recordSpan(name: "app.foreground")
-        reconnectWithLatestToken()
+        await reconnectWithLatestToken()
     }
 
     // MARK: - Outbound
@@ -155,6 +179,31 @@ public final class StudioStore {
     /// unconditionally.
     public func clearViewing() {
         apply(.clearViewing)
+    }
+
+    /// Applies a gallery piece fetched via REST (`GalleryView.select`,
+    /// mirroring RN's `handleGallerySelect`'s `GET /gallery/{n}/strokes`
+    /// round-trip). Converts to the same `.loadCanvas` event the WS
+    /// `load_canvas` message drives, so both paths reduce identically.
+    public func applyLoadedGalleryPiece(_ strokes: GalleryPieceStrokes) {
+        apply(.loadCanvas(LoadCanvasPayload(
+            strokes: strokes.strokes,
+            pieceNumber: strokes.pieceNumber,
+            canvasWidth: strokes.canvasWidth,
+            canvasHeight: strokes.canvasHeight,
+            drawingStyle: strokes.drawingStyle,
+            styleConfig: strokes.styleConfig
+        )))
+    }
+
+    /// Applies `.setPaused` to local state immediately, *alongside* (not
+    /// instead of) the `send(.pause)`/`send(.resume(...))` the caller sends
+    /// over the wire — ux spec §1.2's optimistic-update pattern, matched
+    /// from both reference clients. The server is still the source of
+    /// truth; its own `paused` broadcast just applies this event again
+    /// (idempotent).
+    public func setPausedLocally(_ paused: Bool) {
+        apply(.setPaused(paused))
     }
 
     /// Finishes the in-progress human stroke (ux spec §6.2: a tap/no-drag,
@@ -195,7 +244,9 @@ public final class StudioStore {
             switch reason {
             case .authenticationFailed:
                 recordSpan(name: "ws.auth_error")
-                await onAuthenticationFailure?()
+                if let token = currentToken {
+                    await onAuthenticationFailure?(token)
+                }
             case let .other(code):
                 recordSpan(name: "ws.disconnect", attributes: code.map { ["close_code": String($0)] } ?? [:])
             }
@@ -247,7 +298,8 @@ public final class StudioStore {
         let startTime = nowMillis()
         strokesFetchTask = Task { [weak self] in
             guard let self else { return }
-            while !Task.isCancelled {
+            var attempt = 0
+            while !Task.isCancelled, attempt < Self.maxStrokesFetchAttempts {
                 do {
                     let response = try await self.rest.pendingStrokes()
                     self.apply(.enqueueStrokes(response.strokes))
@@ -259,6 +311,10 @@ public final class StudioStore {
                     )
                     return
                 } catch {
+                    // A persistent failure (dead session, etc.) shouldn't
+                    // retry forever — bounded instead (net-auth spec §6).
+                    attempt += 1
+                    guard attempt < Self.maxStrokesFetchAttempts else { break }
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }

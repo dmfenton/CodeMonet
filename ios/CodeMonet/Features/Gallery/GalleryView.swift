@@ -115,9 +115,28 @@ struct GalleryView: View {
         }
     }
 
+    /// ux spec §1.1 "Gallery -> Studio (piece select)" row. Matches RN's
+    /// `handleGallerySelect`: a `GET /gallery/{n}/strokes` REST round-trip
+    /// (not the WS `load_canvas` message, which has no ack) so a failure is
+    /// a definite, catchable event rather than something the client would
+    /// otherwise have to guess about with a timeout. Navigates to Studio
+    /// optimistically, same as RN; on failure, pauses if running and falls
+    /// back to Home instead of leaving the user sitting on a piece that
+    /// never loaded — this screen is dismissed by that point (`screen`
+    /// switches away from `.gallery`), so, matching RN, the failure is
+    /// silent rather than surfaced as a banner here.
     private func select(_ entry: GalleryEntry) {
-        environment.studio.send(.loadCanvas(pieceNumber: entry.pieceNumber))
         environment.navigation.screen = .studio
+        Task {
+            do {
+                let strokes = try await environment.restClient.galleryPieceStrokes(pieceNumber: entry.pieceNumber)
+                environment.studio.applyLoadedGalleryPiece(strokes)
+            } catch {
+                pauseIfRunning()
+                environment.studio.clearViewing()
+                environment.navigation.screen = .home
+            }
+        }
     }
 
     /// ux spec §1.1 "Gallery -> Home" row: pause-if-running, restore the
@@ -126,11 +145,15 @@ struct GalleryView: View {
     /// gallery was opened from" — that's `closeGallery()`'s job, used by
     /// the header's X instead).
     private func goHome() {
-        if !environment.studio.state.paused {
-            environment.studio.send(.pause)
-        }
+        pauseIfRunning()
         environment.studio.clearViewing()
         environment.navigation.screen = .home
+    }
+
+    private func pauseIfRunning() {
+        guard !environment.studio.state.paused else { return }
+        environment.studio.setPausedLocally(true)
+        environment.studio.send(.pause)
     }
 
     private func refresh() async {

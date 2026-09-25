@@ -17,10 +17,24 @@ public protocol TokenProviding: Sendable {
 public struct CodeMonetRESTClient: Sendable {
     private let api: MobileAPIClient
     private let tokenProvider: any TokenProviding
+    /// Net-auth spec §6/§9.2 point 2: a 401/403 (`MobileAPIError
+    /// .unauthorized`, which covers both — see `APIClient.swift`) should
+    /// trigger the same reactive-auth-failure handling as a live WS 4001.
+    /// Fired with the bearer token this call was made with, so the caller
+    /// can gate a sign-out against it still being the current token
+    /// (`AuthService.signOut(ifBearerTokenMatches:)`) — a nil-token call
+    /// (no session to begin with) never fires this.
+    private let onUnauthorized: (@Sendable (String) async -> Void)?
 
-    public init(baseURL: URL, tokenProvider: any TokenProviding, transport: any HTTPTransport = URLSession.shared) {
+    public init(
+        baseURL: URL,
+        tokenProvider: any TokenProviding,
+        transport: any HTTPTransport = URLSession.shared,
+        onUnauthorized: (@Sendable (String) async -> Void)? = nil
+    ) {
         api = MobileAPIClient(baseURL: baseURL, transport: transport)
         self.tokenProvider = tokenProvider
+        self.onUnauthorized = onUnauthorized
     }
 
     /// `GET /auth/me` — post-sign-in identity check (net-auth spec §0.2, §3.1).
@@ -56,13 +70,23 @@ public struct CodeMonetRESTClient: Sendable {
     /// `piece_NNNNNN`.
     public func thumbnailData(pieceID: String) async throws -> Data {
         let token = await tokenProvider.currentToken()
-        return try await api.data(path: "/gallery/thumbnail/\(pieceID).png", bearerToken: token)
+        do {
+            return try await api.data(path: "/gallery/thumbnail/\(pieceID).png", bearerToken: token)
+        } catch MobileAPIError.unauthorized {
+            if let token { await onUnauthorized?(token) }
+            throw MobileAPIError.unauthorized
+        }
     }
 
     private func get<Response: Decodable & Sendable>(_ path: String, as type: Response.Type) async throws -> Response {
         let token = await tokenProvider.currentToken()
-        let data = try await api.data(path: path, bearerToken: token)
-        return try api.decode(data, as: type)
+        do {
+            let data = try await api.data(path: path, bearerToken: token)
+            return try api.decode(data, as: type)
+        } catch MobileAPIError.unauthorized {
+            if let token { await onUnauthorized?(token) }
+            throw MobileAPIError.unauthorized
+        }
     }
 }
 

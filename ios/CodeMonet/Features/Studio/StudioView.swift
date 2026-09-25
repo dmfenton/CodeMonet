@@ -16,6 +16,11 @@ import SwiftUI
 /// unrelated, still-open `drawingEnabled` gap).
 struct StudioView: View {
     @Environment(AppEnvironment.self) private var environment
+    /// Ux spec §10.7: on iPad (`.regular` width, portrait or landscape —
+    /// there's horizontal room in both), lay Canvas beside
+    /// LiveStatus+MessageStream instead of stacking all four sections
+    /// vertically, so the canvas isn't squeezed into a short strip.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// View-local "Draw" toggle — see `CanvasView.drawingEnabled`.
     @State private var drawingEnabled = false
@@ -30,33 +35,57 @@ struct StudioView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            if let display = liveStatusDisplay {
-                LiveStatusView(display: display)
-                    .transition(.opacity)
+        content
+            .animation(.easeInOut(duration: 0.2), value: liveStatusDisplay != nil)
+            .padding(16)
+            .onAppear { environment.studio.startPlayback() }
+            .onDisappear { environment.studio.stopPlayback() }
+            .onChange(of: state.messages.last?.id) {
+                guard state.messages.last?.type == .pieceComplete else { return }
+                pieceCompleteHapticTrigger.toggle()
             }
-
-            CanvasView(drawingEnabled: drawingEnabled)
-
-            if !isViewOnly {
-                MessageStreamView(messages: state.messages)
+            .sensoryFeedback(.success, trigger: pieceCompleteHapticTrigger)
+            .sensoryFeedback(.selection, trigger: pauseHapticTrigger)
+            .sensoryFeedback(.selection, trigger: drawHapticTrigger)
+            .sheet(isPresented: nudgeSheetBinding) {
+                NudgeSheetView(onSend: sendNudge, onDismiss: closeNudge)
             }
+    }
 
-            ActionBarView(buttons: actionBarButtons, onTap: handle(action:))
-        }
-        .animation(.easeInOut(duration: 0.2), value: liveStatusDisplay != nil)
-        .padding(16)
-        .onAppear { environment.studio.startPlayback() }
-        .onDisappear { environment.studio.stopPlayback() }
-        .onChange(of: state.messages.last?.id) {
-            guard state.messages.last?.type == .pieceComplete else { return }
-            pieceCompleteHapticTrigger.toggle()
-        }
-        .sensoryFeedback(.success, trigger: pieceCompleteHapticTrigger)
-        .sensoryFeedback(.selection, trigger: pauseHapticTrigger)
-        .sensoryFeedback(.selection, trigger: drawHapticTrigger)
-        .sheet(isPresented: nudgeSheetBinding) {
-            NudgeSheetView(onSend: sendNudge, onDismiss: closeNudge)
+    @ViewBuilder
+    private var content: some View {
+        if horizontalSizeClass == .regular {
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
+                    CanvasView(drawingEnabled: drawingEnabled)
+                    VStack(spacing: 12) {
+                        if let display = liveStatusDisplay {
+                            LiveStatusView(display: display)
+                                .transition(.opacity)
+                        }
+                        if !isViewOnly {
+                            MessageStreamView(messages: state.messages)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                }
+                ActionBarView(buttons: actionBarButtons, onTap: handle(action:))
+            }
+        } else {
+            VStack(spacing: 12) {
+                if let display = liveStatusDisplay {
+                    LiveStatusView(display: display)
+                        .transition(.opacity)
+                }
+
+                CanvasView(drawingEnabled: drawingEnabled)
+
+                if !isViewOnly {
+                    MessageStreamView(messages: state.messages)
+                }
+
+                ActionBarView(buttons: actionBarButtons, onTap: handle(action:))
+            }
         }
     }
 
@@ -98,14 +127,17 @@ struct StudioView: View {
 
     private func togglePause() {
         if state.paused {
+            environment.studio.setPausedLocally(false)
             environment.studio.send(.resume(direction: nil))
         } else {
+            environment.studio.setPausedLocally(true)
             environment.studio.send(.pause)
         }
     }
 
     private func goHome() {
         if !state.paused {
+            environment.studio.setPausedLocally(true)
             environment.studio.send(.pause)
         }
         drawingEnabled = false

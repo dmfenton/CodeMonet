@@ -22,7 +22,11 @@ extension AppEnvironment {
     /// Built fresh per call — it's a thin, stateless wrapper over
     /// `URLSession.shared`, not a connection to hold onto.
     var restClient: CodeMonetRESTClient {
-        CodeMonetRESTClient(baseURL: config.apiBaseURL, tokenProvider: FeatureAuthTokenProvider(auth: auth))
+        CodeMonetRESTClient(
+            baseURL: config.apiBaseURL,
+            tokenProvider: FeatureAuthTokenProvider(auth: auth),
+            onUnauthorized: { [weak auth] token in await auth?.signOut(ifBearerTokenMatches: token) }
+        )
     }
 }
 

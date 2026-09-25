@@ -17,22 +17,25 @@ public struct CodeMonetIdentityClient: MagicLinkAuthenticationClient {
         self.codeMonetAPI = codeMonetAPI
     }
 
+    /// Net-auth spec §3.1 scopes the `400 -> .invalidAuthorizationCode` remap
+    /// to the token-exchange/refresh calls only (a mismatched
+    /// `client_id`/`redirect_uri` there is a client bug, not a user-facing
+    /// case). This call has no such remap — a `400` here surfaces as the
+    /// unmapped `MobileAPIError.http(400)`, matching `AuthView`'s existing
+    /// `MobileAPIError`-based error copy instead of falling through to the
+    /// generic default.
     public func requestMagicLink(email: String, codeChallenge: String) async throws -> MagicLinkRequestResult {
-        do {
-            return try await identityAPI.send(
-                path: "/v1/authorization/requests",
-                body: MagicLinkRequestBody(
-                    email: email,
-                    clientID: Self.clientID,
-                    redirectURI: Self.redirectURI,
-                    codeChallenge: codeChallenge,
-                    codeChallengeMethod: "S256"
-                ),
-                response: MagicLinkRequestResult.self
-            )
-        } catch MobileAPIError.http(let statusCode) where statusCode == 400 {
-            throw AuthenticationClientError.invalidAuthorizationCode
-        }
+        try await identityAPI.send(
+            path: "/v1/authorization/requests",
+            body: MagicLinkRequestBody(
+                email: email,
+                clientID: Self.clientID,
+                redirectURI: Self.redirectURI,
+                codeChallenge: codeChallenge,
+                codeChallengeMethod: "S256"
+            ),
+            response: MagicLinkRequestResult.self
+        )
     }
 
     public func exchangeAuthorizationCode(code: String, codeVerifier: String) async throws -> AuthSession {

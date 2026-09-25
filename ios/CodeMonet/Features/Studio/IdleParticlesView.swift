@@ -6,8 +6,6 @@ import SwiftUI
 /// Skia+Reanimated `SkiaIdleParticles` — same particle count and soft
 /// artistic palette, drifting gently on a 15s loop.
 struct IdleParticlesView: View {
-    let canvasSize: CGSize
-
     private static let particleCount = 12
     fileprivate static let cycleDuration: Double = 15
     private static let colors: [Color] = [
@@ -23,14 +21,12 @@ struct IdleParticlesView: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             Canvas { canvasContext, size in
-                guard canvasSize.width > 0, canvasSize.height > 0 else { return }
-                let scaleX = size.width / canvasSize.width
-                let scaleY = size.height / canvasSize.height
+                guard size.width > 0, size.height > 0 else { return }
                 let elapsed = context.date.timeIntervalSinceReferenceDate
 
                 for particle in particles {
                     let (position, opacity) = particle.state(at: elapsed)
-                    let point = CGPoint(x: position.x * scaleX, y: position.y * scaleY)
+                    let point = CGPoint(x: position.x * size.width, y: position.y * size.height)
                     let rect = CGRect(x: point.x - particle.radius, y: point.y - particle.radius, width: particle.radius * 2, height: particle.radius * 2)
                     canvasContext.opacity = opacity
                     canvasContext.fill(Path(ellipseIn: rect), with: .color(particle.color))
@@ -40,13 +36,20 @@ struct IdleParticlesView: View {
         .accessibilityHidden(true)
     }
 
+    /// Positions/radii are generated in normalized `0..<1` space (fractions
+    /// of whatever container this view is given) rather than a hardcoded
+    /// pixel box, so the particle field fills the actual current canvas
+    /// evenly regardless of its size profile (800x600, 1200x420, 800x800,
+    /// 600x900, 1200x600 — see `CanvasSizeProfile`).
     private static func generate() -> [Particle] {
         var generator = SeededGenerator(seed: 0x1DEA_9042)
         return (0 ..< particleCount).map { index in
-            let startX = Double.random(in: 0 ..< 800, using: &generator)
-            let startY = Double.random(in: 0 ..< 600, using: &generator)
+            let startX = Double.random(in: 0 ..< 1, using: &generator)
+            let startY = Double.random(in: 0 ..< 1, using: &generator)
             let angle = Double.random(in: 0 ..< (2 * .pi), using: &generator)
-            let distance = 100 + Double.random(in: 0 ..< 200, using: &generator)
+            // Drift distance as a fraction of the container, roughly
+            // matching the old 100-300px drift against an 800x600 box.
+            let distance = 0.15 + Double.random(in: 0 ..< 0.25, using: &generator)
             return Particle(
                 start: CGPoint(x: startX, y: startY),
                 end: CGPoint(x: startX + cos(angle) * distance, y: startY + sin(angle) * distance),

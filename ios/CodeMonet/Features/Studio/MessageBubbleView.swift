@@ -61,15 +61,15 @@ private struct ErrorBubble: View {
 
     var body: some View {
         let palette = theme.palette(for: colorScheme)
-        MessageBubbleShell(borderColor: .red) {
+        MessageBubbleShell(borderColor: CodeMonetDesignSystem.Extra.error) {
             VStack(alignment: .leading, spacing: FentonSpacing.extraSmall) {
                 HStack(alignment: .top, spacing: FentonSpacing.small) {
                     Image(systemName: "exclamationmark.circle.fill")
-                        .foregroundStyle(.red)
+                        .foregroundStyle(CodeMonetDesignSystem.Extra.error)
                         .accessibilityHidden(true)
                     Text(message.text)
                         .font(.body)
-                        .foregroundStyle(.red)
+                        .foregroundStyle(CodeMonetDesignSystem.Extra.error)
                 }
                 if let stderr = message.metadata?.stderr {
                     Text(stderr)
@@ -148,7 +148,7 @@ private struct CodeExecutionBubble: View {
 
     var body: some View {
         let palette = theme.palette(for: colorScheme)
-        let borderColor = isSuccess ? StudioColors.color(for: tool.colorKey, palette: palette) : .red
+        let borderColor = isSuccess ? StudioColors.color(for: tool.colorKey, palette: palette) : CodeMonetDesignSystem.Extra.error
         MessageBubbleShell(borderColor: borderColor) {
             VStack(alignment: .leading, spacing: FentonSpacing.small) {
                 header(borderColor: borderColor)
@@ -238,6 +238,7 @@ private struct TimestampLabel: View {
         Text(StudioPresentation.formatTime(epochMilliseconds: timestamp))
             .font(.caption2)
             .foregroundStyle(palette.tertiaryText)
+            .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

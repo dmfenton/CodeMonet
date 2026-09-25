@@ -29,6 +29,9 @@ struct NudgeSheetView: View {
         let palette = theme.palette(for: colorScheme)
         NavigationStack {
             VStack(alignment: .leading, spacing: FentonSpacing.large) {
+                Text("Suggest something to the agent")
+                    .font(.caption)
+                    .foregroundStyle(palette.secondaryText)
                 suggestions(palette: palette)
                 inputField(palette: palette)
                 sendButton(palette: palette)
@@ -39,11 +42,6 @@ struct NudgeSheetView: View {
             .navigationTitle("Send a Nudge")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Text("Suggest something to the agent")
-                        .font(.caption)
-                        .foregroundStyle(palette.secondaryText)
-                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         cancel()

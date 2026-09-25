@@ -63,12 +63,12 @@ public enum StudioSelectors {
         var completedKeys: Set<String> = []
         for message in state.messages
             where message.type == .codeExecution && message.status == .completed {
-            guard let tool = message.metadata?.toolName else { continue }
+            let tool = message.metadata?.toolName ?? "unknown"
             completedKeys.insert("\(tool)_\(message.iteration ?? 0)")
         }
         for message in state.messages
             where message.type == .codeExecution && message.status == .started {
-            guard let tool = message.metadata?.toolName else { continue }
+            let tool = message.metadata?.toolName ?? "unknown"
             if !completedKeys.contains("\(tool)_\(message.iteration ?? 0)") {
                 return true
             }

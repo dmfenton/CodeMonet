@@ -81,6 +81,37 @@ struct HomeSelectorsTests {
         }
     }
 
+    /// RN's `title = recentCanvas?.title || (hasCurrentWork ? 'Current
+    /// Drawing' : ...)` (ContinueCard.tsx) — `recentCanvas` is the last
+    /// *completed* gallery entry, independent of `hasCurrentWork`, so its
+    /// title takes precedence over "Current Drawing" even while live work
+    /// is in progress.
+    @Test("continueCardKind's live title prefers the last gallery entry's title, if any")
+    func continueCardKindLiveTitlePrefersGalleryTitle() {
+        var state = StudioState()
+        state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
+        state.gallery = [Self.makeEntry(pieceNumber: 1, title: "Whispers at Dusk")]
+
+        guard case let .live(_, _, _, _, title) = HomeSelectors.continueCardKind(state) else {
+            Issue.record("expected .live")
+            return
+        }
+        #expect(title == "Whispers at Dusk")
+    }
+
+    @Test("continueCardKind's live title falls back to 'Current Drawing' when the last gallery entry has no title")
+    func continueCardKindLiveTitleFallsBackWhenGalleryEntryUntitled() {
+        var state = StudioState()
+        state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
+        state.gallery = [Self.makeEntry(pieceNumber: 1, title: nil)]
+
+        guard case let .live(_, _, _, _, title) = HomeSelectors.continueCardKind(state) else {
+            Issue.record("expected .live")
+            return
+        }
+        #expect(title == "Current Drawing")
+    }
+
     @Test("canSubmit requires non-whitespace text and a connected socket")
     func canSubmitGating() {
         #expect(HomeSelectors.canSubmit(prompt: "a cat", connected: true))

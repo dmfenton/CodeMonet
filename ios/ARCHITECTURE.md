@@ -92,6 +92,23 @@ and DEBUG dev-token bootstrap the net-auth spec requires (§0.1-0.2, §3.4,
 §4), and exposes `bearerToken` to both `StudioStore` (WS auth) and
 `CodeMonetRESTClient` (REST auth) via `MonetNetworking.TokenProviding`.
 
+The two flows are joined in exactly one place: `RootView`
+(`CodeMonet/App/RootView.swift`) calls `StudioStore.connect()` from its
+`onChange(of: environment.auth.state)` handler the moment `auth.state`
+first becomes `.signedIn` — `connect()` itself no-ops on a repeat call, so
+this is safe to call on every re-entry into `.signedIn` (e.g. after a
+silent `refreshSessionOnForeground()` pass). Nothing else in the app calls
+`connect()`; if that `onChange` wiring is ever removed or the state
+transition it watches changes shape, the socket never opens and every
+`connected`-gated UI element (Home's prompt/Surprise-Me/Continue card, New
+Canvas's Start button) stays permanently disabled. A live 4001 (WS) or a
+401/403 (REST, via `CodeMonetRESTClient`'s `onUnauthorized`) both route
+through `StudioStore.onAuthenticationFailure`, which `AppEnvironment` wires
+to `AuthService.signOut(ifBearerTokenMatches:)` — gated by the bearer token
+the failing call actually used, so a stale event from a socket/request
+already superseded by a reconnect with a freshly rotated token can't
+incorrectly sign out an otherwise-healthy session.
+
 ## 3. Ownership table
 
 | Paths | Package (§5) |

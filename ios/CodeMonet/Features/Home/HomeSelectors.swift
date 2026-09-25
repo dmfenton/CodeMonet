@@ -40,13 +40,19 @@ public enum HomeSelectors {
     /// pill) even though the preview itself only appears once strokes > 0.
     public static func continueCardKind(_ state: StudioState) -> ContinueCardKind {
         guard hasRecentWork(state) else { return .none }
+        // RN's `title = recentCanvas?.title || (hasCurrentWork ? 'Current
+        // Drawing' : ...)` (ContinueCard.tsx) — `recentCanvas` is always the
+        // last *completed* gallery entry, independent of `hasCurrentWork`,
+        // so a previously-named piece's title takes precedence over the
+        // "Current Drawing" fallback even while live work is in progress.
+        let liveTitle = state.gallery.last?.title ?? "Current Drawing"
         if hasCurrentWork(state) {
             return .live(
                 strokes: state.strokes,
                 canvasWidth: state.canvasWidth,
                 canvasHeight: state.canvasHeight,
                 styleConfig: state.styleConfig,
-                title: "Current Drawing"
+                title: liveTitle
             )
         }
         if let entry = state.gallery.last {
@@ -61,7 +67,7 @@ public enum HomeSelectors {
             canvasWidth: state.canvasWidth,
             canvasHeight: state.canvasHeight,
             styleConfig: state.styleConfig,
-            title: "Current Drawing"
+            title: liveTitle
         )
     }
 

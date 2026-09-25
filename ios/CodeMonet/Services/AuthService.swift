@@ -138,6 +138,22 @@ public final class AuthService {
         state = .signedOut
     }
 
+    /// Signs out only if `expected` still matches the bearer token
+    /// currently in use — net-auth spec §9.2 point 2's
+    /// `signOut(ifTokenMatches:)` pattern (`FentonMobileCore
+    /// .AuthenticationController` has the equivalent
+    /// `signOut(ifBearerTokenMatches:)`, but that only clears *its own*
+    /// session; this wraps `AuthService.signOut()` instead so the DEBUG
+    /// dev-token and `state` also get cleared consistently). Guards
+    /// against a delayed WS auth-failure event from a socket already
+    /// abandoned by a newer reconnect holding a freshly rotated, valid
+    /// token — that stale event must not sign out a session that's
+    /// actually fine.
+    public func signOut(ifBearerTokenMatches expected: String) async {
+        guard bearerToken == expected else { return }
+        await signOut()
+    }
+
     private func syncStateFromController() async {
         switch controller.state {
         case .restoring:

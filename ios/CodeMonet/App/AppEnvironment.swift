@@ -34,8 +34,11 @@ public final class AppEnvironment {
         // RootView drops back to AuthView rather than sitting on a dead
         // socket. StudioStore only knows `TokenProviding`, never the
         // concrete `AuthService`, so this wiring has to happen here.
-        studio.onAuthenticationFailure = { [weak auth] in
-            await auth?.signOut()
+        // `ifBearerTokenMatches` guards against a delayed 4001 from a
+        // socket already superseded by a reconnect with a valid, rotated
+        // token (see `AuthService.signOut(ifBearerTokenMatches:)`).
+        studio.onAuthenticationFailure = { [weak auth] token in
+            await auth?.signOut(ifBearerTokenMatches: token)
         }
     }
 }

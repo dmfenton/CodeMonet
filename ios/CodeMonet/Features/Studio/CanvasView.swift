@@ -46,7 +46,7 @@ struct CanvasView: View {
                 .frame(width: containerSize.width, height: containerSize.height)
 
                 if !viewOnly, StudioSelectors.shouldShowIdleAnimation(state) {
-                    IdleParticlesView(canvasSize: canvasSize)
+                    IdleParticlesView()
                         .frame(width: containerSize.width, height: containerSize.height)
                         .allowsHitTesting(false)
                 }

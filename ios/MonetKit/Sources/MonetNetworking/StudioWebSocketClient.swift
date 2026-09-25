@@ -120,6 +120,17 @@ public actor StudioWebSocketClient {
         openSocket(token: token, traceID: traceID)
     }
 
+    /// Like `connect(token:traceID:)`, but a no-op when `token` matches the
+    /// last token given *and* a socket task is currently believed live —
+    /// avoids opening a duplicate connection on an app-triggered reconnect
+    /// (e.g. a foreground transition) that didn't actually rotate the token
+    /// (net-auth spec §9.1). Callers that need an unconditional fresh socket
+    /// (the initial `connect`) should keep using `connect` directly.
+    public func reconnectIfTokenChanged(token: String, traceID: String?) {
+        guard task == nil || token != lastToken else { return }
+        connect(token: token, traceID: traceID)
+    }
+
     public func disconnect() {
         generation += 1
         reconnectTask?.cancel()
@@ -143,6 +154,14 @@ public actor StudioWebSocketClient {
         if let traceID { query.append(URLQueryItem(name: "trace_id", value: traceID)) }
         components?.queryItems = query
         guard let url = components?.url else { return }
+
+        // Guard against duplicate concurrent connections (net-auth spec
+        // §9.1): a prior socket that's still CONNECTING/OPEN is abandoned
+        // rather than closed otherwise, leaking a live connection every
+        // time `connect`/`reconnectWithLatestToken` fires while one is
+        // already up (e.g. a foreground transition that didn't actually
+        // need a new token).
+        task?.cancel(with: .goingAway, reason: nil)
 
         let newTask = session.webSocketTask(with: url)
         task = newTask
