@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Authenticate the WebSocket handshake with the same platform-token authority as the REST API; production WebSocket connections previously rejected Fenton Identity tokens.
+- Treat an unavailable identity service as no verdict (WebSocket close 1011, REST 503) instead of an invalid token, so clients retry rather than sign out.
 - Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
 

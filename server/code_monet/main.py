@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 from code_monet.anthropic_wif import anthropic_wif_configuration
 from code_monet.auth import auth_router, dependencies
+from code_monet.auth.platform import IdentityUnavailableError
 from code_monet.config import settings
 from code_monet.logging_config import setup_dev_logging, setup_production_logging
 from code_monet.registry import workspace_registry
@@ -189,10 +190,13 @@ async def websocket_endpoint(
 
     try:
         user = await dependencies.authenticate_access_token(token)
-    except Exception:
-        # Identity unavailable is not an auth failure: 1011 lets clients retry
-        # instead of discarding a valid session.
-        logger.exception("WebSocket auth could not reach the token authority")
+    except Exception as error:
+        # No verdict is not a rejection: 1011 lets clients retry instead of
+        # discarding a valid session (4001 triggers refresh/sign-out).
+        if isinstance(error, IdentityUnavailableError):
+            logger.warning(f"WebSocket auth deferred: {error}")
+        else:
+            logger.exception("WebSocket auth failed unexpectedly")
         await websocket.close(code=1011, reason="Authentication unavailable")
         return
 
