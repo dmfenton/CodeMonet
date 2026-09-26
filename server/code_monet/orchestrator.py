@@ -132,6 +132,7 @@ class AgentOrchestrator:
                 image_width=version.image_width,
                 image_height=version.image_height,
                 stages=version.stages,
+                ops=version.ops,
             )
         )
 

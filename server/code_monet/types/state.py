@@ -44,6 +44,18 @@ class CanvasState(BaseModel):
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER  # Active style
 
 
+class PaintingVersionRef(BaseModel):
+    """One version of a piece as clients see it (init, piece detail payloads)."""
+
+    version: int
+    asset_base: str
+    image_width: int
+    image_height: int
+    stages: list[str]
+    ops: int
+    created_at: str
+
+
 class PaintingVersion(BaseModel):
     """One rendered version of a program painting (paint mode).
 
@@ -57,10 +69,23 @@ class PaintingVersion(BaseModel):
     image_width: int
     image_height: int
     stages: list[str] = []
+    ops: int = 0  # Reveal ops (strokes + area ops) the version's program painted
     created_at: str
 
     def asset_base(self, user_id: str) -> str:
         return f"/painting-assets/{user_id}/{self.token}/"
+
+    def ref(self, user_id: str) -> PaintingVersionRef:
+        """Client-facing reference: assets addressed by URL base instead of token."""
+        return PaintingVersionRef(
+            version=self.version,
+            asset_base=self.asset_base(user_id),
+            image_width=self.image_width,
+            image_height=self.image_height,
+            stages=self.stages,
+            ops=self.ops,
+            created_at=self.created_at,
+        )
 
 
 class AgentState(BaseModel):

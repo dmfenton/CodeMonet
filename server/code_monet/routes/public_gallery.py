@@ -15,6 +15,11 @@ from code_monet.config import settings
 from code_monet.db import get_session, repository
 from code_monet.rendering import options_for_og_image, options_for_thumbnail, render_strokes_async
 from code_monet.types import DrawingStyleType, Path
+from code_monet.workspace.gallery import (
+    parse_drawing_style,
+    piece_detail_fields,
+    piece_stroke_count,
+)
 
 router = APIRouter()
 
@@ -76,15 +81,9 @@ async def _load_public_piece(
     try:
         data = json.loads(piece_file.read_text())
         strokes = [Path(**s) for s in data.get("strokes", [])]
-        # Parse drawing style with fallback to plotter
-        style_str = data.get("drawing_style", "plotter")
-        try:
-            drawing_style = DrawingStyleType(style_str)
-        except ValueError:
-            drawing_style = DrawingStyleType.PLOTTER
         return (
             strokes,
-            drawing_style,
+            parse_drawing_style(data.get("drawing_style", "plotter")),
             data.get("width", 800),
             data.get("height", 600),
             _raster_image(workspace_base, user_id, data),
@@ -130,7 +129,7 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
                     "id": f"piece_{data.get('piece_number', 0):06d}",
                     "user_id": str(user.id),
                     "piece_number": data.get("piece_number", 0),
-                    "stroke_count": len(data.get("strokes", [])),
+                    "stroke_count": piece_stroke_count(data),
                     "width": data.get("width", 800),
                     "height": data.get("height", 600),
                     "created_at": data.get("created_at", ""),
@@ -186,6 +185,7 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
         data = json.loads(piece_file.read_text())
         raster = _raster_image(workspace_base, user_id, data)
         return {
+            **piece_detail_fields(data, user_id, raster=raster is not None),
             "id": piece_id,
             "format": "raster" if raster else "strokes",
             "image_url": (
@@ -195,6 +195,7 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
             "piece_number": data.get("piece_number", 0),
             "canvas_width": data.get("width", 800),
             "canvas_height": data.get("height", 600),
+            "drawing_style": parse_drawing_style(data.get("drawing_style", "plotter")).value,
             "created_at": data.get("created_at", ""),
         }
     except (json.JSONDecodeError, OSError) as e:

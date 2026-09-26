@@ -5,14 +5,78 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path as FilePath
-from typing import Any
+from typing import Any, TypedDict
 
 import aiofiles
 import aiofiles.os
 
-from code_monet.types import DrawingStyleType, GalleryEntry, Path, SavedCanvas
+from code_monet.types import DrawingStyleType, GalleryEntry, PaintingVersion, Path, SavedCanvas
 
 logger = logging.getLogger(__name__)
+
+
+class PieceDetailFields(TypedDict):
+    """Piece metadata shared by the owner and public piece detail payloads."""
+
+    title: str | None
+    prompt: str | None
+    stroke_count: int
+    versions: list[dict[str, Any]]  # Serialized PaintingVersionRef, oldest first
+
+
+def gallery_version_record(version: PaintingVersion) -> dict[str, Any]:
+    """A painting version as stored in gallery piece JSON (piece_number is the piece's)."""
+    return version.model_dump(exclude={"piece_number"})
+
+
+def piece_versions(data: dict[str, Any]) -> list[PaintingVersion]:
+    """Rendered versions of a raster gallery piece, oldest first.
+
+    Pieces saved before version history was recorded carry only the final
+    `image_token`; they read as a single version with unknown stages and ops.
+    """
+    piece_number = int(data.get("piece_number", 0))
+    stored = data.get("versions")
+    if isinstance(stored, list) and stored:
+        return [PaintingVersion.model_validate({**v, "piece_number": piece_number}) for v in stored]
+    token = data.get("image_token")
+    if not isinstance(token, str):
+        return []
+    return [
+        PaintingVersion(
+            piece_number=piece_number,
+            version=1,
+            token=token,
+            image_width=int(data.get("image_width", 0)),
+            image_height=int(data.get("image_height", 0)),
+            created_at=data.get("created_at", ""),
+        )
+    ]
+
+
+def piece_stroke_count(data: dict[str, Any]) -> int:
+    """Marks in the finished picture.
+
+    Every painting version re-renders the whole program, so a raster piece's
+    count is its final version's ops; vector pieces count their strokes.
+    """
+    versions = data.get("versions")
+    if isinstance(versions, list) and versions:
+        ops = versions[-1].get("ops")
+        if isinstance(ops, int):
+            return ops
+    return len(data.get("strokes", []))
+
+
+def piece_detail_fields(data: dict[str, Any], user_id: str, *, raster: bool) -> PieceDetailFields:
+    """Title, prompt, stroke count, and (raster only) version refs for a piece payload."""
+    versions = piece_versions(data) if raster else []
+    return PieceDetailFields(
+        title=data.get("title"),
+        prompt=data.get("prompt"),
+        stroke_count=piece_stroke_count(data),
+        versions=[v.ref(user_id).model_dump() for v in versions],
+    )
 
 
 def parse_drawing_style(style_str: str) -> DrawingStyleType:
@@ -55,7 +119,7 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
                     id=piece_id,
                     created_at=data.get("created_at", ""),
                     piece_number=piece_number,
-                    stroke_count=len(data.get("strokes", [])),
+                    stroke_count=piece_stroke_count(data),
                     width=data.get("width", 800),
                     height=data.get("height", 600),
                     drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),

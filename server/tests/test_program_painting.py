@@ -70,6 +70,7 @@ class TestRunPaintingProgram:
         reveal = json.loads((out / "reveal.json").read_text())
         ops = reveal["keyframes"][1]["ops"]
         assert ops[0][0] == "a" and ops[1][0] == "s"
+        assert v.ops == sum(len(kf["ops"]) for kf in reveal["keyframes"]) > 0
         assert workspace.painting == v
 
     @pytest.mark.asyncio
@@ -136,7 +137,7 @@ class TestPaintingAssetRoute:
         vdir = tmp_path / user_id / "paintings" / token
         vdir.mkdir(parents=True)
         (vdir / "reveal.json").write_text("{}")
-        (vdir / "painting.py").write_text("secret")
+        (vdir / "human.json").write_text("[]")
         monkeypatch.setattr(paintings_routes, "get_user_dir", lambda uid: tmp_path / uid)
         app = FastAPI()
         app.include_router(paintings_routes.router)
@@ -145,6 +146,6 @@ class TestPaintingAssetRoute:
         ok = client.get(f"/painting-assets/{user_id}/{token}/reveal.json")
         assert ok.status_code == 200
         assert "immutable" in ok.headers["cache-control"]
-        assert client.get(f"/painting-assets/{user_id}/{token}/painting.py").status_code == 404
+        assert client.get(f"/painting-assets/{user_id}/{token}/human.json").status_code == 404
         assert client.get(f"/painting-assets/{user_id}/{'b' * 32}/reveal.json").status_code == 404
         assert client.get(f"/painting-assets/{user_id}/..%2F..%2Fx/reveal.json").status_code == 404

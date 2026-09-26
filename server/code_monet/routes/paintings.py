@@ -1,4 +1,4 @@
-"""Program-painting version assets (keyframes, final image, reveal log).
+"""Program-painting version assets (keyframes, final image, reveal log, program).
 
 URLs carry an unguessable per-version token, so assets load in plain <img>
 tags and native image views without auth headers, like share links.
@@ -16,8 +16,13 @@ from code_monet.workspace.persistence import get_user_dir
 router = APIRouter()
 
 _TOKEN = re.compile(r"^[0-9a-f]{32}$")
-_ASSET = re.compile(r"^(kf_\d{2}\.jpg|final\.png|preview\.jpg|reveal\.json)$")
-_MEDIA = {".jpg": "image/jpeg", ".png": "image/png", ".json": "application/json"}
+_ASSET = re.compile(r"^(kf_\d{2}\.jpg|final\.png|preview\.jpg|reveal\.json|painting\.py)$")
+_MEDIA = {
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".json": "application/json",
+    ".py": "text/plain; charset=utf-8",
+}
 
 
 @router.get("/painting-assets/{user_id}/{token}/{file}")

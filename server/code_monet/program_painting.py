@@ -32,7 +32,6 @@ class PaintSuccess:
     version: PaintingVersion
     preview: FilePath
     final: FilePath
-    ops: int
     seconds: float
 
 
@@ -109,17 +108,20 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
     human_file.unlink(missing_ok=True)
     shutil.copyfile(program, out_dir / "painting.py")
     version = await state.record_painting_version(
-        token, int(summary["width"]), int(summary["height"]), list(summary["stages"])
+        token,
+        int(summary["width"]),
+        int(summary["height"]),
+        list(summary["stages"]),
+        ops=int(summary["ops"]),
     )
     logger.info(
         f"User {state.user_id}: painting v{version.version} rendered in {seconds:.1f}s "
-        f"({summary['ops']} ops, {len(version.stages)} stages)"
+        f"({version.ops} ops, {len(version.stages)} stages)"
     )
     return PaintSuccess(
         version=version,
         preview=out_dir / "preview.jpg",
         final=out_dir / "final.png",
-        ops=int(summary["ops"]),
         seconds=seconds,
     )
 

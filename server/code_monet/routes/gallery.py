@@ -10,6 +10,7 @@ from code_monet.auth.dependencies import CurrentUser
 from code_monet.db import get_session, repository
 from code_monet.routes.canvas import get_user_state, render_strokes_to_png
 from code_monet.types import get_style_config
+from code_monet.workspace.gallery import piece_detail_fields
 
 router = APIRouter()
 
@@ -32,7 +33,9 @@ async def get_gallery_piece_strokes(piece_number: int, user: CurrentUser) -> dic
     strokes, drawing_style, width, height = result
     style_config = get_style_config(drawing_style)
     raster = await state.gallery_raster(piece_number)
+    data = await state.gallery_piece_data(piece_number) or {}
     return {
+        **piece_detail_fields(data, user.id, raster=raster is not None),
         "strokes": [s.model_dump() for s in strokes],
         "piece_number": piece_number,
         "canvas_width": width,
