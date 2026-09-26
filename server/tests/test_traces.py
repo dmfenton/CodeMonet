@@ -124,6 +124,31 @@ class TestTracesEndpoint:
 
         assert response.status_code == 200
 
+    def test_receive_traces_fractional_millisecond_timestamps(self, client):
+        """Swift's `Date().timeIntervalSince1970 * 1000` is virtually always
+        fractional; the server must truncate rather than 422 (regression for
+        the iOS client's every-flush 422)."""
+        test_client, mock_record = client
+        payload = {
+            "spans": [
+                {
+                    "traceId": "1-12345678-123456789012345678901234",
+                    "spanId": "1234567890abcdef",
+                    "name": "test.event",
+                    "startTime": 1758830000123.456,
+                    "endTime": 1758830000200.9,
+                }
+            ]
+        }
+
+        response = test_client.post("/traces", json=payload)
+
+        assert response.status_code == 200
+        assert response.json() == {"received": 1}
+        recorded_spans = mock_record.call_args[0][0]
+        assert recorded_spans[0]["startTime"] == 1758830000123
+        assert recorded_spans[0]["endTime"] == 1758830000200
+
     def test_receive_traces_invalid_payload(self, client):
         """Test invalid payload returns 422."""
         test_client, _ = client

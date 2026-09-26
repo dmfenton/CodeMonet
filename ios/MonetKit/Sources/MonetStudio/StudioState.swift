@@ -102,6 +102,12 @@ public struct StudioState: Equatable, Sendable {
     public var canvasHeight: Int = CanvasDefaults.height
     public var pieceNumber: Int = 0
     public var viewingPiece: Int?
+    /// Set alongside `viewingPiece` when the gallery piece being viewed is
+    /// `.raster` (program painting, no vector strokes) — the API-relative
+    /// URL of its final image (`LoadCanvasPayload.imageURL`, program-
+    /// painting spec §2.1's `galleryRasterImageUrl`). `nil` for a `.strokes`
+    /// piece, and whenever `viewingPiece` is `nil`.
+    public var viewingImageURL: String?
     public var drawingEnabled: Bool = false
     public var gallery: [GalleryEntry] = []
     /// Client assumes paused until the server says otherwise.

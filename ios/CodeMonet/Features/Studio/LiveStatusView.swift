@@ -25,6 +25,15 @@ struct LiveStatusView: View {
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("live-status")
         .accessibilityLabel(accessibilityText)
+        // ux spec §10 item 9: announce updates as the agent works, so a
+        // VoiceOver user doesn't have to manually re-navigate back to this
+        // element to notice new content. Keyed off `accessibilityText`
+        // (not the raw event stream), which only changes at the
+        // `.revealWord` cadence `PerformerEngine` already paces thinking
+        // text at — never per animation frame.
+        .onChange(of: accessibilityText) { _, newValue in
+            AccessibilityNotification.Announcement(newValue).post()
+        }
     }
 
     private var statusRow: some View {

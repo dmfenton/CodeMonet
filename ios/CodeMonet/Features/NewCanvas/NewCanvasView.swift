@@ -14,10 +14,22 @@ struct NewCanvasView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var direction = ""
     @State private var style: DrawingStyleType
     @State private var profile = CanvasSizeProfiles.standard
+    /// Guards the action bar against a tap landing on it while the sheet's
+    /// presentation transition is still in flight. Right after the sheet
+    /// animates in, SwiftUI can hit-test a tap aimed at the auto-growing
+    /// `.vertical` direction `TextField` (in the scrolling content above)
+    /// against this `safeAreaInset` action bar's still-settling frame
+    /// instead — firing "Let Agent Decide" and dismissing the sheet before
+    /// the user ever touched a button. Disabling this bar for the
+    /// transition's duration turns a stray early tap into a no-op instead
+    /// of an accidental undirected start.
+    @State private var actionsReady = false
+    private static let presentationSettleDelay: Duration = .milliseconds(400)
 
     /// Pre-seeded from Home's currently-selected style, reset every time the
     /// sheet opens (ux spec §7.2) — automatic here since SwiftUI creates a
@@ -67,10 +79,15 @@ struct NewCanvasView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 actions(palette: palette, connected: environment.studio.connected)
+                    .allowsHitTesting(actionsReady)
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .modifier(AdaptiveSheetPresentation(isRegularWidth: horizontalSizeClass == .regular))
+        .task {
+            actionsReady = false
+            try? await Task.sleep(for: Self.presentationSettleDelay)
+            actionsReady = true
+        }
     }
 
     var subtitle: String { "Give the agent a direction, or let it decide" }

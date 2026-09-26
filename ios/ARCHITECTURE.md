@@ -233,12 +233,16 @@ code — they contain exact constants/formulas this document doesn't repeat.
   - `cd ios && make test-app`
   - `cd ios/MonetKit && swift build && swift test` (unaffected by your changes, but must still pass — you own `Package.swift`... no, you don't; if you ever touch it, flag it)
 
-## 7. Program painting (protocol/state/reveal-math landed; drawing/networking/UI outstanding)
+## 7. Program painting (protocol/state/reveal-math/drawing/networking/UI landed)
 
 Program-painting support (`docs/program-painting.md`,
 `scratchpad/specs/program-painting.md` — the client contract for PR #313)
-has landed at the `MonetKit` layer only. No `Package.swift`/`project.yml`
-change was needed — every addition is new files or additive fields under
+has landed end to end: `MonetKit`'s protocol/state/reveal-math layer, the
+CoreGraphics reveal compositor and painting-asset networking, and their
+wiring into the Studio canvas and gallery viewing (see "Wired since the
+above was written" below the work-package table). No `Package.swift`/
+`project.yml` change was needed — every addition is new files or additive
+fields under
 already-listed `sources` paths.
 
 **Landed:**
@@ -275,29 +279,6 @@ already-listed `sources` paths.
   (`buildRevealPlan`, `advanceRevealPlan`, gallery raster URLs) verbatim
   against the same fixture manifest shape.
 
-**Deliberately not started** (flagging per §4 rule 1/rule-of-thumb — these
-are net-new subsystems, not edits to an existing public contract, so no
-signature changed underneath anyone, but they're real scope a future
-work package must pick up before program painting is usable end to end):
-
-- **Drawing.** No `RasterRevealLayer`/accumulation-`CGContext` driving loop
-  exists yet (spec §9: `CADisplayLink` → `advanceRevealPlan` → incremental
-  `CGContext` draw → `CALayer.contents`). `RevealSink` is defined and tested
-  against a recording stub only; a real CoreGraphics-backed conformer, and
-  its compositing into the Studio canvas (owned by work package 5,
-  `ios/CodeMonet/Features/Studio/`), is unbuilt.
-- **Networking.** No fetch/cache path exists for `reveal.json` or keyframe/
-  `final.png` images from a version's `asset_base` (`MonetNetworking`,
-  work package 4) — `PaintingAssetURL` only does the string joining `reveal.ts`'s
-  `paintingAssetUrl` does; the actual `URLSession` fetch, off-main JPEG/PNG
-  decode, and bounded `NSCache` are unbuilt.
-- **Gallery/Home raster thumbnails and detail view** (work package 6,
-  `ios/CodeMonet/Features/Gallery/`, `Home/`) — reads `GalleryPieceFormat`/
-  `imageURL` are decoded and available, but nothing in the UI layer consumes
-  them yet.
-None of the above required touching a frozen public contract; they are
-purely additive follow-on work in packages 4/5/6.
-
 **Wired since the above was written:**
 
 - **`IncrementalCanvasRenderer` wiring.** `CodeMonet/Features/Studio/CanvasView.swift`
@@ -310,10 +291,66 @@ purely additive follow-on work in packages 4/5/6.
   frame. The cache fully rebakes on a canvas-size change, a
   `(pieceNumber, viewingPiece)` change (new/loaded/gallery canvas), or
   whenever `state.strokes` is shorter than what's already baked (a
-  generic reset fallback, e.g. `.clear`). This still does **not** draw
-  `state.painting` (see "Drawing" above, still unbuilt) — only the
-  vector-stroke path.
+  generic reset fallback, e.g. `.clear`).
 - **`TOOL_ICONS`.** `StudioPresentation.KnownTool` now has a `.paint` case
   (`paintpalette.fill`/`paintpalette`), so a `paint` code-execution message
   gets a real icon instead of falling through to the generic
   "Running code" presentation.
+- **Drawing — live paint-mode reveal.** `MonetRender.RasterRevealSink`
+  (`RasterRevealSink.swift`) is a real `RevealSink` conformer: a
+  `CoreGraphics`-backed compositor over a `plan.width x plan.height`
+  bitmap context, one to one with `RevealOp` coordinates. CoreGraphics has
+  no image-shader-fill primitive (Skia's `makeShaderOptions`), so each op
+  is clip-then-draw instead: the op's shape (an ellipse/stroked polyline
+  for a stroke op, a rect for an area op) becomes the clip path, then the
+  keyframe image is drawn across the whole canvas rect. Bitmap contexts in
+  this package are bottom-left-origin, un-flipped; empirically verified
+  (not just documentation-derived — see the type's doc comment) that
+  `CGContext.draw(_:in:)` needs **no** flip transform here, while clip
+  geometry built from manifest (top-left-origin, y-down) coordinates does,
+  via the same `CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty:
+  height)` every other renderer in this package already uses.
+  `PaintingImageDecoder` decodes a keyframe/`final.png`'s raw bytes to a
+  `CGImage` via `ImageIO`. Tests: `RasterRevealSinkTests.swift` — pixel-level
+  (reads `context.data` directly, never redraws through a second context,
+  which would silently reintroduce an orientation ambiguity of its own).
+- **Networking — painting assets.** `MonetNetworking.PaintingAssetClient`
+  fetches `reveal.json` and keyframe/`final.png` images directly from
+  their resolved `PaintingAssetURL`-joined URLs — no bearer auth (the
+  server's own doc comment: these load "like share links"), via the same
+  `HTTPTransport` protocol `CodeMonetRESTClient` uses, so it's equally
+  fakeable in tests.
+- **Studio canvas compositing.** `CodeMonet/Features/Studio/
+  PaintingRevealController.swift` (app target, not unit-tested itself —
+  glue over the two tested pieces above) drives the whole live pipeline:
+  fetches `base`'s `final.png` and, when `playing` is set, `reveal.json` +
+  every keyframe + `final.png`, builds a `RevealPlan`, and advances it one
+  `TimelineView` tick at a time (mirrors `app/src/renderers/
+  RasterRevealLayer.tsx`'s generation-counter cancellation model: a
+  version superseded mid-fetch or mid-reveal never clobbers a newer one,
+  and an interrupted reveal is jumped to its own fully-revealed state
+  rather than left frozen, matching `MonetStudio.settlePainting`'s
+  contract). `CanvasView.frame(state:canvasSize:now:)` renders this layer
+  instead of the strokes layer whenever `MonetStudio.hasPainting` is true,
+  and calls `StudioStore.paintingPlaybackDone(assetBase:)` once a reveal
+  finishes. Known simplification vs. the RN reference: no cross-version
+  `NSCache` for decoded images (RN's `IMAGE_CACHE_LIMIT`) — each version's
+  assets are fetched fresh; acceptable for now (a version's assets are
+  small and fetched once), flagged as a follow-up if it shows up as a
+  real cost.
+- **Gallery raster viewing.** A `.raster` gallery piece (no vector
+  strokes — a saved program-painting piece) now actually renders:
+  `LoadCanvasPayload` grew `format`/`imageURL` fields (defaulted so an
+  older/partial payload still decodes), `StudioState.viewingImageURL` is
+  set by `StudioReducer`'s `.loadCanvas` case when `format == .raster` and
+  cleared alongside `viewingPiece` everywhere else, and
+  `StudioStore.applyLoadedGalleryPiece` (the REST `GET /gallery/{n}
+  /strokes` path `GalleryView.select()` actually uses) threads
+  `GalleryPieceStrokes.format`/`.imageURL` through. `CanvasView` renders a
+  small dedicated `GalleryRasterImageView` (fetch + decode + display, no
+  animation — a saved piece has nothing to reveal) instead of the
+  strokes/painting layers whenever `viewingImageURL` is set. The live WS
+  `load_canvas` broadcast still never sends `format`/`image_url` (server
+  only ever pushes `.strokes` pieces over it) — harmless, since the app's
+  actual gallery-open flow is the REST round-trip above, not that
+  message; flagged as a gap if a future flow needs the WS path too.

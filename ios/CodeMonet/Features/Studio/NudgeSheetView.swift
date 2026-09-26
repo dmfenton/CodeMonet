@@ -13,6 +13,7 @@ struct NudgeSheetView: View {
     @FocusState private var inputFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private static let quickSuggestions = [
         "Add some curves",
@@ -54,8 +55,7 @@ struct NudgeSheetView: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .modifier(AdaptiveSheetPresentation(isRegularWidth: horizontalSizeClass == .regular))
         .onAppear { inputFocused = true }
     }
 

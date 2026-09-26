@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0577A6BAE0256D55C48BB321 /* WipPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69ECA128215DE3C5212546F /* WipPreview.swift */; };
+		09121B6ECCC7A28A982589DF /* PaintingRevealController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614E72772745666FD5C96705 /* PaintingRevealController.swift */; };
 		0B282C422D4AA72C5DB1E7FF /* ThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */; };
 		0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3ED8CFBB02A001645BE0A8BD /* NewCanvasView.swift */; };
 		0E31FEE8046E7DD437D5FDC4 /* MessageStreamView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93E6D09DF899F9E0EAC328AB /* MessageStreamView.swift */; };
@@ -47,6 +48,7 @@
 		BA4835DB5CC9E34A940E0C2A /* LiveStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */; };
 		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
 		D148D506115831798F412C22 /* CanvasSizeProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */; };
+		D2E9421CE9635D149E9E9C62 /* E2ERoundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E2BBA512FFAF2E4B6F825356 /* ActionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FBE71A271190830A2BC772 /* ActionBarView.swift */; };
 		E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12336794874A19B003081A3 /* CodeMonetApp.swift */; };
@@ -54,6 +56,7 @@
 		EFEB74A8F727EFD3DC54D8D9 /* CanvasSizeProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DF81FFDD70A7EBB7EE730F6 /* CanvasSizeProfileTests.swift */; };
 		F95DD9D4FE5C88F906C0E22C /* MonetStudio in Frameworks */ = {isa = PBXBuildFile; productRef = 15B7043D6142FDEA8DD537B7 /* MonetStudio */; };
 		F9972B04273718665320F46B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A178E0739AE265CF31CAF184 /* Assets.xcassets */; };
+		FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA2978DE221F6E5A1AB4C9D7 /* GalleryRasterImageView.swift */; };
 		FFBC212FF50ADDBFA00269A5 /* MessageBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 965DD7F1D2381A4B9D118405 /* MessageBubbleView.swift */; };
 /* End PBXBuildFile section */
 
@@ -80,6 +83,7 @@
 		0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStatusView.swift; sourceTree = "<group>"; };
 		1DFBA460C8BDEADA2CA5EC44 /* StudioPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioPresentation.swift; sourceTree = "<group>"; };
 		1F335A83678298111142386B /* CodeMonetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetTests.swift; sourceTree = "<group>"; };
+		2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ERoundTests.swift; sourceTree = "<group>"; };
 		2279D8BC1717425C6A89565F /* IdleParticlesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleParticlesView.swift; sourceTree = "<group>"; };
 		2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectorsTests.swift; sourceTree = "<group>"; };
 		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
@@ -90,6 +94,7 @@
 		488E8004DCBEBAB3333BB48C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		48FBE71A271190830A2BC772 /* ActionBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionBarView.swift; sourceTree = "<group>"; };
 		4E5BE0E77B05628D4B9AFE7B /* GalleryFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryFormatting.swift; sourceTree = "<group>"; };
+		614E72772745666FD5C96705 /* PaintingRevealController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingRevealController.swift; sourceTree = "<group>"; };
 		62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		669B99ED0E92CCD268014A1B /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		679612E25876041328C74819 /* MonetKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonetKit; path = MonetKit; sourceTree = SOURCE_ROOT; };
@@ -122,6 +127,7 @@
 		E22EBD765435D2E439AA9DE0 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSizeProfile.swift; sourceTree = "<group>"; };
 		E94A1ADB343BFCBF9580CFFA /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		EA2978DE221F6E5A1AB4C9D7 /* GalleryRasterImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryRasterImageView.swift; sourceTree = "<group>"; };
 		F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCacheTests.swift; sourceTree = "<group>"; };
 		FE4E9C51B443F946BFE95703 /* GalleryFormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryFormattingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -209,6 +215,7 @@
 			isa = PBXGroup;
 			children = (
 				02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */,
+				2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */,
 				91DB036202BA768B628019C3 /* Features */,
 			);
 			path = CodeMonetUITests;
@@ -334,11 +341,13 @@
 			children = (
 				48FBE71A271190830A2BC772 /* ActionBarView.swift */,
 				2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */,
+				EA2978DE221F6E5A1AB4C9D7 /* GalleryRasterImageView.swift */,
 				2279D8BC1717425C6A89565F /* IdleParticlesView.swift */,
 				0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */,
 				965DD7F1D2381A4B9D118405 /* MessageBubbleView.swift */,
 				93E6D09DF899F9E0EAC328AB /* MessageStreamView.swift */,
 				D9000081C43132C4A7392D8F /* NudgeSheetView.swift */,
+				614E72772745666FD5C96705 /* PaintingRevealController.swift */,
 				09618FB822CCC59348901D71 /* StudioColors.swift */,
 				1DFBA460C8BDEADA2CA5EC44 /* StudioPresentation.swift */,
 				7734D18A173A15DE0904EB0E /* StudioView.swift */,
@@ -537,6 +546,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				66C00DCA9EA9160B7DE335A5 /* CodeMonetUITests.swift in Sources */,
+				D2E9421CE9635D149E9E9C62 /* E2ERoundTests.swift in Sources */,
 				B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -571,6 +581,7 @@
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
 				BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */,
 				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
+				FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */,
 				62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */,
 				B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */,
 				1981E79F549C22B21554CC5B /* HomeView.swift in Sources */,
@@ -581,6 +592,7 @@
 				587FB805A51C21177B1132A4 /* Navigation.swift in Sources */,
 				0DE5D614B7A2BDF192CBA700 /* NewCanvasView.swift in Sources */,
 				12B66E995106F678B12911B1 /* NudgeSheetView.swift in Sources */,
+				09121B6ECCC7A28A982589DF /* PaintingRevealController.swift in Sources */,
 				A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */,
 				71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */,
 				7F80C3C67F0562E3DF897B33 /* StudioColors.swift in Sources */,

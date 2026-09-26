@@ -55,6 +55,38 @@ public enum CodeMonetDesignSystem {
     }
 }
 
+/// Presents a `.sheet` as a bottom detent sheet on compact width, or a
+/// centered form sheet on regular width (ux spec §10 item 7: "definitely
+/// allow ... a proper centered/form-sheet rather than a bottom sheet that
+/// looks awkward at iPad width"). `StudioView`/`GalleryView` already branch
+/// on `horizontalSizeClass == .regular` for their own iPad-specific
+/// presentation; this gives sheet-presented modals (New Canvas, Nudge) the
+/// same treatment via one shared modifier instead of duplicating the
+/// detents/adaptation calls at each call site.
+public struct AdaptiveSheetPresentation: ViewModifier {
+    let isRegularWidth: Bool
+
+    public init(isRegularWidth: Bool) {
+        self.isRegularWidth = isRegularWidth
+    }
+
+    public func body(content: Content) -> some View {
+        if isRegularWidth {
+            // No `presentationDetents` here: adding one is what makes
+            // iPadOS render a `.sheet` as a bottom-anchored resizable
+            // detent sheet in the first place. Leaving it unset gives the
+            // platform default for a regular-width presentation — a
+            // centered form sheet — matching the RN app's own
+            // `NewCanvasModal`-equivalent behavior on iPad.
+            content
+        } else {
+            content
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+    }
+}
+
 extension Color {
     /// `#RRGGBB` hex parsing, tolerant of a missing `#`. Bad input falls back
     /// to opaque black rather than crashing — this is UI theming, not a

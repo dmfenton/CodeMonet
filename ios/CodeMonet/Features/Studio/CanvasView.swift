@@ -1,3 +1,4 @@
+import MonetNetworking
 import MonetProtocol
 import MonetRender
 import MonetStudio
@@ -27,6 +28,11 @@ struct CanvasView: View {
 
     @Environment(AppEnvironment.self) private var environment
     @State private var canvasCache = IncrementalCanvasCache()
+    /// Drives the raster layer for paint-mode pieces (program-painting spec
+    /// §4) — a piece with a live/base `painting_version` has no vector
+    /// `Path` strokes to draw, so `frame(state:canvasSize:)` renders this
+    /// layer instead of `canvasCache`'s whenever `hasPainting` is true.
+    @State private var paintingController = PaintingRevealController()
 
     @State private var isDragging = false
 
@@ -40,10 +46,22 @@ struct CanvasView: View {
             let containerSize = CGSize(width: proxy.size.width, height: proxy.size.width * canvasSize.height / max(canvasSize.width, 1))
 
             ZStack(alignment: .topLeading) {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isAnimating(state))) { _ in
-                    frame(state: state, canvasSize: canvasSize)
+                if let imagePath = state.viewingImageURL {
+                    // A `.raster` gallery piece (program-painting spec §2.1's
+                    // `galleryRasterImageUrl`): a static final image, no
+                    // reveal animation, no vector strokes at all — entirely
+                    // separate from the live-painting/strokes machinery
+                    // below.
+                    GalleryRasterImageView(
+                        urlString: PaintingAssetURL.apiAssetUrl(environment.config.apiBaseURL.absoluteString, imagePath)
+                    )
+                    .frame(width: containerSize.width, height: containerSize.height)
+                } else {
+                    TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isAnimating(state))) { timeline in
+                        frame(state: state, canvasSize: canvasSize, now: timeline.date)
+                    }
+                    .frame(width: containerSize.width, height: containerSize.height)
                 }
-                .frame(width: containerSize.width, height: containerSize.height)
 
                 if !viewOnly, StudioSelectors.shouldShowIdleAnimation(state) {
                     IdleParticlesView()
@@ -72,8 +90,24 @@ struct CanvasView: View {
     // MARK: - Rendering
 
     @ViewBuilder
-    private func frame(state: StudioState, canvasSize: CGSize) -> some View {
-        if let image = canvasCache.frame(state: state, canvasSize: canvasSize) {
+    private func frame(state: StudioState, canvasSize: CGSize, now: Date) -> some View {
+        if MonetStudio.hasPainting(state.painting) {
+            if let image = paintingController.frame(
+                base: state.painting.base,
+                playing: state.painting.playing,
+                apiBaseURL: environment.config.apiBaseURL,
+                now: now,
+                onPlaybackDone: { assetBase in
+                    environment.studio.paintingPlaybackDone(assetBase: assetBase)
+                }
+            ) {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .accessibilityHidden(true)
+            } else {
+                Color.white
+            }
+        } else if let image = canvasCache.frame(state: state, canvasSize: canvasSize) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .accessibilityHidden(true)
@@ -84,6 +118,7 @@ struct CanvasView: View {
 
     private func isAnimating(_ state: StudioState) -> Bool {
         state.performance.onStage != nil || !state.currentStroke.isEmpty || !state.performance.buffer.isEmpty
+            || state.painting.playing != nil
     }
 
     // MARK: - Pen indicator (performer-render spec §9.1)

@@ -68,6 +68,7 @@ public enum StudioReducer {
             s.strokes = []
             s.currentStroke = []
             s.viewingPiece = nil
+            s.viewingImageURL = nil
             s.savedCanvas = nil
             s.messages = []
             s.thinking = ""
@@ -103,6 +104,9 @@ public enum StudioReducer {
             s.strokes = payload.strokes
             s.currentStroke = []
             s.viewingPiece = payload.pieceNumber
+            // `.raster` (program painting, no vector strokes): the piece's
+            // content is its final image, not `payload.strokes` (empty).
+            s.viewingImageURL = payload.format == .raster ? payload.imageURL : nil
             s.canvasWidth = payload.canvasWidth
             s.canvasHeight = payload.canvasHeight
             // ⚑ drawingStyle = action.drawingStyle ?? state.drawingStyle
@@ -134,6 +138,7 @@ public enum StudioReducer {
                     s.savedCanvas = nil
                 }
                 s.viewingPiece = nil
+                s.viewingImageURL = nil
             }
         case let .initialize(payload):
             s.performance = PerformanceState()
@@ -144,6 +149,7 @@ public enum StudioReducer {
             s.canvasWidth = payload.canvasWidth
             s.canvasHeight = payload.canvasHeight
             s.viewingPiece = nil
+            s.viewingImageURL = nil
             s.savedCanvas = nil
             s.drawingStyle = payload.drawingStyle
             s.styleConfig = payload.styleConfig

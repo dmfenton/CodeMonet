@@ -63,8 +63,6 @@ public final class StudioStore {
     /// the socket wasn't open) would otherwise leak forever.
     private var pendingSelfStrokes: [Path] = []
     private static let maxPendingSelfStrokes = 32
-    /// Bound on `/strokes/pending` retry attempts — see `handleStrokesReady`.
-    private static let maxStrokesFetchAttempts = 10
 
     public init(environment: CodeMonetEnvironment, tokenProvider: any TokenProviding) {
         socket = StudioWebSocketClient(baseURL: environment.wsBaseURL)
@@ -94,7 +92,19 @@ public final class StudioStore {
         Task { await traceBuffer.startAutoFlush() }
         socketTask = Task { [weak self] in
             guard let self else { return }
-            guard let token = await self.tokenProvider.currentToken() else { return }
+            guard let token = await self.tokenProvider.currentToken() else {
+                // No session yet (net-auth spec §9.1: skip connecting
+                // entirely). `socketTask` guards "currently connecting/
+                // connected", not "connect() was ever called" — leaving it
+                // set here would permanently disable every future
+                // `connect()` call once the guard above sees it non-nil,
+                // since nothing else ever clears it (`disconnect()` has no
+                // caller in the shipped app). Clear it so a later
+                // `connect()`, once a token becomes available, can actually
+                // open the socket.
+                self.socketTask = nil
+                return
+            }
             self.currentToken = token
             self.recordSpan(name: "ws.connect")
             // Subscribe before opening the socket: `openSocket` yields `.connected`
@@ -187,6 +197,16 @@ public final class StudioStore {
         apply(.clearViewing)
     }
 
+    /// A program-painting reveal this device was animating has fully
+    /// drawn its final image (program-painting spec §4.1) — dispatched by
+    /// `CanvasView`'s `PaintingRevealController` once its playback loop
+    /// finishes. Mirrors `clearViewing()`'s pattern of exposing a
+    /// client-local `StudioEvent` publicly; the reducer itself guards
+    /// against a stale/superseded `assetBase`.
+    public func paintingPlaybackDone(assetBase: String) {
+        apply(.paintingPlaybackDone(assetBase: assetBase))
+    }
+
     /// Persists the user's Plotter/Paint choice into the shared,
     /// session-lived `StudioState.drawingStyle` (protocol-state spec's
     /// canonical "current style" slot, matching RN's
@@ -209,7 +229,9 @@ public final class StudioStore {
             canvasWidth: strokes.canvasWidth,
             canvasHeight: strokes.canvasHeight,
             drawingStyle: strokes.drawingStyle,
-            styleConfig: strokes.styleConfig
+            styleConfig: strokes.styleConfig,
+            format: strokes.format,
+            imageURL: strokes.imageURL
         )))
     }
 
@@ -315,8 +337,17 @@ public final class StudioStore {
         let startTime = nowMillis()
         strokesFetchTask = Task { [weak self] in
             guard let self else { return }
-            var attempt = 0
-            while !Task.isCancelled, attempt < Self.maxStrokesFetchAttempts {
+            // Retry until success or cancellation (a newer
+            // `agent_strokes_ready` superseding this fetch, via the
+            // `strokesFetchTask?.cancel()` above, or the task being torn
+            // down) — never give up after a fixed attempt count. The
+            // server already committed this batch; a client that stops
+            // retrying after ~9s of degraded network can permanently drop
+            // strokes the agent already drew, with no other resync trigger
+            // while the WebSocket itself stays connected. A genuine auth
+            // failure is handled separately, via `onUnauthorized` inside
+            // `CodeMonetRESTClient`, not by this retry loop giving up.
+            while !Task.isCancelled {
                 do {
                     let response = try await self.rest.pendingStrokes()
                     self.apply(.enqueueStrokes(response.strokes))
@@ -328,10 +359,6 @@ public final class StudioStore {
                     )
                     return
                 } catch {
-                    // A persistent failure (dead session, etc.) shouldn't
-                    // retry forever — bounded instead (net-auth spec §6).
-                    attempt += 1
-                    guard attempt < Self.maxStrokesFetchAttempts else { break }
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                 }
             }

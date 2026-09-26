@@ -133,7 +133,7 @@ enum StrokeRendering {
     /// point-sampled stroke does (spec §8.5).
     static func drawBlurred(context: CGContext, width: Int, height: Int, radius: Double, draw: (CGContext) -> Void) {
         guard width > 0, height > 0 else { return }
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let layer = CGContext(
             data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
             space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue

@@ -105,6 +105,16 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
     public var canvasHeight: Int
     public var drawingStyle: DrawingStyleType?
     public var styleConfig: DrawingStyleConfig?
+    /// `.raster` for a program-painting piece with no vector strokes to
+    /// draw — `imageURL` is then where its final image lives (program-
+    /// painting spec §2.1's `galleryRasterImageUrl`). Absent from the live
+    /// WS `load_canvas` broadcast today (server only ever sends `.strokes`
+    /// pieces over it); populated by `StudioStore.applyLoadedGalleryPiece`
+    /// from the REST `GET /gallery/{n}/strokes` response, which already
+    /// carries both (`GalleryPieceStrokes`). Defaults to `.strokes`/`nil`
+    /// so an older/partial payload decodes exactly as before.
+    public var format: GalleryPieceFormat
+    public var imageURL: String?
 
     enum CodingKeys: String, CodingKey {
         case strokes
@@ -113,6 +123,8 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         case canvasHeight = "canvas_height"
         case drawingStyle = "drawing_style"
         case styleConfig = "style_config"
+        case format
+        case imageURL = "image_url"
     }
 
     public init(
@@ -121,7 +133,9 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         canvasWidth: Int,
         canvasHeight: Int,
         drawingStyle: DrawingStyleType?,
-        styleConfig: DrawingStyleConfig?
+        styleConfig: DrawingStyleConfig?,
+        format: GalleryPieceFormat = .strokes,
+        imageURL: String? = nil
     ) {
         self.strokes = strokes
         self.pieceNumber = pieceNumber
@@ -129,6 +143,8 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         self.canvasHeight = canvasHeight
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
+        self.format = format
+        self.imageURL = imageURL
     }
 
     /// `canvas_width`/`canvas_height` default to 800/600 if the payload
@@ -141,6 +157,8 @@ public struct LoadCanvasPayload: Codable, Equatable, Sendable {
         canvasHeight = try container.decodeIfPresent(Int.self, forKey: .canvasHeight) ?? CanvasDefaults.height
         drawingStyle = try container.decodeIfPresent(DrawingStyleType.self, forKey: .drawingStyle)
         styleConfig = try container.decodeIfPresent(DrawingStyleConfig.self, forKey: .styleConfig)
+        format = try container.decodeIfPresent(GalleryPieceFormat.self, forKey: .format) ?? .strokes
+        imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
     }
 }
 
