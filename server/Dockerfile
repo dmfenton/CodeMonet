@@ -1,10 +1,12 @@
-FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df AS build
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS build
 
 WORKDIR /app/server
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 
-RUN apk add --no-cache build-base
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
@@ -13,7 +15,7 @@ COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/pytho
 
 RUN uv sync --frozen --no-dev --no-cache
 
-FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
 
 # Build args for version info
 ARG APP_VERSION=dev
@@ -35,13 +37,19 @@ COPY server/alembic/ alembic/
 COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
 
+# The SDK source distribution omits Claude Code. Fail the build unless the
+# glibc wheel supplied a runnable bundled CLI.
+RUN .venv/bin/python -c "import os, subprocess; from pathlib import Path; import claude_agent_sdk; cli = Path(claude_agent_sdk.__file__).parent / '_bundled' / 'claude'; assert cli.is_file() and os.access(cli, os.X_OK), 'Claude SDK bundled CLI is missing'; subprocess.run([str(cli), '--version'], check=True)"
+
 # Persistent data lives on the /app/data volume. Config paths are relative
 # (data/drawing_agent.db, data/agent_workspace/users) and resolve from this
 # WORKDIR, so data/ must be the volume, not a directory inside the image.
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # Remove the unused system package installer, then create the non-root runtime user.
-RUN apk upgrade --no-cache \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/* \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
@@ -49,7 +57,7 @@ RUN apk upgrade --no-cache \
     && test ! -e /usr/local/bin/uv \
     && ! command -v pip \
     && ! command -v wheel \
-    && /bin/busybox adduser -D -u 1000 appuser \
+    && useradd --create-home --uid 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
@@ -61,7 +69,7 @@ ENV DEV_MODE=false
 ENV APP_VERSION=${APP_VERSION}
 ENV APP_COMMIT=${APP_COMMIT}
 ENV APP_BUILD_TIME=${APP_BUILD_TIME}
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/server/.venv/bin:${PATH}"
 
 # Keep the image independently health-aware when it runs outside Compose.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
