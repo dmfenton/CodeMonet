@@ -16,9 +16,11 @@ struct HomeComposer: View {
 
     private static let maxLength = 200
 
-    /// The style lives in `StudioState.drawingStyle`, so the choice survives
-    /// Home being recreated on every Home <-> Studio round trip.
-    private var style: DrawingStyleType { environment.studio.state.drawingStyle }
+    /// The next piece's style. Composer-local so choosing it never restyles
+    /// the piece on the easel; `startNewPiece` applies it when a piece
+    /// starts. Defaults to the current piece's style.
+    @State private var chosenStyle: DrawingStyleType?
+    private var style: DrawingStyleType { chosenStyle ?? environment.studio.state.drawingStyle }
 
     var body: some View {
         PaletteReader { palette in
@@ -98,7 +100,7 @@ struct HomeComposer: View {
 
     private func styleChip(_ candidate: DrawingStyleType, title: String, systemImage: String) -> some View {
         Button {
-            environment.studio.setStyle(candidate)
+            chosenStyle = candidate
         } label: {
             ChipLabel(text: title, systemImage: systemImage, selected: style == candidate)
         }

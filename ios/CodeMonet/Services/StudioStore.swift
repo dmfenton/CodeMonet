@@ -228,13 +228,9 @@ public final class StudioStore {
         apply(.paintingPlaybackDone(assetBase: assetBase))
     }
 
-    /// Persists the user's Plotter/Paint choice into the shared,
-    /// session-lived `StudioState.drawingStyle` (protocol-state spec's
-    /// canonical "current style" slot, matching RN's
-    /// `canvasState.drawingStyle`) rather than a per-view `@State`, so the
-    /// choice survives Home <-> Studio round trips instead of resetting to
-    /// Plotter every time Home is recreated. Mirrors `clearViewing()`'s
-    /// pattern for exposing a client-only `StudioEvent` publicly.
+    /// Sets the session's current style (`StudioState.drawingStyle`, the
+    /// protocol-state spec's canonical "current style" slot). Called only
+    /// when a new piece starts, so the piece on the easel keeps its style.
     public func setStyle(_ style: DrawingStyleType) {
         apply(.setStyle(style, style == .paint ? .paint : .plotter))
     }
