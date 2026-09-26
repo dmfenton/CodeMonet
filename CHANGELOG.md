@@ -37,13 +37,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these entries cover that range.
 
+### Added
+
+- Program painting: the agent writes a Python painting program against `code_monet.paintlib`, the server renders each run as a version, and clients reveal it stroke by stroke (#313).
+- Native SwiftUI iOS app (`ios/`, MonetKit) replaces the React Native app (#315).
+
 ### Changed
 
+- Share the Anthropic workload-identity access token across agent subprocesses (#307).
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
 - Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
 
 ### Fixed
 
+- Keep production server data on the persistent volume (#316).
+- Patch OpenSSL in the SSR image and remediate JavaScript dependency advisories, including js-yaml (#304, #310, #312).
 - Authenticate the WebSocket handshake with the same platform-token authority as the REST API; production WebSocket connections previously rejected Fenton Identity tokens.
 - Treat an unavailable identity service as no verdict (WebSocket close 1011, REST 503) instead of an invalid token, scoped to tokens whose signing key could not be fetched, so clients retry rather than sign out.
 - Web client keeps the stored session and retries with backoff when the server cannot give an auth verdict, persists rotated refresh tokens before the user lookup, and refreshes the session when the WebSocket rejects its token.
