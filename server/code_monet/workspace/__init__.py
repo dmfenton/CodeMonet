@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import uuid
 from datetime import UTC, datetime
 from pathlib import Path as FilePath
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import aiofiles
 import aiofiles.os
 
+from code_monet.rendering import RenderOptions, render_strokes_async
 from code_monet.types import (
     AgentStatus,
     CanvasState,
@@ -464,11 +466,19 @@ class WorkspaceState:
 
             await atomic_write(piece_file, json.dumps(piece_data, indent=2))
 
-            saved_id = f"piece_{self._piece_number:06d}"
+            piece_number = self._piece_number
+            saved_id = f"piece_{piece_number:06d}"
             title_info = (
                 f' titled "{self._current_piece_title}"' if self._current_piece_title else ""
             )
             logger.info(f"Saved piece {self._piece_number}{title_info} to gallery as {saved_id}")
+
+        # The gallery is read far more often than pieces are saved. Render once
+        # here so opening it never queues a full canvas render for every tile.
+        try:
+            await self.gallery_thumbnail(piece_number)
+        except (OSError, ValueError) as exc:
+            logger.warning("Could not prepare gallery thumbnail for %s: %s", saved_id, exc)
 
         await self.save()
         return saved_id
@@ -517,6 +527,60 @@ class WorkspaceState:
         """(image_token, final image path) for a raster gallery piece, else None."""
         data = await self.gallery_piece_data(piece_number)
         return self.raster_final(data) if data else None
+
+    async def gallery_thumbnail(self, piece_number: int) -> bytes | None:
+        """Return a small persisted thumbnail, creating it for older pieces on demand."""
+        data_path = self._gallery_dir / f"piece_{piece_number:06d}.json"
+        if not await aiofiles.os.path.exists(data_path):
+            data_path = self._gallery_dir / f"piece_{piece_number:03d}.json"
+        if not await aiofiles.os.path.exists(data_path):
+            return None
+        thumbnail_path = self._gallery_dir / f"piece_{piece_number:06d}.thumb.png"
+        if await aiofiles.os.path.exists(thumbnail_path):
+            thumbnail_stat, data_stat = await asyncio.gather(
+                aiofiles.os.stat(thumbnail_path), aiofiles.os.stat(data_path)
+            )
+            if thumbnail_stat.st_mtime_ns >= data_stat.st_mtime_ns:
+                async with aiofiles.open(thumbnail_path, "rb") as thumbnail_file:
+                    return await thumbnail_file.read()
+
+        data = await self.gallery_piece_data(piece_number)
+        if data is None:
+            return None
+        from code_monet.workspace.gallery import parse_gallery_piece
+
+        strokes, style, width, height = parse_gallery_piece(data)
+        if width <= 0 or height <= 0:
+            return None
+        raster = self.raster_final(data)
+        if not strokes and raster is None:
+            return None
+
+        target_width = min(width, 640)
+        target_height = max(1, round(height * target_width / width))
+        result = await render_strokes_async(
+            strokes,
+            RenderOptions(
+                width=target_width,
+                height=target_height,
+                drawing_style=style,
+                scale_from=(width, height),
+                base_image=raster[1] if raster else None,
+            ),
+        )
+        assert isinstance(result, bytes)
+
+        # A unique temporary name keeps simultaneous first requests for an old
+        # piece from racing over the same temporary file.
+        temporary_path = thumbnail_path.with_name(f"{thumbnail_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            async with aiofiles.open(temporary_path, "wb") as thumbnail_file:
+                await thumbnail_file.write(result)
+            await aiofiles.os.replace(temporary_path, thumbnail_path)
+        finally:
+            if await aiofiles.os.path.exists(temporary_path):
+                await aiofiles.os.remove(temporary_path)
+        return result
 
     def raster_final(self, data: dict[str, Any]) -> tuple[str, str] | None:
         """(image_token, final image path) for gallery piece JSON, if its image exists."""
