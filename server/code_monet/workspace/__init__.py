@@ -75,6 +75,7 @@ class WorkspaceState:
         self._workspace_file = user_dir / "workspace.json"
         self._gallery_dir = user_dir / "gallery"
         self._write_lock = asyncio.Lock()
+        self._gallery_thumbnail_locks: dict[int, asyncio.Lock] = {}
         self._stroke_lock = asyncio.Lock()  # Protects stroke/canvas modifications
 
         # In-memory state
@@ -464,9 +465,10 @@ class WorkspaceState:
                     gallery_version_record(v) for v in self._painting_versions
                 ]
 
-            await atomic_write(piece_file, json.dumps(piece_data, indent=2))
-
             piece_number = self._piece_number
+            async with self._gallery_thumbnail_lock(piece_number):
+                await atomic_write(piece_file, json.dumps(piece_data, indent=2))
+
             saved_id = f"piece_{piece_number:06d}"
             title_info = (
                 f' titled "{self._current_piece_title}"' if self._current_piece_title else ""
@@ -530,6 +532,13 @@ class WorkspaceState:
 
     async def gallery_thumbnail(self, piece_number: int) -> bytes | None:
         """Return a small persisted thumbnail, creating it for older pieces on demand."""
+        async with self._gallery_thumbnail_lock(piece_number):
+            return await self._gallery_thumbnail_unlocked(piece_number)
+
+    def _gallery_thumbnail_lock(self, piece_number: int) -> asyncio.Lock:
+        return self._gallery_thumbnail_locks.setdefault(piece_number, asyncio.Lock())
+
+    async def _gallery_thumbnail_unlocked(self, piece_number: int) -> bytes | None:
         data_path = self._gallery_dir / f"piece_{piece_number:06d}.json"
         if not await aiofiles.os.path.exists(data_path):
             data_path = self._gallery_dir / f"piece_{piece_number:03d}.json"
@@ -556,8 +565,9 @@ class WorkspaceState:
         if not strokes and raster is None:
             return None
 
-        target_width = min(width, 640)
-        target_height = max(1, round(height * target_width / width))
+        scale = min(1, 640 / max(width, height))
+        target_width = max(1, round(width * scale))
+        target_height = max(1, round(height * scale))
         result = await render_strokes_async(
             strokes,
             RenderOptions(
@@ -592,7 +602,10 @@ class WorkspaceState:
 
     async def list_gallery(self) -> list[GalleryEntry]:
         """List gallery pieces by scanning piece files."""
-        return await scan_gallery_entries(self._gallery_dir)
+        # A saved piece can be replaced while its metadata sidecar is built.
+        # Share the writer's lock so an older scan cannot publish stale data.
+        async with self._write_lock:
+            return await scan_gallery_entries(self._gallery_dir)
 
     async def list_gallery_with_strokes(self) -> list[SavedCanvas]:
         """List gallery pieces with full stroke data.

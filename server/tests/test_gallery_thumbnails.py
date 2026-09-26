@@ -1,11 +1,13 @@
 """Gallery thumbnails are small, persisted, and available to older pieces."""
 
+import asyncio
 import io
 import json
 import uuid
 from pathlib import Path
 from unittest.mock import patch
 
+import aiofiles.os
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -116,3 +118,84 @@ async def test_owner_thumbnail_route_serves_saved_thumbnail(
     assert response.headers["content-type"] == "image/png"
     with Image.open(io.BytesIO(response.content)) as image:
         assert image.size == (640, 480)
+
+
+@pytest.mark.asyncio
+async def test_portrait_thumbnail_caps_longest_edge(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    state.canvas.width = 600
+    state.canvas.height = 900
+    await state.add_strokes(
+        [StrokePath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=600, y=900)])]
+    )
+    await state.save_to_gallery()
+
+    data = await state.gallery_thumbnail(0)
+    assert data is not None
+    with Image.open(io.BytesIO(data)) as image:
+        assert image.size == (427, 640)
+
+
+@pytest.mark.asyncio
+async def test_resave_waits_for_same_piece_thumbnail_render(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    stroke = StrokePath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=1600, y=1200)])
+    await state.add_strokes([stroke])
+    await state.save_to_gallery()
+    (state._gallery_dir / "piece_000000.thumb.png").unlink()
+
+    rendering = asyncio.Event()
+    finish_render = asyncio.Event()
+
+    async def render(strokes: list[StrokePath], _options: object) -> bytes:
+        if len(strokes) == 1:
+            rendering.set()
+            await finish_render.wait()
+        return b"old" if len(strokes) == 1 else b"new"
+
+    with patch("code_monet.workspace.render_strokes_async", side_effect=render):
+        old_request = asyncio.create_task(state.gallery_thumbnail(0))
+        await rendering.wait()
+        await state.add_strokes([stroke])
+        resave = asyncio.create_task(state.save_to_gallery())
+        await asyncio.sleep(0)
+        assert not resave.done()
+        finish_render.set()
+        await old_request
+        await resave
+
+    assert (state._gallery_dir / "piece_000000.thumb.png").read_bytes() == b"new"
+
+
+@pytest.mark.asyncio
+async def test_resave_waits_for_metadata_publication(tmp_path: Path) -> None:
+    state = _state(tmp_path)
+    stroke = StrokePath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=1600, y=1200)])
+    await state.add_strokes([stroke])
+    await state.save_to_gallery()
+    first = await state.list_gallery()
+    assert first[0].title is None
+    (state._gallery_dir / "piece_000000.meta").unlink()
+
+    publishing = asyncio.Event()
+    finish_publish = asyncio.Event()
+    real_replace = aiofiles.os.replace
+
+    async def replace(source: Path, destination: Path) -> None:
+        if destination.suffix == ".meta":
+            publishing.set()
+            await finish_publish.wait()
+        await real_replace(source, destination)
+
+    with patch("code_monet.workspace.gallery.aiofiles.os.replace", side_effect=replace):
+        old_listing = asyncio.create_task(state.list_gallery())
+        await publishing.wait()
+        state.current_piece_title = "New title"
+        resave = asyncio.create_task(state.save_to_gallery())
+        await asyncio.sleep(0)
+        assert not resave.done()
+        finish_publish.set()
+        await old_listing
+        await resave
+
+    assert (await state.list_gallery())[0].title == "New title"
