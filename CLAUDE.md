@@ -649,11 +649,13 @@ See [docs/troubleshooting.md](docs/troubleshooting.md) for common issues with Do
 
 ## Codex Review Gate
 
-- Never merge a pull request until the `Codex review gate` check passes.
-- Address every Codex review comment, regardless of severity, and resolve every Codex review thread before merge.
-- Allow only one `@codex review` request per head SHA. After an invalidation requires another review, push a new commit before re-requesting; an empty commit is acceptable only when no code change is needed.
+The required `Codex review gate` status comes from the pinned
+`dmfenton/codex-review-gate` workflow (`.github/workflows/codex-p1-gate.yml`),
+which caps review at two Codex rounds per PR. Follow its procedure:
+
+- Never merge a pull request until the `Codex review gate` check passes on its current head.
+- Request the first review only after implementation and local checks are complete: comment `@codex review <!-- codex-request-generation:<full head SHA>:<full base SHA> -->`. Allow only one request per head SHA; never request after trivial pushes.
+- Address every Codex review comment, regardless of severity: fix it (or reply why not), reply on the thread, and resolve it. P0/P1 findings block the gate; P2/P3 findings are advisory to the gate but still get a reply.
+- If the first review reports P0/P1 findings, fix them together, push, and request one final review for the new head. A review with no blocking finding is already the final round.
+- After the final round, fix any blocking findings, reply to and resolve each thread, rerun the local checks, and dispatch the gate with `gh workflow run codex-p1-gate.yml -f pr_number=<n>`. Never request a third review. The gate accepts a head that descends from the final reviewed commit with no unresolved blocking Codex thread, including later base-branch merges; the base advancing after the final review is a warning, not a block.
 - Immediately before merge, re-query the live review threads and stop if any Codex thread is unresolved; never rely only on an earlier green status.
-- After resolving or reopening any Codex thread, first post `<!-- codex-resolution-invalidation:<full current head SHA>:<full current base SHA> -->`, then push a new commit, then comment `@codex review <!-- codex-request-generation:<full new head SHA>:<full current base SHA> -->` and wait for the gate to recompute.
-- For the one-time PR that first introduces this workflow before it exists on the default branch, publish the bootstrap status out of band only after manually performing the same exact-head clean-review and live-thread audit; this exception ends once the workflow is on the default branch.
-- After every push, comment `@codex review <!-- codex-request-generation:<full current head SHA>:<full current base SHA> -->` and wait for a clean review that names the exact current head SHA.
-- A clean review or green check for an earlier commit never authorizes merging a newer head.
