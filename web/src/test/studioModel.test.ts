@@ -282,7 +282,7 @@ describe('notebook', () => {
     const critique = s.notebook[s.notebook.length - 1];
     expect(critique).toMatchObject({ kind: 'critique', verdict: 'fail', version: 2 });
     expect(critique?.kind === 'critique' && critique.text).toBe(
-      'FINDINGS:\n- Reflections too literal.'
+      '- Reflections too literal.'
     );
     // The started line became the critique block (no duplicate tool line)
     expect(kinds(s.notebook)).toEqual(['critique']);

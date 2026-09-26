@@ -193,9 +193,21 @@
 }
 
 /* Stage bar */
+.stage-bar-wrap {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
 .stage-bar {
   display: flex;
   gap: 4px;
+}
+
+.stage-bar-caption {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stage-seg {
@@ -393,6 +405,53 @@
 
 .nb-error .nb-block-label {
   color: var(--danger);
+}
+
+.nb-housekeeping {
+  font: 400 11.5px/1.4 var(--mono);
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.nb-md {
+  margin-top: 3px;
+  font: 400 13.5px/1.5 var(--serif);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.nb-md.is-clamped {
+  max-height: calc(1.5em * 4);
+  overflow: hidden;
+}
+
+.nb-md p,
+.nb-md ul {
+  margin: 0;
+}
+
+.nb-md p + p,
+.nb-md p + ul,
+.nb-md ul + p,
+.nb-md ul + ul {
+  margin-top: 0.35em;
+}
+
+.nb-md ul {
+  padding-left: 1.1em;
+}
+
+.nb-md strong {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.nb-critique.is-pass {
+  border-left-color: var(--accent);
+}
+
+.nb-critique.is-pass .nb-block-label {
+  color: var(--accent);
 }
 
 .nb-more {

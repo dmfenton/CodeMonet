@@ -29,6 +29,8 @@ export type NotebookEntry =
       version: number | null;
       /** paint: the version this run produced, once the server reports it. */
       produced: { version: number; ops: number | null } | null;
+      /** Run time reported in the tool's output (paint: "rendered in 13.0s"). */
+      seconds: number | null;
     }
   | {
       kind: 'critique';
@@ -115,11 +117,20 @@ export function parseCritique(output: string): { verdict: 'pass' | 'fail' | null
   const match = /VERDICT:\s*(PASS|FAIL)/i.exec(output);
   const verdict = match ? (match[1]!.toLowerCase() as 'pass' | 'fail') : null;
   const text = output
-    .replace(/VERDICT:\s*(PASS|FAIL)\s*/i, '')
     // Drop the tool's trailing gate instructions to the agent.
     .split(/\n\s*FINISH GATE:/)[0]!
+    .replace(/^\s*\**VERDICT:\s*\**\s*(PASS|FAIL)\b[^\n]*\n?/im, '')
+    .trim()
+    // A leading "FINDINGS:" header repeats what the block label already says.
+    .replace(/^\**FINDINGS:?\**\s*/i, '')
     .trim();
   return { verdict, text };
+}
+
+/** Run time from a tool's output, e.g. paint's "Version 3 rendered in 13.0s". */
+export function parseToolSeconds(output: string | null | undefined): number | null {
+  const match = /rendered in (\d+(?:\.\d+)?)\s*s\b/i.exec(output ?? '');
+  return match ? Number(match[1]) : null;
 }
 
 function stringInput(
@@ -194,6 +205,7 @@ export function recordToolMessage(
         detail: toolDetail(tool, input),
         version: tool === 'critique_canvas' ? versions.latest : versions.working,
         produced: null,
+        seconds: null,
       },
     ]);
   }
@@ -224,7 +236,11 @@ export function recordToolMessage(
       version: match?.version ?? versions.latest,
     };
   } else if (match?.kind === 'tool') {
-    settled = { ...match, status: failed ? 'failed' : 'done' };
+    settled = {
+      ...match,
+      status: failed ? 'failed' : 'done',
+      seconds: parseToolSeconds(output) ?? match.seconds,
+    };
   } else {
     settled = {
       kind: 'tool',
@@ -235,6 +251,7 @@ export function recordToolMessage(
       detail: toolDetail(tool, input),
       version: versions.working,
       produced: null,
+      seconds: parseToolSeconds(output),
     };
   }
 

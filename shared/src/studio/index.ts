@@ -10,6 +10,7 @@ export {
   appendThought,
   attachProducedVersion,
   parseCritique,
+  parseToolSeconds,
   recordToolMessage,
   sealThought,
   toolDetail,
@@ -25,7 +26,27 @@ export {
 } from './versions';
 
 export type { StageSegment, StageSpec, StageState } from './stageBar';
-export { STAGE_MIN_SHARE, buildStageBar, stagesFromLabels, stagesFromManifest } from './stageBar';
+export {
+  STAGE_LABEL_MIN_PX,
+  STAGE_MIN_SHARE,
+  buildStageBar,
+  stageBarCaption,
+  stageLabelsFit,
+  stagesFromLabels,
+  stagesFromManifest,
+} from './stageBar';
+
+export type { MarkdownBlock, MarkdownSpan, NotebookViewItem } from './notebookView';
+export {
+  DOMAIN_TOOLS,
+  buildNotebookView,
+  critiqueLabel,
+  housekeepingLabel,
+  isHousekeepingTool,
+  parseInlineMarkdown,
+  parseMarkdownBlocks,
+  toolLabel,
+} from './notebookView';
 
 export type { TitleSource } from './titles';
 export { PROMPT_TITLE_MAX, pieceDisplayTitle, truncateText } from './titles';

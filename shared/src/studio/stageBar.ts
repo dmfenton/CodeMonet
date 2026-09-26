@@ -91,3 +91,41 @@ export function buildStageBar(
     state: stateFor(g, activeKeyframe),
   }));
 }
+
+/** A segment shows its own label only when it is at least this wide (px). */
+export const STAGE_LABEL_MIN_PX = 72;
+
+/**
+ * True when every segment is wide enough for its full label.
+ * @param barWidth bar width in px; @param gap px between segments;
+ * @param measure label text width in px.
+ */
+export function stageLabelsFit(
+  segments: readonly StageSegment[],
+  barWidth: number,
+  gap: number,
+  measure: (label: string) => number,
+  minPx: number = STAGE_LABEL_MIN_PX
+): boolean {
+  if (segments.length === 0 || barWidth <= 0) return false;
+  const usable = barWidth - gap * (segments.length - 1);
+  return segments.every((s) => {
+    const width = s.weight * usable;
+    return width >= minPx && width >= measure(s.label || '—');
+  });
+}
+
+/**
+ * One caption for the whole bar when per-segment labels don't fit:
+ * "stage 4 of 8 · harbor" while revealing, "8 stages · final touches" when done.
+ */
+export function stageBarCaption(segments: readonly StageSegment[]): string {
+  const n = segments.length;
+  if (n === 0) return '';
+  const current = segments.findIndex((s) => s.state === 'current');
+  if (current >= 0) {
+    return `stage ${current + 1} of ${n} · ${segments[current]!.label || '—'}`;
+  }
+  const last = segments[n - 1]!;
+  return `${n} stage${n === 1 ? '' : 's'} · ${last.label || '—'}`;
+}

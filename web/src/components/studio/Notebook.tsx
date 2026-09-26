@@ -4,59 +4,84 @@
  * at the bottom.
  */
 
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import type { NotebookEntry, StudioPhase } from '@code-monet/shared';
-import { isActivePhase } from '@code-monet/shared';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { MarkdownSpan, NotebookEntry, StudioPhase } from '@code-monet/shared';
+import {
+  buildNotebookView,
+  critiqueLabel,
+  housekeepingLabel,
+  isActivePhase,
+  parseMarkdownBlocks,
+  toolLabel,
+} from '@code-monet/shared';
 import { Icon } from '../brand/Icon';
 
-const TOOL_LABELS: Record<string, string> = {
-  paint: 'paint',
-  view_canvas: 'view canvas',
-  critique_canvas: 'critique',
-  imagine: 'imagine reference',
-  name_piece: 'name piece',
-  sign_canvas: 'sign',
-  mark_piece_done: 'mark done',
-  draw_paths: 'draw paths',
-  generate_svg: 'generate svg',
-};
-
-/** Critiques longer than this collapse behind "more". */
-const CRITIQUE_PREVIEW_CHARS = 320;
-
-export function toolLine(entry: Extract<NotebookEntry, { kind: 'tool' }>): string {
-  const label = TOOL_LABELS[entry.tool] ?? entry.tool;
-  if (entry.tool === 'paint') {
-    const version = entry.produced?.version ?? entry.version;
-    const ops = entry.produced?.ops;
-    return [
-      version !== null ? `paint v${version}` : 'paint',
-      ops ? `${ops.toLocaleString()} strokes` : null,
-    ]
-      .filter(Boolean)
-      .join(' · ');
-  }
-  if (entry.tool === 'name_piece' && entry.detail) return `${label} · “${entry.detail}”`;
-  return entry.detail ? `${label} · ${entry.detail}` : label;
+function Spans({ spans }: { spans: MarkdownSpan[] }): React.ReactElement {
+  return (
+    <>
+      {spans.map((span, i) =>
+        span.bold ? (
+          <strong key={i}>{span.text}</strong>
+        ) : span.italic ? (
+          <em key={i}>{span.text}</em>
+        ) : (
+          <React.Fragment key={i}>{span.text}</React.Fragment>
+        )
+      )}
+    </>
+  );
 }
 
+function Markdown({ text }: { text: string }): React.ReactElement {
+  const blocks = useMemo(() => parseMarkdownBlocks(text), [text]);
+  return (
+    <>
+      {blocks.map((block, i) =>
+        block.kind === 'list' ? (
+          <ul key={i}>
+            {block.items.map((item, j) => (
+              <li key={j}>
+                <Spans spans={item} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p key={i}>
+            <Spans spans={block.spans} />
+          </p>
+        )
+      )}
+    </>
+  );
+}
+
+/** Critique block: verdict label, markdown body clamped to ~4 lines. */
 function Critique({
   entry,
 }: {
   entry: Extract<NotebookEntry, { kind: 'critique' }>;
 }): React.ReactElement {
+  const bodyRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const long = entry.text.length > CRITIQUE_PREVIEW_CHARS;
-  const text =
-    long && !expanded ? `${entry.text.slice(0, CRITIQUE_PREVIEW_CHARS).trimEnd()}…` : entry.text;
-  const label = ['critique', entry.version !== null ? `v${entry.version}` : null, entry.verdict]
-    .filter(Boolean)
-    .join(' · ');
+  const [overflows, setOverflows] = useState(false);
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el || expanded) return;
+    const measure = (): void => setOverflows(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return (): void => observer.disconnect();
+  }, [entry.text, expanded]);
+
   return (
     <div className={`nb-block nb-critique${entry.verdict ? ` is-${entry.verdict}` : ''}`}>
-      <div className="nb-block-label">{label}</div>
-      <p className="nb-block-text">{text}</p>
-      {long && (
+      <div className="nb-block-label">{critiqueLabel(entry.verdict)}</div>
+      <div ref={bodyRef} className={`nb-md${expanded ? '' : ' is-clamped'}`}>
+        <Markdown text={entry.text} />
+      </div>
+      {(overflows || expanded) && (
         <button type="button" className="nb-more" onClick={() => setExpanded((v) => !v)}>
           {expanded ? 'less' : 'more'}
         </button>
@@ -88,7 +113,7 @@ function Entry({
     case 'tool':
       return (
         <div className={`nb-tool is-${entry.status}`}>
-          <span aria-hidden="true">›</span> {toolLine(entry)}
+          <span aria-hidden="true">›</span> {toolLabel(entry)}
           {entry.status === 'running' && live && <span className="nb-tool-running"> …</span>}
           {entry.status === 'failed' && <span className="nb-tool-failed"> · failed</span>}
         </div>
@@ -156,6 +181,7 @@ export function Notebook({
   }, [draft, canSend, onNudge]);
 
   const last = entries[entries.length - 1];
+  const view = useMemo(() => buildNotebookView(entries), [entries]);
   let prevVersion: number | null = null;
 
   return (
@@ -173,7 +199,19 @@ export function Notebook({
               : 'Listening…'}
           </p>
         ) : (
-          entries.map((entry) => {
+          view.map((item) => {
+            if (item.kind === 'housekeeping') {
+              return (
+                <div
+                  key={item.id}
+                  className="nb-housekeeping"
+                  title={`${item.entries.length} tool calls`}
+                >
+                  {housekeepingLabel(item.names)}
+                </div>
+              );
+            }
+            const entry = item.entry;
             // Critiques carry the version they looked at; they don't start a group.
             const group = entry.kind === 'critique' ? null : entry.version;
             const showDivider = group !== null && prevVersion !== null && group !== prevVersion;
