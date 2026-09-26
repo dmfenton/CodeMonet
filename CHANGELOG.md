@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A paint run whose program prints after it finishes, exits before exporting, or tampers with its output now returns a clear error to the agent instead of crashing the paint tool; version metadata comes from the published `reveal.json`, not the program's stdout.
+- A paint run whose program prints after it finishes, exits before exporting, or tampers with its output (removed or linked images, a replaced output directory) now returns a clear error to the agent instead of crashing the paint tool or recording a broken version; version metadata comes from the published `reveal.json`, not the program's stdout.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
 ## [1.41.0] - 2026-09-26

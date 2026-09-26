@@ -72,6 +72,7 @@ class TestRunPaintingProgram:
         ops = reveal["keyframes"][1]["ops"]
         assert ops[0][0] == "a" and ops[1][0] == "s"
         assert v.ops == sum(len(kf["ops"]) for kf in reveal["keyframes"]) > 0
+        assert result.preview_jpeg == (out / "preview.jpg").read_bytes()
         assert workspace.painting == v
 
     @pytest.mark.asyncio
@@ -140,6 +141,14 @@ class TestRunnerOutput:
             '{"width": "320", "height": 240, "keyframes": []}',
             '{"width": 320, "height": 240, "keyframes": [{"label": "sky"}]}',
             '{"width": 1000000, "height": 240, "keyframes": []}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "../x.jpg", "ops": []}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "sky", "ops": []}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [["s", 0, 1, 1]]}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [["a", 0, 0, 1]]}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [{"x": 1}]}]}',
             "[" * 100_000,
         ],
     )
@@ -194,6 +203,41 @@ atexit.register(lambda: (os.unlink(p), os.mkdir(p)))
 
         assert isinstance(result, PaintFailure), result
         assert list(workspace.paintings_dir.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        ("tamper", "message"),
+        [
+            ("os.unlink(j(out, 'preview.jpg'))", "preview.jpg"),
+            (
+                "(os.unlink(j(out, 'final.png')), os.symlink('/etc/hosts', j(out, 'final.png')))",
+                "final.png is missing or not a regular file",
+            ),
+            ("os.unlink(j(out, 'kf_00.jpg'))", "kf_00.jpg is missing or not a regular file"),
+            (
+                "(os.rename(out, out + '.moved'), os.symlink(out + '.moved', out))",
+                "output directory was moved or replaced",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_tampered_assets_fail_and_leave_no_version(
+        self, workspace: WorkspaceState, tamper: str, message: str
+    ) -> None:
+        program = f"""
+import atexit, os, sys
+j = os.path.join
+out = {_OUT_DIR}
+atexit.register(lambda: {tamper})
+"""
+        _write_program(workspace, program + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert message in result.error
+        left = list(workspace.paintings_dir.iterdir())
+        assert all(p.name.endswith(".moved") for p in left)  # only what the program moved
+        assert workspace.painting is None
 
 
 class TestRasterGallery:

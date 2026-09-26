@@ -11,6 +11,7 @@ import asyncio
 import errno
 import json
 import logging
+import math
 import os
 import secrets
 import shutil
@@ -20,8 +21,9 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path as FilePath
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PositiveInt
 
 from code_monet.paintlib.canvas import RevealSummary, reveal_summary
 from code_monet.types import PaintingVersion
@@ -37,8 +39,7 @@ _ERROR_TAIL_CHARS = 3000
 @dataclass(frozen=True)
 class PaintSuccess:
     version: PaintingVersion
-    preview: FilePath
-    final: FilePath
+    preview_jpeg: bytes
     seconds: float
 
 
@@ -51,10 +52,41 @@ class PaintFailure:
 PaintResult = PaintSuccess | PaintFailure
 
 
+@dataclass(frozen=True)
+class _Exported:
+    """A run's checked output: what the version records and what the agent sees."""
+
+    summary: RevealSummary
+    preview_jpeg: bytes
+
+
+def _check_reveal_op(op: list[object]) -> list[object]:
+    """A reveal op as the clients decode it (parseRevealOp, MonetKit RevealOp).
+
+    ["s", width > 0, x, y, ...more points] or ["a", x0, y0, x1, y1].
+    """
+    if not op:
+        raise ValueError("empty reveal op")
+    tag = op[0]
+    nums = [
+        n
+        for n in op[1:]
+        if isinstance(n, int | float) and not isinstance(n, bool) and math.isfinite(n)
+    ]
+    if len(nums) != len(op) - 1:
+        raise ValueError("reveal op coordinates must be finite numbers")
+    if tag == "s" and len(nums) >= 3 and len(nums) % 2 == 1 and nums[0] > 0:
+        return op
+    if tag == "a" and len(nums) == 4:
+        return op
+    raise ValueError(f"not a reveal op: {str(op)[:80]}")
+
+
 class _RevealKeyframe(BaseModel):
     model_config = ConfigDict(strict=True)
     label: str
-    ops: list[object]
+    image: str = Field(pattern=r"^kf_\d{2}\.jpg$")
+    ops: list[Annotated[list[object], AfterValidator(_check_reveal_op)]]
 
 
 class _RevealManifest(BaseModel):
@@ -141,7 +173,7 @@ async def _run_and_record(
     except TimeoutError:
         proc.kill()
         await proc.wait()
-        shutil.rmtree(out_dir, ignore_errors=True)
+        _discard(out_dir)
         return PaintFailure(
             f"Program exceeded {PAINT_TIMEOUT_S}s and was stopped. Reduce mark counts or "
             "per-pixel work (vectorize, work on smaller regions).",
@@ -150,26 +182,27 @@ async def _run_and_record(
 
     seconds = time.monotonic() - started
     if proc.returncode != 0:
-        shutil.rmtree(out_dir, ignore_errors=True)
+        _discard(out_dir)
         err = stderr.decode(errors="replace")[-_ERROR_TAIL_CHARS:]
         out = stdout.decode(errors="replace")[-500:]
         return PaintFailure(
             f"Program failed:\n{err}" + (f"\nstdout:\n{out}" if out.strip() else ""), seconds
         )
 
-    # The published reveal.json, not stdout (which the program shares), is the
-    # record of what was painted.
-    summary = await asyncio.to_thread(_read_reveal_summary, out_dir, width, height)
-    if isinstance(summary, str):
-        shutil.rmtree(out_dir, ignore_errors=True)
+    # The exported files, not stdout (which the program shares), are the record
+    # of what was painted; the program may also have altered them on its way out.
+    exported = await asyncio.to_thread(_collect_export, out_dir, width, height)
+    if isinstance(exported, str):
+        _discard(out_dir)
         out = stdout.decode(errors="replace")[-500:]
-        return PaintFailure(summary + (f"\nstdout:\n{out}" if out.strip() else ""), seconds)
+        return PaintFailure(exported + (f"\nstdout:\n{out}" if out.strip() else ""), seconds)
     try:
         human_file.unlink(missing_ok=True)
         _publish_program(out_dir, source)
     except OSError as e:
-        shutil.rmtree(out_dir, ignore_errors=True)
+        _discard(out_dir)
         return PaintFailure(f"Could not publish the program: {e.strerror or e}", seconds)
+    summary = exported.summary
     version = await state.record_painting_version(
         token,
         summary["width"],
@@ -179,7 +212,7 @@ async def _run_and_record(
         generation=generation,
     )
     if version is None:
-        shutil.rmtree(out_dir, ignore_errors=True)
+        _discard(out_dir)
         return PaintFailure(
             "The canvas was reset while this program ran; its result was discarded.", seconds
         )
@@ -187,22 +220,19 @@ async def _run_and_record(
         f"User {state.user_id}: painting v{version.version} rendered in {seconds:.1f}s "
         f"({version.ops} ops, {len(version.stages)} stages)"
     )
-    return PaintSuccess(
-        version=version,
-        preview=out_dir / "preview.jpg",
-        final=out_dir / "final.png",
-        seconds=seconds,
-    )
+    return PaintSuccess(version=version, preview_jpeg=exported.preview_jpeg, seconds=seconds)
 
 
-def _read_reveal_summary(out_dir: FilePath, width: int, height: int) -> RevealSummary | str:
-    """Version metadata from the run's reveal.json, or an error for the agent.
+def _collect_export(out_dir: FilePath, width: int, height: int) -> _Exported | str:
+    """Check the run's output directory holds a publishable version, or explain why not.
 
-    The server chose the image size, so a manifest of any other size is malformed.
+    A recorded version is a real directory whose published assets are regular
+    files, and whose manifest has the size the server requested.
     """
-    malformed = (
-        "The painting's reveal.json is malformed ({}). Do not write into the output directory."
-    )
+    tampered = "Do not write into the output directory."
+    malformed = "The painting's reveal.json is malformed ({}). " + tampered
+    if not stat.S_ISDIR(_lstat_mode(out_dir)):
+        return "The painting's output directory was moved or replaced. " + tampered
     try:
         raw = json.loads(_read_no_follow(out_dir / "reveal.json"))
         manifest = _RevealManifest.model_validate(raw)
@@ -219,7 +249,31 @@ def _read_reveal_summary(out_dir: FilePath, width: int, height: int) -> RevealSu
         return malformed.format(
             f"size {manifest.width}x{manifest.height}, expected {width}x{height}"
         )
-    return reveal_summary(raw)
+    assets = ["final.png", *(kf.image for kf in manifest.keyframes)]
+    for name in assets:
+        if not stat.S_ISREG(_lstat_mode(out_dir / name)):
+            return f"The painting's {name} is missing or not a regular file. " + tampered
+    try:
+        preview_jpeg = _read_no_follow(out_dir / "preview.jpg")
+    except OSError as e:
+        return f"Could not read the painting's preview.jpg: {e.strerror or e}. " + tampered
+    return _Exported(summary=reveal_summary(raw), preview_jpeg=preview_jpeg)
+
+
+def _lstat_mode(path: FilePath) -> int:
+    """File type bits of `path` itself (0 if absent), never following a symlink."""
+    try:
+        return path.lstat().st_mode
+    except OSError:
+        return 0
+
+
+def _discard(out_dir: FilePath) -> None:
+    """Remove a run's output directory, or the link a program left in its place."""
+    if out_dir.is_symlink():
+        out_dir.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(out_dir, ignore_errors=True)
 
 
 def _read_no_follow(path: FilePath) -> bytes:
