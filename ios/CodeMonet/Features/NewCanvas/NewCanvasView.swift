@@ -19,17 +19,6 @@ struct NewCanvasView: View {
     @State private var direction = ""
     @State private var style: DrawingStyleType
     @State private var profile = CanvasSizeProfiles.standard
-    /// Guards the action bar against a tap landing on it while the sheet's
-    /// presentation transition is still in flight. Right after the sheet
-    /// animates in, SwiftUI can hit-test a tap aimed at the auto-growing
-    /// `.vertical` direction `TextField` (in the scrolling content above)
-    /// against this `safeAreaInset` action bar's still-settling frame
-    /// instead — firing "Let Agent Decide" and dismissing the sheet before
-    /// the user ever touched a button. Disabling this bar for the
-    /// transition's duration turns a stray early tap into a no-op instead
-    /// of an accidental undirected start.
-    @State private var actionsReady = false
-    private static let presentationSettleDelay: Duration = .milliseconds(400)
 
     /// Pre-seeded from Home's currently-selected style, reset every time the
     /// sheet opens (ux spec §7.2) — automatic here since SwiftUI creates a
@@ -62,6 +51,8 @@ struct NewCanvasView: View {
                     sizeProfileChips(palette: palette)
 
                     directionInput(palette: palette)
+
+                    actions(palette: palette, connected: environment.studio.connected)
                 }
                 .padding(FentonSpacing.large)
             }
@@ -77,17 +68,8 @@ struct NewCanvasView: View {
                     .accessibilityLabel("Close")
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                actions(palette: palette, connected: environment.studio.connected)
-                    .allowsHitTesting(actionsReady)
-            }
         }
         .modifier(AdaptiveSheetPresentation(isRegularWidth: horizontalSizeClass == .regular))
-        .task {
-            actionsReady = false
-            try? await Task.sleep(for: Self.presentationSettleDelay)
-            actionsReady = true
-        }
     }
 
     var subtitle: String { "Give the agent a direction, or let it decide" }
@@ -176,6 +158,8 @@ struct NewCanvasView: View {
         let hasText = !direction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let startEnabled = connected && hasText
         HStack(spacing: FentonSpacing.medium) {
+            // Only offered while the field is empty: a stray tap can never discard typed text.
+            if !hasText {
             Button {
                 start(withDirection: false)
             } label: {
@@ -192,6 +176,7 @@ struct NewCanvasView: View {
             .buttonStyle(.plain)
             .disabled(!connected)
             .opacity(connected ? 1 : 0.5)
+            }
 
             Button {
                 start(withDirection: true)
@@ -210,8 +195,6 @@ struct NewCanvasView: View {
             .disabled(!connected)
             .accessibilityIdentifier("new-canvas-start-button")
         }
-        .padding(FentonSpacing.large)
-        .background(.bar)
     }
 
     /// "Let Agent Decide" always starts with no direction, even if text was

@@ -171,13 +171,24 @@ public final class AuthService {
 
     /// Net-auth spec §0.2: a successful token exchange alone does not prove
     /// the platform identity maps to a CodeMonet user.
+    /// Only a definitive 401/403 signs out; no verdict (offline, 5xx such as
+    /// the server's 503 during an identity outage) keeps the session and retries.
     private func verifyIdentityMapping() async {
-        do {
-            let user = try await restClient.currentUser()
-            state = .signedIn(user)
-        } catch {
-            await controller.signOut()
-            state = .error("Identity could not be mapped to a CodeMonet user")
+        var delay: Duration = .seconds(2)
+        while !Task.isCancelled {
+            do {
+                let user = try await restClient.currentUser()
+                state = .signedIn(user)
+                return
+            } catch MobileAPIError.unauthorized {
+                await controller.signOut()
+                state = .error("Identity could not be mapped to a CodeMonet user")
+                return
+            } catch {
+                state = .restoring
+                try? await Task.sleep(for: delay)
+                delay = min(delay * 2, .seconds(30))
+            }
         }
     }
 

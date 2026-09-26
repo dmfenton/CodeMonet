@@ -187,6 +187,8 @@ public actor StudioWebSocketClient {
                 self.receiveLoop(task: task, generation: generation)
             } catch {
                 guard self.generation == generation else { return }
+                // A dead socket is not a connection: let reconnectIfTokenChanged reopen it.
+                if self.task === task { self.task = nil }
                 let closeCode = task.closeCode
                 let reason = Self.closeReason(rawCloseCode: closeCode == .invalid ? nil : closeCode.rawValue)
                 self.continuation?.yield(.disconnected(reason))
