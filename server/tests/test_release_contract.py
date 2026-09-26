@@ -5,13 +5,17 @@ ROOT = Path(__file__).parents[2]
 
 def test_runtime_image_has_no_build_package_managers() -> None:
     dockerfile = (ROOT / "server/Dockerfile").read_text()
-    runtime = dockerfile.split("FROM python:3.12-alpine@sha256:", maxsplit=2)[2]
+    assert dockerfile.count("FROM python:3.12-slim@sha256:") == 2
+    runtime = dockerfile.split("FROM python:3.12-slim@sha256:", maxsplit=2)[2]
 
     assert "COPY --from=ghcr.io/astral-sh/uv" not in runtime
     assert 'CMD ["/app/server/.venv/bin/uvicorn",' in runtime
-    assert "RUN apk upgrade --no-cache" in runtime
+    assert "apt-get upgrade -y" in runtime
     assert "/usr/local/bin/pip*" in runtime
     assert "/usr/local/bin/wheel" in runtime
+    assert "'_bundled' / 'claude'" in runtime
+    assert "subprocess.run([str(cli), '--version'], check=True)" in runtime
+    assert 'ENV PATH="/app/server/.venv/bin:${PATH}"' in runtime
 
     remote = (ROOT / "scripts/remote.py").read_text()
     assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
