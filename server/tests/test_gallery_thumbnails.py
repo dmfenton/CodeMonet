@@ -3,6 +3,7 @@
 import asyncio
 import io
 import json
+import os
 import uuid
 from pathlib import Path
 from unittest.mock import patch
@@ -134,6 +135,31 @@ async def test_portrait_thumbnail_caps_longest_edge(tmp_path: Path) -> None:
     assert data is not None
     with Image.open(io.BytesIO(data)) as image:
         assert image.size == (427, 640)
+
+
+@pytest.mark.asyncio
+async def test_resave_invalidates_sidecars_even_when_their_mtimes_are_newer(
+    tmp_path: Path,
+) -> None:
+    state = _state(tmp_path)
+    stroke = StrokePath(type=PathType.LINE, points=[Point(x=0, y=0), Point(x=1600, y=1200)])
+    await state.add_strokes([stroke])
+    await state.save_to_gallery()
+    await state.list_gallery()
+
+    thumbnail = state._gallery_dir / "piece_000000.thumb.png"
+    metadata = state._gallery_dir / "piece_000000.meta"
+    for sidecar in (thumbnail, metadata):
+        future = sidecar.stat().st_mtime_ns + 10_000_000_000
+        os.utime(sidecar, ns=(future, future))
+
+    await state.add_strokes([stroke])
+    state.current_piece_title = "New title"
+    with patch("code_monet.workspace.render_strokes_async", return_value=b"new"):
+        await state.save_to_gallery()
+
+    assert thumbnail.read_bytes() == b"new"
+    assert (await state.list_gallery())[0].title == "New title"
 
 
 @pytest.mark.asyncio
