@@ -70,9 +70,13 @@ public final class AuthService {
     /// DEBUG-only, never persisted (net-auth spec §4) — never routed through
     /// `AuthenticationController`'s refresh machinery.
     private var debugToken: String?
+    /// The last Platform rotation, scoped to this app sign-in. Late responses
+    /// carrying its predecessor can use the replacement without refreshing a
+    /// second time or borrowing a token from a later sign-in.
+    @ObservationIgnored private var recoveredBearer: (rejected: String, replacement: String)?
+    @ObservationIgnored private var sessionGeneration: UInt64 = 0
 
-    public init(environment: CodeMonetEnvironment) {
-        self.environment = environment
+    public convenience init(environment: CodeMonetEnvironment) {
         let identityAPI = MobileAPIClient(baseURL: CodeMonetEnvironment.identityBaseURL)
         let codeMonetAPI = MobileAPIClient(baseURL: environment.apiBaseURL)
         let client = FentonIdentityClient(
@@ -86,11 +90,17 @@ public final class AuthService {
             }
         )
         let stores = KeychainAuthenticationStores(service: "net.dmfenton.sketchpad")
-        controller = AuthenticationController(
+        let controller = AuthenticationController(
             client: client,
             sessionStore: stores.session,
             pendingAuthorizationStore: stores.pendingAuthorization
         )
+        self.init(environment: environment, controller: controller)
+    }
+
+    init(environment: CodeMonetEnvironment, controller: AuthenticationController) {
+        self.environment = environment
+        self.controller = controller
     }
 
     public var bearerToken: String? {
@@ -101,6 +111,8 @@ public final class AuthService {
     /// leaves the app signed out — tries the DEBUG dev-token bootstrap
     /// (net-auth spec §4).
     public func start() async {
+        sessionGeneration &+= 1
+        recoveredBearer = nil
         state = .restoring
         await controller.restoreSession()
         await syncStateFromController()
@@ -151,30 +163,54 @@ public final class AuthService {
     /// applying the identity-mapping check from §0.2/§3.4 before ever
     /// reporting `.signedIn`.
     public func consume(code: String) async throws {
+        sessionGeneration &+= 1
+        recoveredBearer = nil
         state = .exchangingCode
         try await controller.exchangeAuthorizationCode(code)
         await verifyIdentityMapping()
     }
 
     public func signOut() async {
+        sessionGeneration &+= 1
+        recoveredBearer = nil
         debugToken = nil
         await controller.signOut()
         state = .signedOut
     }
 
-    /// Signs out only if `expected` still matches the bearer token
-    /// currently in use — net-auth spec §9.2 point 2's
-    /// `signOut(ifTokenMatches:)` pattern (`FentonMobileCore
-    /// .AuthenticationController` has the equivalent
-    /// `signOut(ifBearerTokenMatches:)`, but that only clears *its own*
-    /// session; this wraps `AuthService.signOut()` instead so the DEBUG
-    /// dev-token and `state` also get cleared consistently). Guards
-    /// against a delayed WS auth-failure event from a socket already
-    /// abandoned by a newer reconnect holding a freshly rotated, valid
-    /// token — that stale event must not sign out a session that's
-    /// actually fine.
-    public func signOut(ifBearerTokenMatches expected: String) async {
-        guard bearerToken == expected else { return }
+    /// Let Platform decide whether a rejected access token can be refreshed.
+    /// A stale failure from a superseded session cannot affect the current one.
+    /// Returns the replacement for one replay of a rejected read, if available.
+    public func recoverRejectedToken(_ rejected: String) async -> String? {
+        if let recoveredBearer,
+           recoveredBearer.rejected == rejected,
+           bearerToken == recoveredBearer.replacement {
+            return recoveredBearer.replacement
+        }
+        guard bearerToken == rejected else { return nil }
+        if debugToken != nil {
+            await signOut()
+            return nil
+        }
+        let generation = sessionGeneration
+        let survived = await controller.handleUnauthorizedRequest(bearerToken: rejected)
+        guard sessionGeneration == generation else { return nil }
+        guard survived else {
+            recoveredBearer = nil
+            state = .signedOut
+            return nil
+        }
+        guard let replacement = controller.session?.bearerToken else { return nil }
+        if replacement != rejected {
+            recoveredBearer = (rejected, replacement)
+        }
+        return replacement
+    }
+
+    /// Code Monet rejected a freshly replayed bearer. Clear only the session
+    /// that sent it; a late response cannot end a newer sign-in or rotation.
+    func rejectCurrentBearer(_ rejected: String) async {
+        guard bearerToken == rejected else { return }
         await signOut()
     }
 
@@ -199,12 +235,26 @@ public final class AuthService {
     /// the server's 503 during an identity outage) keeps the session and retries.
     private func verifyIdentityMapping() async {
         var delay: Duration = .seconds(2)
+        var refreshedAfterRejection = false
         while !Task.isCancelled {
             do {
                 let user = try await restClient.currentUser()
                 state = .signedIn(user)
                 return
             } catch MobileAPIError.unauthorized {
+                if !refreshedAfterRejection, let rejected = controller.session?.bearerToken {
+                    let replacement = await recoverRejectedToken(rejected)
+                    if case .signedOut = state { return }
+                    if let replacement {
+                        refreshedAfterRejection = replacement != rejected
+                        if replacement == rejected {
+                            if !state.isSignedIn { state = .restoring }
+                            try? await Task.sleep(for: delay)
+                            delay = min(delay * 2, .seconds(30))
+                        }
+                        continue
+                    }
+                }
                 await controller.signOut()
                 state = .error("Identity could not be mapped to a CodeMonet user")
                 return
