@@ -43,6 +43,7 @@ export {
   critiqueLabel,
   housekeepingLabel,
   isHousekeepingTool,
+  markdownToPlainText,
   parseInlineMarkdown,
   parseMarkdownBlocks,
   toolLabel,
@@ -52,4 +53,4 @@ export type { TitleSource } from './titles';
 export { PROMPT_TITLE_MAX, pieceDisplayTitle, truncateText } from './titles';
 
 export type { StudioPhase } from './phase';
-export { STUDIO_PHASE_LABELS, deriveStudioPhase, isActivePhase } from './phase';
+export { deriveStudioPhase, isActivePhase } from './phase';

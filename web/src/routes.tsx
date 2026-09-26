@@ -14,18 +14,20 @@ import { GalleryPage } from './pages/GalleryPage';
 import { GalleryPiecePage } from './pages/GalleryPiecePage';
 import { ReplayPage } from './pages/ReplayPage';
 import type { SSRData } from './entry-server';
+import { ssrDataFor } from './ssrData';
 
 interface AppRoutesProps {
   initialData?: unknown;
 }
 
 export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
-  const ssrData = initialData as SSRData | undefined;
+  const location = useLocation();
+  const ssrData = ssrDataFor(initialData, location.pathname);
 
   return (
     <Routes>
       {/* Public routes */}
-      <Route path="/" element={<HomepageRoute />} />
+      <Route path="/" element={<HomepageRoute initialData={ssrData} />} />
       <Route path="/gallery" element={<GalleryRoute initialData={ssrData} />} />
       <Route
         path="/gallery/:userId/:pieceId"
@@ -45,7 +47,7 @@ export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
   );
 }
 
-function HomepageRoute(): React.ReactElement {
+function HomepageRoute({ initialData }: { initialData?: SSRData }): React.ReactElement {
   return (
     <>
       <Helmet>
@@ -104,7 +106,7 @@ function HomepageRoute(): React.ReactElement {
           })}
         </script>
       </Helmet>
-      <Homepage />
+      <Homepage initialGalleryPieces={initialData?.galleryPieces} />
     </>
   );
 }
@@ -230,6 +232,7 @@ function GalleryPieceRoute({ initialData }: { initialData?: SSRData }): React.Re
         </script>
       </Helmet>
       <GalleryPiecePage
+        key={`${userId}/${pieceId}`}
         userId={userId ?? ''}
         pieceId={pieceId ?? ''}
         initialPiece={piece}

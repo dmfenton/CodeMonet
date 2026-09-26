@@ -514,7 +514,14 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       let pieceTitle = state.pieceTitle;
       if (message.type === 'code_execution') {
         notebook = recordToolMessage(notebook, message, versions);
-        if (message.status === 'started' && message.metadata?.tool_name === 'name_piece') {
+        // The title counts once naming succeeded (a completed, non-failed result).
+        const returnCode = message.metadata?.return_code;
+        const succeeded = typeof returnCode !== 'number' || returnCode === 0;
+        if (
+          message.status === 'completed' &&
+          succeeded &&
+          message.metadata?.tool_name === 'name_piece'
+        ) {
           pieceTitle = toolDetail('name_piece', message.metadata.tool_input) ?? pieceTitle;
         }
       } else if (message.type === 'error') {

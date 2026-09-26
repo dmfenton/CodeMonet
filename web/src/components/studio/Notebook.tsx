@@ -11,6 +11,8 @@ import {
   critiqueLabel,
   housekeepingLabel,
   isActivePhase,
+  isHousekeepingTool,
+  markdownToPlainText,
   parseMarkdownBlocks,
   toolLabel,
 } from '@code-monet/shared';
@@ -139,6 +141,31 @@ function Entry({
   }
 }
 
+/**
+ * Screen-reader text for the newest settled entry (open thoughts still
+ * streaming and housekeeping calls are skipped so the region stays calm).
+ */
+export function notebookAnnouncement(entries: readonly NotebookEntry[]): string {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i]!;
+    switch (e.kind) {
+      case 'thought':
+        if (e.open) continue;
+        return e.text.trim().slice(0, 240);
+      case 'tool':
+        if (isHousekeepingTool(e.tool)) continue;
+        return e.status === 'running' ? `${toolLabel(e)}…` : toolLabel(e);
+      case 'critique':
+        return `${critiqueLabel(e.verdict)}. ${markdownToPlainText(e.text).slice(0, 240)}`.trim();
+      case 'nudge':
+        return `you: ${e.text}`;
+      case 'note':
+        return e.tone === 'error' ? `error: ${e.text}` : 'piece finished';
+    }
+  }
+  return '';
+}
+
 interface NotebookProps {
   entries: NotebookEntry[];
   phase: StudioPhase;
@@ -182,6 +209,7 @@ export function Notebook({
 
   const last = entries[entries.length - 1];
   const view = useMemo(() => buildNotebookView(entries), [entries]);
+  const announcement = useMemo(() => notebookAnnouncement(entries), [entries]);
   let prevVersion: number | null = null;
 
   return (
@@ -190,6 +218,9 @@ export function Notebook({
         <span className="mono-label">
           notebook{latestVersion !== null ? ` · v${latestVersion}` : ''}
         </span>
+      </div>
+      <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
       </div>
       <div className="notebook-scroll" ref={scrollRef} onScroll={handleScroll}>
         {entries.length === 0 ? (

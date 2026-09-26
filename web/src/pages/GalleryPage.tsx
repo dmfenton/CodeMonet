@@ -5,11 +5,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import type { DrawingStyleType, PublicGalleryPiece } from '@code-monet/shared';
-import { pieceDisplayTitle } from '@code-monet/shared';
-import { getApiUrl, getPublicAssetUrl } from '../config';
+import { getApiUrl } from '../config';
 import { Icon } from '../components/brand/Icon';
+import { PieceCard } from '../components/site/PieceCard';
 import { SiteFooter, SiteHeader } from '../components/site/SiteChrome';
-import { formatShortDate, pieceHref } from './galleryFormat';
+import { formatShortDate } from './galleryFormat';
 
 /** The public listing endpoint caps a page at 50 pieces. */
 const GALLERY_LIMIT = 50;
@@ -26,18 +26,6 @@ interface GalleryPageProps {
   initialGalleryPieces?: PublicGalleryPiece[];
 }
 
-function thumbnailUrl(piece: PublicGalleryPiece): string {
-  return getPublicAssetUrl(`/public/gallery/${piece.user_id}/${piece.id}/thumbnail.png`);
-}
-
-function titleOf(piece: PublicGalleryPiece): string {
-  return pieceDisplayTitle({
-    title: piece.title,
-    prompt: piece.prompt,
-    pieceNumber: piece.piece_number,
-  });
-}
-
 function countLabel(pieces: PublicGalleryPiece[]): string {
   const n = pieces.length;
   const noun = n === 1 ? 'piece' : 'pieces';
@@ -45,37 +33,6 @@ function countLabel(pieces: PublicGalleryPiece[]): string {
   const oldest = pieces[pieces.length - 1]?.created_at;
   const since = oldest ? formatShortDate(oldest, { year: true }) : null;
   return since ? `${count} · since ${since}` : count;
-}
-
-function PieceCard({
-  piece,
-  featured = false,
-}: {
-  piece: PublicGalleryPiece;
-  featured?: boolean;
-}): React.ReactElement {
-  const title = titleOf(piece);
-  return (
-    <Link to={pieceHref(piece)} className={`art-card${featured ? ' art-card-featured' : ''}`}>
-      <div className="mat">
-        <img
-          src={thumbnailUrl(piece)}
-          alt={title}
-          width={piece.width ?? 800}
-          height={piece.height ?? 600}
-          loading={featured ? 'eager' : 'lazy'}
-        />
-      </div>
-      <span className="art-card-meta">
-        <span className="art-card-title">{title}</span>
-        {piece.created_at && (
-          <span className="mono-label">
-            {formatShortDate(piece.created_at, { year: featured })}
-          </span>
-        )}
-      </span>
-    </Link>
-  );
 }
 
 export function GalleryPage({ initialGalleryPieces }: GalleryPageProps): React.ReactElement {

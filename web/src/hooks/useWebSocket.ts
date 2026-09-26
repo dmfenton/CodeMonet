@@ -18,7 +18,8 @@ interface UseWebSocketOptions {
 
 interface UseWebSocketReturn {
   status: ConnectionStatus;
-  send: (message: ClientMessage) => void;
+  /** Sends when connected; returns false (and drops the message) otherwise. */
+  send: (message: ClientMessage) => boolean;
   connect: () => void;
   disconnect: () => void;
 }
@@ -117,12 +118,13 @@ export function useWebSocket({
     setStatus('disconnected');
   }, []);
 
-  const send = useCallback((message: ClientMessage) => {
+  const send = useCallback((message: ClientMessage): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
-    } else {
-      console.warn('[WebSocket] Cannot send, not connected');
+      return true;
     }
+    console.warn('[WebSocket] Cannot send, not connected');
+    return false;
   }, []);
 
   // Auto-connect on mount

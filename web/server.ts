@@ -6,6 +6,8 @@
  */
 
 import fs from 'node:fs';
+import http, { type IncomingMessage } from 'node:http';
+import type { Socket } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
@@ -94,21 +96,20 @@ async function fetchPieceStrokes(userId: string, pieceId: string): Promise<Piece
 
 async function createServer(): Promise<void> {
   const app = express();
+  // One http server for pages, the /ws proxy's upgrades and Vite's HMR socket.
+  const server = http.createServer(app);
 
   let vite: ViteDevServer | undefined;
   let template: string;
   let ssrModule: SSRModule;
+  /** Dev only: WebSocket upgrade handler for /ws (attached to the listening server). */
+  let upgradeWs: ((req: IncomingMessage, socket: Socket, head: Buffer) => void) | undefined;
 
   if (!isProduction) {
-    // Development mode: use Vite's middleware
-    const { createServer: createViteServer } = await import('vite');
-    vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'custom',
-    });
-    app.use(vite.middlewares);
-
-    // Proxy API requests in development
+    // Development mode. Our proxies mount BEFORE Vite's middlewares: in
+    // middlewareMode Vite has no http server to take WebSocket upgrades, so its
+    // own server.proxy (vite.config.ts, for the standalone `vite` dev server)
+    // must never see /api or /ws here.
     const { createProxyMiddleware } = await import('http-proxy-middleware');
     app.use(
       '/api',
@@ -118,13 +119,22 @@ async function createServer(): Promise<void> {
         pathRewrite: { '^/api': '' },
       })
     );
-    app.use(
-      '/ws',
-      createProxyMiddleware({
-        target: API_URL.replace(/^http/, 'ws'),
-        ws: true,
-      })
-    );
+    const wsProxy = createProxyMiddleware({
+      target: API_URL.replace(/^http/, 'ws'),
+      ws: true,
+      pathFilter: '/ws',
+    });
+    app.use(wsProxy);
+    upgradeWs = wsProxy.upgrade;
+
+    const { createServer: createViteServer } = await import('vite');
+    vite = await createViteServer({
+      // HMR shares this server (no separate port 24678 to collide across worktrees);
+      // Vite only answers its own 'vite-hmr' upgrades, the /ws proxy the rest.
+      server: { middlewareMode: true, hmr: { server } },
+      appType: 'custom',
+    });
+    app.use(vite.middlewares);
   } else {
     // Production mode: serve static assets
     app.use(compression());
@@ -168,7 +178,10 @@ async function createServer(): Promise<void> {
       '</urlset>';
     res
       .status(200)
-      .set({ 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=300' })
+      .set({
+        'Content-Type': 'application/xml; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+      })
       .end(body);
   });
 
@@ -201,8 +214,8 @@ async function createServer(): Promise<void> {
       let initialData: Record<string, unknown> = {};
 
       if (url === '/' || url.startsWith('/?')) {
-        // Homepage: fetch gallery preview
-        const galleryPieces = await fetchGalleryPieces(6);
+        // Homepage: "From the gallery" shows the latest pieces
+        const galleryPieces = await fetchGalleryPieces(4);
         initialData = { galleryPieces };
       } else if (url === '/gallery' || url.startsWith('/gallery?')) {
         // Gallery page: fetch more pieces
@@ -232,6 +245,10 @@ async function createServer(): Promise<void> {
           }
         }
       }
+
+      // Tag the data with the path it was rendered for; the client ignores it
+      // after navigating elsewhere (routes.tsx).
+      initialData = { ...initialData, path: url.split('?')[0] };
 
       // Render the app
       const { html: appHtml, helmet } = ssrModule.render(url, initialData);
@@ -271,7 +288,8 @@ async function createServer(): Promise<void> {
     }
   });
 
-  app.listen(port, () => {
+  if (upgradeWs) server.on('upgrade', upgradeWs);
+  server.listen(port, () => {
     console.log(`SSR server running at http://localhost:${port}`);
   });
 }

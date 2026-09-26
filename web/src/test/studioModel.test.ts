@@ -281,11 +281,21 @@ describe('notebook', () => {
     );
     const critique = s.notebook[s.notebook.length - 1];
     expect(critique).toMatchObject({ kind: 'critique', verdict: 'fail', version: 2 });
-    expect(critique?.kind === 'critique' && critique.text).toBe(
-      '- Reflections too literal.'
-    );
+    expect(critique?.kind === 'critique' && critique.text).toBe('- Reflections too literal.');
     // The started line became the critique block (no duplicate tool line)
     expect(kinds(s.notebook)).toEqual(['critique']);
+  });
+
+  it('settles parallel calls of one tool oldest-first', () => {
+    const s1 = play(
+      painting(),
+      tool('started', 'view_canvas'),
+      tool('started', 'view_canvas'),
+      tool('completed', 'view_canvas')
+    );
+    expect(s1.notebook.map((e) => e.kind === 'tool' && e.status)).toEqual(['done', 'running']);
+    const s2 = play(s1, tool('completed', 'view_canvas'));
+    expect(s2.notebook.map((e) => e.kind === 'tool' && e.status)).toEqual(['done', 'done']);
   });
 
   it('ignores a duplicate completion', () => {
@@ -322,11 +332,13 @@ describe('notebook', () => {
     ]);
   });
 
-  it('takes the title from the agent naming the piece', () => {
-    const s = play(
-      painting(),
-      tool('started', 'name_piece', { tool_input: { title: 'Lilies, late' } })
-    );
+  it('takes the title from a successful name_piece result, not the call', () => {
+    const input = { tool_input: { title: 'Lilies, late' } };
+    const started = play(painting(), tool('started', 'name_piece', input));
+    expect(started.pieceTitle).toBeNull();
+    const failed = play(started, tool('completed', 'name_piece', { ...input, return_code: 1 }));
+    expect(failed.pieceTitle).toBeNull();
+    const s = play(started, tool('completed', 'name_piece', input));
     expect(s.pieceTitle).toBe('Lilies, late');
     expect(s.notebook[0]).toMatchObject({ kind: 'tool', detail: 'Lilies, late' });
   });

@@ -13,7 +13,6 @@ import type {
 } from '@code-monet/shared';
 import {
   PAINTING_FINAL_FILE,
-  STUDIO_PHASE_LABELS,
   buildStageBar,
   deriveAgentStatus,
   deriveStudioPhase,
@@ -181,6 +180,12 @@ function App(): React.ReactElement {
     onAuthError: recoverSession,
   });
 
+  // A prompt pending across a dropped connection can't be matched to a
+  // server new_canvas any more; the next init carries the server's prompt.
+  useEffect(() => {
+    if (wsStatus !== 'connected') pendingPromptRef.current = null;
+  }, [wsStatus]);
+
   // Callback when stroke animation completes
   const sendRef = useRef<((msg: { type: 'animation_done'; batch_id: number }) => void) | null>(
     null
@@ -239,8 +244,10 @@ function App(): React.ReactElement {
       setNewPieceOpen(false);
       dispatch({ type: 'SET_STYLE', drawingStyle: style, styleConfig: getStyleConfig(style) });
       setPaused(false);
-      pendingPromptRef.current = direction ?? null;
-      send({ type: 'new_canvas', direction, drawing_style: style, ...canvas });
+      // Record the prompt only if the request actually went out; it is
+      // applied when the server confirms with new_canvas.
+      const sent = send({ type: 'new_canvas', direction, drawing_style: style, ...canvas });
+      pendingPromptRef.current = sent ? (direction ?? null) : null;
       send({ type: 'resume' });
     },
     [dispatch, setPaused, send]
@@ -342,7 +349,7 @@ function App(): React.ReactElement {
           </h1>
           <span className={`status-pill is-${phase}`} data-testid="status-pill">
             {isActivePhase(phase) && <span className="status-dot is-live" aria-hidden="true" />}
-            {STUDIO_PHASE_LABELS[phase]}
+            {phase}
             {pillVersion !== null && ` v${pillVersion}`}
           </span>
           {wsStatus !== 'connected' && (
@@ -377,7 +384,7 @@ function App(): React.ReactElement {
             onToggleDrawing={toggleDrawing}
             onClear={handleClear}
             debugVisible={showDebug}
-            onToggleDebug={import.meta.env.DEV ? () => setShowDebug((v) => !v) : undefined}
+            onToggleDebug={() => setShowDebug((v) => !v)}
             onSignOut={signOut}
           />
         </div>
@@ -400,7 +407,8 @@ function App(): React.ReactElement {
               agentStrokeStyle={state.performance.agentStrokeStyle}
               penPosition={state.performance.penPosition}
               penDown={state.performance.penDown}
-              drawingEnabled={state.drawingEnabled}
+              // Drawing over an older version's image would land on the live canvas.
+              drawingEnabled={state.drawingEnabled && viewed === null}
               canvasWidth={state.canvasWidth}
               canvasHeight={state.canvasHeight}
               styleConfig={state.styleConfig}

@@ -163,3 +163,11 @@ export function parseMarkdownBlocks(text: string): MarkdownBlock[] {
 /** "critique · pass" / "critique · fail" / "critique". */
 export const critiqueLabel = (verdict: 'pass' | 'fail' | null): string =>
   verdict ? `critique · ${verdict}` : 'critique';
+
+/** Plain text of a markdown body (for screen readers and previews). */
+export function markdownToPlainText(text: string): string {
+  const spansText = (spans: MarkdownSpan[]): string => spans.map((s) => s.text).join('');
+  return parseMarkdownBlocks(text)
+    .map((b) => (b.kind === 'list' ? b.items.map(spansText).join('; ') : spansText(b.spans)))
+    .join(' ');
+}

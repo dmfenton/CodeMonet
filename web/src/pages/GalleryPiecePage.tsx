@@ -19,6 +19,7 @@ import { Icon } from '../components/brand/Icon';
 import { SiteFooter, SiteHeader } from '../components/site/SiteChrome';
 import { RasterRevealLayer, type RevealPlaybackInfo } from '../renderers/RasterRevealLayer';
 import { useRevealManifest } from '../renderers/revealManifest';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { formatShortDate } from './galleryFormat';
 
 interface GalleryPiecePageProps {
@@ -147,13 +148,8 @@ function ProgramDialog({
     return (): void => controller.abort();
   }, [version.asset_base]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return (): void => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onClose);
 
   const copy = (): void => {
     void navigator.clipboard?.writeText(program.text).then(() => setCopied(true));
@@ -162,6 +158,7 @@ function ProgramDialog({
   return (
     <div className="dialog-backdrop" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="dialog program-dialog"
         role="dialog"
         aria-modal="true"

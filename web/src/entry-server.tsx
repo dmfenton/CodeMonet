@@ -13,6 +13,8 @@ import type { GalleryPieceDetail, PublicGalleryPiece } from '@code-monet/shared'
 import { AppRoutes } from './routes';
 
 export interface SSRData {
+  /** Pathname the data was rendered for; ignored on any other path. */
+  path?: string;
   galleryPieces?: PublicGalleryPiece[];
   galleryPiece?: PublicGalleryPiece & { description?: string };
   pieceStrokes?: GalleryPieceDetail;

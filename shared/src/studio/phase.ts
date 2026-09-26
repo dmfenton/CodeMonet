@@ -7,15 +7,6 @@ import type { AgentStatus, ToolName } from '../types';
 
 export type StudioPhase = 'painting' | 'thinking' | 'critique' | 'paused' | 'idle' | 'error';
 
-export const STUDIO_PHASE_LABELS: Record<StudioPhase, string> = {
-  painting: 'painting',
-  thinking: 'thinking',
-  critique: 'critique',
-  paused: 'paused',
-  idle: 'idle',
-  error: 'error',
-};
-
 const PAINTING_TOOLS: ReadonlySet<string> = new Set(['paint', 'draw_paths', 'generate_svg']);
 
 export function deriveStudioPhase(status: AgentStatus, lastTool: ToolName | null): StudioPhase {

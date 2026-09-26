@@ -3,8 +3,11 @@
  * paint program beside the picture it produced, then pieces from the gallery.
  */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import type { PublicGalleryPiece } from '@code-monet/shared';
+import { getApiUrl } from '../config';
+import { PieceCard } from './site/PieceCard';
 import { Icon } from './brand/Icon';
 import { SiteFooter, SiteHeader } from './site/SiteChrome';
 import { HeroPainting } from './homepage/HeroPainting';
@@ -110,9 +113,33 @@ function ProgramCard(): React.ReactElement {
   );
 }
 
-const GALLERY_PREVIEW = SHOWCASE_PIECES.slice(0, 4);
+const PREVIEW_COUNT = 4;
+const SHOWCASE_PREVIEW = SHOWCASE_PIECES.slice(0, PREVIEW_COUNT);
 
-export function Homepage(): React.ReactElement {
+interface HomepageProps {
+  /** Latest public pieces (SSR); fetched on the client otherwise. */
+  initialGalleryPieces?: PublicGalleryPiece[];
+}
+
+/** Latest public pieces for "From the gallery" (null while loading). */
+function useLatestPieces(initial: PublicGalleryPiece[] | undefined): PublicGalleryPiece[] | null {
+  const [pieces, setPieces] = useState<PublicGalleryPiece[] | null>(initial ?? null);
+  useEffect(() => {
+    if (initial) return;
+    const controller = new AbortController();
+    fetch(`${getApiUrl()}/public/gallery?limit=${PREVIEW_COUNT}`, { signal: controller.signal })
+      .then((res) => (res.ok ? (res.json() as Promise<PublicGalleryPiece[]>) : []))
+      .then((data) => setPieces(data))
+      .catch(() => {
+        if (!controller.signal.aborted) setPieces([]);
+      });
+    return (): void => controller.abort();
+  }, [initial]);
+  return pieces;
+}
+
+export function Homepage({ initialGalleryPieces }: HomepageProps): React.ReactElement {
+  const latest = useLatestPieces(initialGalleryPieces);
   return (
     <div className="site landing">
       <SiteHeader>
@@ -190,21 +217,23 @@ export function Homepage(): React.ReactElement {
             </Link>
           </div>
           <ul className="art-grid art-grid-4">
-            {GALLERY_PREVIEW.map((piece) => (
-              <li key={piece.slug}>
-                <a
-                  href={piece.image}
-                  className="art-card"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div className="mat">
-                    <img src={piece.image} alt={piece.description} loading="lazy" />
-                  </div>
-                  <span className="art-card-title">{piece.title}</span>
-                </a>
-              </li>
-            ))}
+            {latest && latest.length > 0
+              ? latest.slice(0, PREVIEW_COUNT).map((piece) => (
+                  <li key={`${piece.user_id}/${piece.id}`}>
+                    <PieceCard piece={piece} />
+                  </li>
+                ))
+              : // No public pieces (yet): the curated showcase, pointing at the gallery.
+                SHOWCASE_PREVIEW.map((piece) => (
+                  <li key={piece.slug}>
+                    <Link to="/gallery" className="art-card">
+                      <div className="mat">
+                        <img src={piece.image} alt={piece.description} loading="lazy" />
+                      </div>
+                      <span className="art-card-title">{piece.title}</span>
+                    </Link>
+                  </li>
+                ))}
           </ul>
         </section>
       </main>

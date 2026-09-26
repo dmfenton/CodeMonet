@@ -2,8 +2,9 @@
  * New piece: optional direction, style (Paint / Plotter) and canvas shape.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { DrawingStyleType } from '@code-monet/shared';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
 
 export interface CanvasDimensions {
   canvas_width: number;
@@ -49,15 +50,8 @@ export function NewPieceDialog({
   const [style, setStyle] = useState<DrawingStyleType>(initialStyle);
   const [profileId, setProfileId] = useState(CANVAS_PROFILES[0]!.id);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onCancel();
-    };
-    window.addEventListener('keydown', onKey);
-    return (): void => window.removeEventListener('keydown', onKey);
-  }, [onCancel]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onCancel, inputRef);
 
   const submit = (): void => {
     const profile = CANVAS_PROFILES.find((p) => p.id === profileId) ?? CANVAS_PROFILES[0]!;
@@ -70,6 +64,7 @@ export function NewPieceDialog({
   return (
     <div className="dialog-backdrop" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className="dialog new-piece"
         role="dialog"
         aria-modal="true"
@@ -95,7 +90,8 @@ export function NewPieceDialog({
             value={direction}
             onChange={(e) => setDirection(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              // Enter submits, but not while an IME is composing text.
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 submit();
               }

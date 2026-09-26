@@ -210,15 +210,22 @@ export function recordToolMessage(
     ]);
   }
 
-  // Completed: settle the matching started line; ignore duplicate completions.
-  const index = lastIndexWhere(
-    entries,
+  // Completed: settle the OLDEST running line for this tool + iteration
+  // (parallel calls of one tool complete in start order). With none running,
+  // a completion for a line we already settled is a duplicate.
+  const index = entries.findIndex(
     (e) =>
-      (e.kind === 'tool' && e.tool === tool && e.iteration === iteration) ||
-      (e.kind === 'critique' && tool === 'critique_canvas' && e.iteration === iteration)
+      e.kind === 'tool' && e.tool === tool && e.iteration === iteration && e.status === 'running'
   );
   const match = index >= 0 ? entries[index]! : null;
-  if (match && (match.kind !== 'tool' || match.status !== 'running')) return entries;
+  const alreadySettled =
+    index < 0 &&
+    entries.some(
+      (e) =>
+        (e.kind === 'tool' && e.tool === tool && e.iteration === iteration) ||
+        (e.kind === 'critique' && tool === 'critique_canvas' && e.iteration === iteration)
+    );
+  if (alreadySettled) return entries;
 
   const returnCode = message.metadata?.return_code;
   const failed = typeof returnCode === 'number' && returnCode !== 0;
