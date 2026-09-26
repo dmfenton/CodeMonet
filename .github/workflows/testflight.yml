@@ -149,7 +149,7 @@ jobs:
           gem install fastlane
 
       - name: Set up shared iOS signing
-        uses: dmfenton/platform.dmfenton.net/.github/actions/isolated-ios-signing@7c5b9b0e57bbcba96f4ded32623c589314b4ddf4
+        uses: ./vendor/platform.dmfenton.net/.github/actions/isolated-ios-signing
         with:
           certificate-p12-base64: ${{ secrets.IOS_DISTRIBUTION_CERT_P12 }}
           certificate-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
@@ -185,7 +185,7 @@ jobs:
 
       - name: Clean up shared iOS signing
         if: always()
-        uses: dmfenton/platform.dmfenton.net/.github/actions/isolated-ios-signing@7c5b9b0e57bbcba96f4ded32623c589314b4ddf4
+        uses: ./vendor/platform.dmfenton.net/.github/actions/isolated-ios-signing
         with:
           mode: cleanup
           keychain-path: ${{ env.FENTON_IOS_KEYCHAIN_PATH }}
