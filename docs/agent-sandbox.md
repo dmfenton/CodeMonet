@@ -2,7 +2,8 @@
 
 The agent is steered by user text (directions, nudges), so everything it
 executes must be treated as possibly prompt-injected: its Bash, Read, Write,
-Edit, Glob and Grep tools, and the painting programs it writes. All of that runs
+Edit, Glob and Grep tools, the painting programs it writes, and plotter-mode
+`generate_svg` code. All of that runs
 as the server's OS user in the server's container. The sandbox limits it to
 the user's own workspace. It sits under the tools and programs, so it does not
 rely on the model following instructions.
@@ -50,9 +51,10 @@ still built from scratch there, but the tools and programs run unconfined.
 |---|---|---|---|---|
 | Claude CLI (drawing agent, critique) and everything its tools run | `/usr /lib /bin /sbin /etc /proc`, Python + venv, the CLI binary, the identity-token directory | the user's workspace, the user's Claude home, `/dev` | yes (Anthropic API) | yes |
 | Painting program (`paint_runner`) | Python + venv + `sys.path`, `/lib /usr/lib` | the version's output dir, its scratch dir | no | no (threads only) |
+| `generate_svg` code (`confined_python`) | same as painting | its throwaway run dir | no | no (threads only) |
 
 The server decides each policy (`claude_runtime.claude_launch`,
-`paint_runner.paint_policy`); the confined side only applies it.
+`sandbox.python_policy`); the confined side only applies it.
 
 **Claude CLI.** Every CLI process is started through the SDK's `cli_path` =
 `code_monet/bin/claude-sandboxed`, which runs `code_monet.claude_sandbox`.
@@ -70,8 +72,10 @@ sessions). The CLI honours `TMPDIR`, so no shared `/tmp` is needed. In
 development without workload identity the CLI uses the developer's own login
 (`HOME`).
 
-**Painting programs.** `paint_runner` confines itself before importing numpy
-or anything else, then runs the program. See
+**Painting programs and `generate_svg` code.** `paint_runner` confines itself
+before importing numpy or anything else, then runs the program;
+`generate_svg` scripts run via `python -I -m code_monet.confined_python`, which
+confines itself and then runs the script. See
 [program-painting.md](program-painting.md#untrusted-programs) for the
 environment and the published-asset checks.
 
@@ -90,6 +94,11 @@ environment and the published-asset checks.
   change the other user's data.
 - Metadata: `stat` of paths outside the policy is not restricted, so file
   existence and sizes are visible, but not contents or directory listings.
+  Likewise other processes' `/proc/<pid>/cmdline|status` (e.g. another user's
+  agent command line) are readable; their environment and memory are not.
+- The CLI's environment passes through variables named `CLAUDE_CODE_*` and
+  `CLAUDE_AGENT_SDK_*` from the server (the SDK's own settings). Never give a
+  server secret such a name.
 - No memory or CPU cgroup limits; painting runs are bounded by
   `PAINT_TIMEOUT_S` and cannot fork.
 

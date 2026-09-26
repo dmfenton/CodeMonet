@@ -4,8 +4,8 @@
 
 Runs the real Agent SDK and Claude CLI through `claude-sandboxed`, scripted by a
 local mock of the Anthropic Messages API that makes the "agent" run hostile
-Bash/Read/Grep tool calls, and runs hostile painting programs through
-`run_painting_program`. Fails if anything outside the user's own workspace is
+Bash/Read/Grep tool calls, runs hostile painting programs through
+`run_painting_program`, and hostile generate_svg code through `run_python_code`. Fails if anything outside the user's own workspace is
 reachable, or if normal work (own files, Grep, python, painting) breaks.
 Expects DEV_MODE=true, SECRET_CANARY set, and a writable /data owned by the user.
 """
@@ -56,6 +56,22 @@ raise RuntimeError("PROBE " + json.dumps({
     "network": attempt(lambda: socket.create_connection(("127.0.0.1", 8765), timeout=2)),
     "fork": attempt(os.fork),
 }))
+"""
+SVG_PROBE = """
+import os, socket
+def attempt(f):
+    try:
+        f()
+        return "LEAK"
+    except OSError:
+        return "ok"
+print("PROBE " + json.dumps({
+    "other-user": attempt(lambda: open("/data/users/u2/secret.txt").read()),
+    "server-environ": attempt(lambda: open("/proc/1/environ").read()),
+    "network": attempt(lambda: socket.create_connection(("127.0.0.1", 8765), timeout=2)),
+    "subprocess": attempt(lambda: os.posix_spawn("/bin/true", ["true"], {})),
+}))
+output_paths([line(0, 0, 10, 10)])
 """
 PAINTING = (
     'cv.stage("ground")\ncv.ground("#d9c9a8")\ncv.stroke([(10, 10), (60, 40)], 6, "#223344")\n'
@@ -219,6 +235,15 @@ def main() -> int:
     print("paint normal program:", type(painted).__name__)
     if not isinstance(painted, PaintSuccess):
         failures.append(f"normal painting failed: {painted}")
+
+    from code_monet.tools.python_sandbox import run_python_code
+
+    svg = asyncio.run(run_python_code(SVG_PROBE, 40, 30))
+    seen = json.loads(svg["stdout"].split("PROBE ", 1)[1].splitlines()[0])
+    print("generate_svg probe:", seen, "paths:", len(svg["paths"]))
+    failures += [f"generate_svg {k}" for k, v in seen.items() if v != "ok"]
+    if len(svg["paths"]) != 1:
+        failures.append(f"generate_svg output broke: {svg['stderr'][-300:]}")
 
     if failures:
         print("FAILED:", *failures, sep="\n  ")

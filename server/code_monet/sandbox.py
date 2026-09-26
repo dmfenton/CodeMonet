@@ -43,6 +43,19 @@ class Policy:
     protected_pids: tuple[int, ...] = field(default_factory=tuple)  # never signalled
 
 
+def python_policy(*write: str) -> Policy:
+    """Untrusted Python: read Python, its packages and shared libraries; write only
+    `write`; no network, no new processes, no signals to the parent or PID 1."""
+    python = {sys.prefix, sys.base_prefix, sys.exec_prefix, *filter(os.path.isdir, sys.path)}
+    return Policy(
+        read=(*sorted(python), "/lib", "/usr/lib"),
+        write=write,
+        network=False,
+        subprocesses=False,
+        protected_pids=(1, os.getppid()),
+    )
+
+
 def available() -> bool:
     return sys.platform == "linux" and platform.machine() in _ARCHES
 
@@ -187,7 +200,7 @@ _ARCHES = {
             "chmod": 90, "fchmodat": 268, "fchmodat2": 452, "chown": 92, "lchown": 94,
             "fchownat": 260, "truncate": 76, "io_uring_setup": 425, "kill": 62,
             "tkill": 200, "tgkill": 234, "rt_sigqueueinfo": 129, "rt_tgsigqueueinfo": 297,
-            "pidfd_open": 434, "socket": 41, "fork": 57, "vfork": 58, "clone": 56,
+            "pidfd_open": 434, "pidfd_send_signal": 424, "socket": 41, "fork": 57, "vfork": 58, "clone": 56,
             "clone3": 435, "execve": 59, "execveat": 322,
         },
     ),
@@ -197,14 +210,20 @@ _ARCHES = {
             "fchmodat": 53, "fchmodat2": 452, "fchownat": 54, "truncate": 45,
             "io_uring_setup": 425, "kill": 129, "tkill": 130, "tgkill": 131,
             "rt_sigqueueinfo": 138, "rt_tgsigqueueinfo": 240, "pidfd_open": 434,
+            "pidfd_send_signal": 424,
             "socket": 198, "clone": 220, "clone3": 435, "execve": 221, "execveat": 281,
         },
     ),
 }  # fmt: skip
 
+# Path-based mutations Landlock ABI 2 does not govern. The fd-based ones
+# (fchmod, ftruncate, fsetxattr, futimens) need a writable or owned fd, which
+# Landlock (opens) and file ownership already limit to the sandbox's own files.
+# pidfd_send_signal: pidfds of protected processes are also unobtainable
+# (pidfd_open is pid-checked below), but deny it outright.
 _ALWAYS_DENIED = (
     "chmod", "fchmodat", "fchmodat2", "chown", "lchown", "fchownat", "truncate",
-    "io_uring_setup", "tkill",
+    "io_uring_setup", "tkill", "pidfd_send_signal",
 )  # fmt: skip
 _TARGETS_PID = ("kill", "tgkill", "rt_sigqueueinfo", "rt_tgsigqueueinfo", "pidfd_open")
 

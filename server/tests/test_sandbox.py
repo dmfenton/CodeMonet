@@ -15,7 +15,6 @@ import pytest
 from code_monet import claude_runtime, claude_sandbox, sandbox
 from code_monet.claude_runtime import SANDBOXED_CLI, claude_launch
 from code_monet.config import settings
-from code_monet.paint_runner import paint_policy
 
 
 class TestSeccompFilter:
@@ -130,9 +129,9 @@ class TestClaudeLaunch:
         assert spec["write"] == ["/ws", "/Users/dev", "/dev"]
 
 
-class TestPaintPolicy:
-    def test_writes_only_its_output_and_scratch_dirs(self) -> None:
-        policy = paint_policy("/data/users/u/paintings/t", "/tmp/paint-run-x")
+class TestPythonPolicy:
+    def test_writes_only_the_given_dirs(self) -> None:
+        policy = sandbox.python_policy("/data/users/u/paintings/t", "/tmp/paint-run-x")
 
         assert policy.write == ("/data/users/u/paintings/t", "/tmp/paint-run-x")
         assert not policy.network and not policy.subprocesses
@@ -206,6 +205,33 @@ class TestEnforcement:
 
         assert {k for k, v in seen.items() if v == "allowed"} == {"write_own", "unix_socket"}, seen
         assert (tmp_path / "other" / "secret").read_text() == "secret"
+
+    @pytest.mark.asyncio
+    async def test_generate_svg_code_is_confined(self, tmp_path: Path) -> None:
+        from code_monet.tools.python_sandbox import run_python_code
+
+        (tmp_path / "secret").write_text("secret")
+        code = f"""
+import os, socket
+def attempt(f):
+    try:
+        f()
+        return "allowed"
+    except OSError:
+        return "denied"
+print("PROBE " + json.dumps({{
+    "read_outside": attempt(lambda: open({str(tmp_path / "secret")!r}).read()),
+    "parent_environ": attempt(lambda: open(f"/proc/{{os.getppid()}}/environ").read()),
+    "inet_socket": attempt(lambda: socket.socket(socket.AF_INET).close()),
+    "subprocess": attempt(lambda: os.posix_spawn("/bin/true", ["true"], {{}})),
+    "write_cwd": attempt(lambda: open("scratch", "w").write("x")),
+}}))
+"""
+        result = await run_python_code(code, 40, 30)
+
+        assert result["return_code"] == 0, result["stderr"]
+        seen = json.loads(result["stdout"].split("PROBE ", 1)[1].splitlines()[0])
+        assert {k for k, v in seen.items() if v == "allowed"} == {"write_cwd"}, seen
 
     def test_the_probe_detects_access_when_unconfined(self, tmp_path: Path) -> None:
         seen = _probe(tmp_path, 0, "none")

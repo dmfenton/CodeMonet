@@ -30,18 +30,6 @@ from pathlib import Path
 from code_monet import sandbox
 
 
-def paint_policy(out_dir: str, work_dir: str) -> sandbox.Policy:
-    """Read Python and shared libraries; write the version's output and scratch dirs."""
-    python = {sys.prefix, sys.base_prefix, sys.exec_prefix, *filter(os.path.isdir, sys.path)}
-    return sandbox.Policy(
-        read=(*sorted(python), "/lib", "/usr/lib"),
-        write=(out_dir, work_dir),
-        network=False,
-        subprocesses=False,
-        protected_pids=(1, os.getppid()),
-    )
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--program", required=True)
@@ -55,7 +43,7 @@ def main() -> int:
     human = json.loads(Path(args.human).read_text()) if args.human else []
     source = Path(args.program).read_text()
     if sandbox.available():
-        sandbox.confine(paint_policy(args.out, os.getcwd()))
+        sandbox.confine(sandbox.python_policy(args.out, os.getcwd()))
 
     import numpy as np
     from scipy import ndimage
