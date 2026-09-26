@@ -139,8 +139,14 @@ public actor StudioWebSocketClient {
         task = nil
     }
 
+    /// Thrown by `send` when no socket is open, so callers can tell a message
+    /// that never left from one that did.
+    public enum SendError: Error, Equatable {
+        case notConnected
+    }
+
     public func send(_ message: ClientMessage) async throws {
-        guard let task else { return }
+        guard let task else { throw SendError.notConnected }
         let data = try JSONEncoder().encode(message)
         let text = String(decoding: data, as: UTF8.self)
         try await task.send(.string(text))

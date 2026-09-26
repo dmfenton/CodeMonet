@@ -98,8 +98,40 @@ struct GalleryPieceDetailView: View {
         }
     }
 
+    /// A painted piece's image is the program render only; the viewer's own
+    /// marks stay vector on top, as in Studio and the server's thumbnails.
     @ViewBuilder
     private var image: some View {
+        if showsRaster, let detail, !humanStrokes.isEmpty {
+            rasterImage.overlay {
+                WipPreview(
+                    strokes: humanStrokes,
+                    canvasWidth: detail.canvasWidth,
+                    canvasHeight: detail.canvasHeight,
+                    styleConfig: detail.styleConfig ?? (detail.drawingStyle == .paint ? .paint : .plotter)
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        } else {
+            rasterImage
+        }
+    }
+
+    private var humanStrokes: [MonetProtocol.Path] {
+        (detail?.strokes ?? []).filter { $0.author == .human }
+    }
+
+    /// True when the main image is a raster (a replayed version or the final render).
+    private var showsRaster: Bool {
+        if let replayIndex, versions.indices.contains(replayIndex) { return true }
+        return PaintingAssetURL.galleryRasterImageUrl(
+            apiBase: apiBase, format: detail?.format ?? entry.format, imageURL: detail?.imageURL
+        ) != nil
+    }
+
+    @ViewBuilder
+    private var rasterImage: some View {
         if let replayIndex, versions.indices.contains(replayIndex) {
             ReplayCanvas(
                 controller: replay,

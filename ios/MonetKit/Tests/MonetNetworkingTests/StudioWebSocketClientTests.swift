@@ -91,4 +91,17 @@ struct StudioWebSocketClientConfigurationTests {
         #expect(await client.reconnectAttempt == 0)
         await client.disconnect()
     }
+
+    @Test("send without an open socket throws notConnected instead of silently dropping")
+    func sendWithoutSocketThrows() async {
+        let client = StudioWebSocketClient(
+            baseURL: URL(string: "ws://127.0.0.1:65500")!,
+            configuration: .init(reconnectInterval: 0.01, maxReconnectInterval: 1),
+            sleeper: RecordingSleeper(),
+            jitterSource: { 0 }
+        )
+        await #expect(throws: StudioWebSocketClient.SendError.notConnected) {
+            try await client.send(.nudge(text: "hello"))
+        }
+    }
 }

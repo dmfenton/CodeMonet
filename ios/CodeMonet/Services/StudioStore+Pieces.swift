@@ -11,6 +11,10 @@ extension StudioStore {
     public func startNewPiece(direction: String?, style: DrawingStyleType, width: Int?, height: Int?) {
         let trimmed = direction?.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = trimmed?.isEmpty == false ? trimmed : nil
+        // Applied now (the server's confirmation may be routed before the
+        // send resumes) and rolled back if the request never went out, so
+        // the piece on the easel is never left restyled.
+        let previousStyle = state.drawingStyle
         setStyle(style)
         // Recorded before the send completes (the server's `new_canvas`
         // confirmation can be routed before the send's continuation
@@ -24,6 +28,7 @@ extension StudioStore {
                 try await self.socket.send(request)
             } catch {
                 if self.pendingPrompt == prompt { self.pendingPrompt = nil }
+                if self.state.drawingStyle == style { self.setStyle(previousStyle) }
                 return
             }
             self.setPausedLocally(false)

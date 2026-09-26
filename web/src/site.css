@@ -502,6 +502,12 @@
   object-fit: contain;
 }
 
+.piece-frame > .piece-strokes-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .replay {
   display: flex;
   align-items: center;

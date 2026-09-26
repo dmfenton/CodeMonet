@@ -81,15 +81,22 @@ function VectorArtwork({
   width,
   height,
   title,
+  overlay = false,
 }: {
   strokes: Path[];
   width: number;
   height: number;
   title: string;
+  /** Transparent layer over a painted image (the viewer's own marks). */
+  overlay?: boolean;
 }): React.ReactElement {
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} aria-label={title} role="img">
-      <rect width={width} height={height} fill="#fffdf8" />
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className={overlay ? 'piece-strokes-overlay' : undefined}
+      {...(overlay ? { 'aria-hidden': true } : { 'aria-label': title, role: 'img' })}
+    >
+      {!overlay && <rect width={width} height={height} fill="#fffdf8" />}
       {strokes.map((stroke, i) => {
         const strokeWidth = stroke.stroke_width ?? (stroke.author === 'human' ? 4 : 3);
         const strokeColor =
@@ -324,6 +331,11 @@ export function GalleryPiecePage({
         ? versionFinalUrl(current)
         : imageUrl;
   const showVector = !staticSrc && !replay.started && strokes.length > 0;
+  // A painted piece's image is the program's render only; human marks stay
+  // vector on top (as in the studio and the server's thumbnails).
+  const humanStrokes = strokes.filter((s) => s.author === 'human');
+  const showHumanOverlay =
+    !showVector && (Boolean(staticSrc) || replay.playing) && humanStrokes.length > 0;
   const fill =
     versions.length > 0 ? (index + (replay.playing ? progress : 1)) / versions.length : 0;
 
@@ -371,6 +383,15 @@ export function GalleryPiecePage({
                       pacing={REPLAY_PACING}
                       onProgress={handleProgress}
                       onPlaybackDone={handlePlaybackDone}
+                    />
+                  )}
+                  {showHumanOverlay && (
+                    <VectorArtwork
+                      strokes={humanStrokes}
+                      width={width}
+                      height={height}
+                      title={title}
+                      overlay
                     />
                   )}
                 </div>
