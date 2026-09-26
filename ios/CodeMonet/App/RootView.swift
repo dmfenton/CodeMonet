@@ -2,14 +2,13 @@ import FentonMobileCore
 import SwiftUI
 
 /// Root gating (ux spec §1): auth-loading spinner -> Auth screen -> the
-/// main app (a one-shot Splash overlay, then Home/Studio/Gallery). This is
+/// main app (Home/Studio/Gallery). This is
 /// the app-shell work package's file; feature views below are owned by
 /// their respective packages per ../../ARCHITECTURE.md's ownership table.
 struct RootView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.scenePhase) private var scenePhase
     @State private var deepLinkCoordinator = DeepLinkCoordinator(parser: CodeMonetAuthDeepLink.parser)
-    @State private var didFinishSplash = false
 
     /// Net-auth spec §9.2 wants a *silent* foreground session revalidation
     /// (`AuthenticationController.restoreSession()`, reachable only through
@@ -38,11 +37,7 @@ struct RootView: View {
             case .signedOut, .error:
                 AuthView()
             case .signedIn:
-                if didFinishSplash {
-                    MainAppView()
-                } else {
-                    SplashView { didFinishSplash = true }
-                }
+                MainAppView()
             }
         }
         .task { await environment.auth.start() }

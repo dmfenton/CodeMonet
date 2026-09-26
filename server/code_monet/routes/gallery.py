@@ -8,7 +8,7 @@ from fastapi.responses import Response
 
 from code_monet.auth.dependencies import CurrentUser
 from code_monet.db import get_session, repository
-from code_monet.routes.canvas import get_user_state, render_strokes_to_png
+from code_monet.routes.canvas import get_user_state
 from code_monet.types import get_style_config
 from code_monet.workspace.gallery import parse_gallery_piece, piece_detail_fields
 
@@ -67,23 +67,9 @@ async def get_gallery_thumbnail(piece_id: str, user: CurrentUser) -> Response:
     piece_number = int(match.group(1))
 
     state = await get_user_state(user)
-    result = await state.load_from_gallery(piece_number)
-
-    if result is None:
+    png_bytes = await state.gallery_thumbnail(piece_number)
+    if png_bytes is None:
         raise HTTPException(status_code=404, detail="Piece not found")
-
-    strokes, style, width, height = result
-    raster = await state.gallery_raster(piece_number)
-    if not strokes and raster is None:
-        raise HTTPException(status_code=404, detail="Piece has no strokes")
-
-    png_bytes = await render_strokes_to_png(
-        strokes,
-        width=width,
-        height=height,
-        drawing_style=style,
-        base_image=raster[1] if raster else None,
-    )
     return Response(
         content=png_bytes,
         media_type="image/png",
