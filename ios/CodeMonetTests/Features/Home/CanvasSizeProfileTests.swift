@@ -18,6 +18,11 @@ struct CanvasSizeProfileTests {
         #expect(CanvasSizeProfiles.all.count == 5)
     }
 
+    @Test("aspect labels reduce each size")
+    func aspectLabels() {
+        #expect(CanvasSizeProfiles.all.map(\.aspectLabel) == ["4:3", "20:7", "1:1", "2:3", "2:1"])
+    }
+
     @Test("all ids are unique")
     func uniqueIDs() {
         let ids = Set(CanvasSizeProfiles.all.map(\.id))

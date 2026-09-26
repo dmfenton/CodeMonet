@@ -33,15 +33,13 @@ final class StudioUITests: XCTestCase {
 
         surpriseMe.tap()
 
-        let canvas = app.otherElements["canvas-view"]
+        let canvas = app.descendants(matching: .any)["canvas-view"]
         XCTAssertTrue(canvas.waitForExistence(timeout: 5), "canvas-view should appear once Studio is reachable")
 
-        let actionBar = app.otherElements["action-bar"]
-        XCTAssertTrue(actionBar.exists, "action-bar should be visible alongside the canvas")
-
-        // Normal (non-paused, non-view-only) state shows all five buttons.
-        for identifier in ["action-draw", "action-nudge", "action-home", "action-gallery", "action-pause"] {
-            XCTAssertTrue(app.buttons[identifier].exists, "\(identifier) should exist in the normal running state")
+        // The redesign's always-visible controls: back, status, menu, notebook,
+        // nudge bar, pause/resume.
+        for identifier in ["studio-back-button", "status-pill", "studio-menu", "studio-notebook", "nudge-input", "studio-pause-button"] {
+            XCTAssertTrue(app.descendants(matching: .any)[identifier].exists, "\(identifier) should exist in Studio")
         }
     }
 }

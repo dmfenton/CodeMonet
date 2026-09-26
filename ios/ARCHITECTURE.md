@@ -100,8 +100,8 @@ this is safe to call on every re-entry into `.signedIn` (e.g. after a
 silent `refreshSessionOnForeground()` pass). Nothing else in the app calls
 `connect()`; if that `onChange` wiring is ever removed or the state
 transition it watches changes shape, the socket never opens and every
-`connected`-gated UI element (Home's prompt/Surprise-Me/Continue card, New
-Canvas's Start button) stays permanently disabled. A live 4001 (WS) or a
+`connected`-gated UI element (Home's composer Begin/Surprise me, the easel's
+Watch/Continue, Studio's nudge bar) stays permanently disabled. A live 4001 (WS) or a
 401/403 (REST, via `CodeMonetRESTClient`'s `onUnauthorized`) both route
 through `StudioStore.onAuthenticationFailure`, which `AppEnvironment` wires
 to `AuthService.signOut(ifBearerTokenMatches:)` — gated by the bearer token
@@ -354,3 +354,43 @@ already-listed `sources` paths.
   only ever pushes `.strokes` pieces over it) — harmless, since the app's
   actual gallery-open flow is the REST round-trip above, not that
   message; flagged as a gap if a future flow needs the WS path too.
+
+## 8. Redesign (Fenton palette, notebook, versions)
+
+The app now uses the Fenton paper/ink/forest palette
+(`CodeMonet/DesignSystem/CodeMonetDesignSystem.swift`), a native `BrandMark`
+drawn from `brand/mark.svg`, and system serif/monospaced type roles
+(`MonetStyle.swift`). Screens:
+
+- **Home** (`Features/Home`): brand header + account menu (sign out), "on the
+  easel" row (`HomeSelectors.easel`), one composer (`HomeComposer`: prompt,
+  Paint/Plotter chips, canvas-size menu, Surprise me, Begin) that replaces the
+  New Canvas sheet (deleted, with `ActiveModal`), and a recent row.
+- **Studio** (`Features/Studio`): top bar (back, title, status pill, menu with
+  New piece / Gallery / Draw on canvas / Pause), canvas in a paper mat, stage
+  bar (`MonetStudio.StageBar` over the displayed version's `reveal.json`) and
+  version chips (tap an older version to pin its `final.png` over the live
+  canvas), the notebook (`MonetStudio.Notebook`) and an always-visible nudge
+  bar with pause/resume. The action bar, LiveStatus, message stream and nudge
+  sheet are gone. `StudioView` owns the `PaintingRevealController`, which now
+  also publishes the revealing keyframe and caches manifests by `asset_base`.
+- **Gallery** (`Features/Gallery`): filters, featured latest piece, grid, and
+  `GalleryPieceDetailView` (meta, prompt, version replay through a second
+  `PaintingRevealController`, `painting.py` sheet, "Open in studio").
+
+Contract changes (all additive on the wire; flagged per §4 rule 1):
+
+- `ServerMessage.paintingVersion` gained `ops: Int? = nil`; `StudioEvent
+  .paintingVersion` carries `stages`/`ops` (defaults `[]`/`nil`) into the
+  version history only — playback is unchanged.
+- `InitPayload` gained `title`, `prompt` (top-level, else `painting.prompt`)
+  and `paintingVersions` (`painting.versions`); `GalleryPieceStrokes` gained
+  `title`, `prompt`, `strokeCount`, `versions`. New `PaintingVersionSummary`.
+- `AgentMessage` gained `version` (stamped by the reducer: work toward vN is
+  everything after v(N-1) arrived) and `AgentMessageType.userNudge`.
+- `StudioState` gained `versions` (seeded from `init`, accumulated from
+  `painting_version`, reset on `clear`/`new_canvas`), `title` (init or a
+  completed `name_piece` input), `prompt`; events `.setTitle`/`.setPrompt`.
+- `MessageRouter` archives pending thinking when a tool call starts, so the
+  notebook interleaves thought and tool lines.
+- `PaintingAssetClient.text(at:)` fetches a version's `painting.py`.

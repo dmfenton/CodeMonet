@@ -1,32 +1,16 @@
 import FentonDesignSystem
 import MonetProtocol
+import MonetRender
 import MonetStudio
 import SwiftUI
 
-/// Home screen (ux spec §5): the "Start Drawing" card (prompt input, style
-/// picker, Surprise Me) plus a conditional Continue/Recent-work section
-/// (§5.2, `HomeSelectors.continueCardKind`) and connection hint (§5.3).
-/// Reads `AppEnvironment` for navigation/studio state; the New Canvas sheet
-/// is a native-improvement entry point (ux spec §7.2's note) reachable from
-/// the header here, since no RN control ever opened it.
+/// Home: the brand header, the live piece "on the easel", one composer
+/// ("What should we paint today?") that starts every new piece, and the
+/// three most recent gallery pieces.
 struct HomeView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
-    @State private var prompt = ""
-    @FocusState private var promptFocused: Bool
-
-    /// Reads/writes the canonical `StudioState.drawingStyle` (protocol-state
-    /// spec's "current style" slot) instead of a per-view `@State`, so the
-    /// user's Plotter/Paint choice survives Home being recreated on every
-    /// Home <-> Studio round trip (`RootView`'s `screenContent` switch
-    /// constructs a fresh `HomeView` each time `.home` is shown).
-    private var style: Binding<DrawingStyleType> {
-        Binding(
-            get: { environment.studio.state.drawingStyle },
-            set: { environment.studio.setStyle($0) }
-        )
-    }
 
     var body: some View {
         let state = environment.studio.state
@@ -34,307 +18,226 @@ struct HomeView: View {
         let connected = environment.studio.connected
 
         ScrollView {
-            VStack(alignment: .leading, spacing: FentonSpacing.large) {
-                startDrawingSection(connected: connected)
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                    .padding(.bottom, FentonSpacing.medium)
 
-                if HomeSelectors.hasRecentWork(state) {
-                    orDivider(palette: palette)
-                    continueSection(state: state, connected: connected, palette: palette)
+                if let easel = HomeSelectors.easel(state) {
+                    EaselRow(easel: easel, connected: connected, onContinue: continueWork)
+                    Rectangle().fill(palette.divider).frame(height: 1)
+                        .padding(.vertical, FentonSpacing.large - 4)
                 }
+
+                Text("What should we paint today?")
+                    .font(MonetType.display)
+                    .foregroundStyle(palette.text)
+                    .padding(.bottom, FentonSpacing.small + 4)
+                HomeComposer(connected: connected, onStarted: { environment.navigation.screen = .studio })
+
+                recentSection(state: state, palette: palette)
 
                 if !connected {
                     connectionHint(palette: palette)
                 }
             }
-            .padding(FentonSpacing.medium)
+            .padding(.horizontal, 18)
+            .padding(.top, FentonSpacing.small)
+            .padding(.bottom, FentonSpacing.large)
+            .frame(maxWidth: 560)
+            .frame(maxWidth: .infinity)
         }
         .scrollBounceBehavior(.basedOnSize)
         .scrollDismissesKeyboard(.interactively)
-        .background(
-            RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous)
-                .fill(palette.elevatedSurface)
-        )
-        .padding(FentonSpacing.medium)
-        .background(palette.surface)
+        .background(palette.surface.ignoresSafeArea())
         .accessibilityIdentifier("home-panel")
-        .sheet(isPresented: newCanvasPresented) {
-            NewCanvasView(initialStyle: style.wrappedValue)
-        }
     }
 
-    // MARK: - Start Drawing
+    private var header: some View {
+        HStack {
+            BrandLockup(markSize: 28, wordSize: 20)
+            Spacer()
+            AccountMenu()
+        }
+        .padding(.top, FentonSpacing.small)
+    }
 
     @ViewBuilder
-    private func startDrawingSection(connected: Bool) -> some View {
-        VStack(alignment: .leading, spacing: FentonSpacing.medium) {
-            HStack {
-                Text("Start Drawing")
-                    .font(.system(.body, weight: .semibold))
+    private func recentSection(state: StudioState, palette: FentonTheme.Palette) -> some View {
+        let recent = HomeSelectors.recentPieces(state)
+        VStack(alignment: .leading, spacing: FentonSpacing.small) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionLabel("recent")
                 Spacer()
                 Button {
-                    environment.navigation.activeModal = .newCanvas
+                    environment.navigation.openGallery(from: .home)
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
-                        .accessibilityHidden(true)
+                    HStack(spacing: 3) {
+                        Text("Gallery")
+                        if !state.gallery.isEmpty {
+                            Text("\(state.gallery.count)")
+                                .font(MonetType.meta)
+                                .foregroundStyle(palette.tertiaryText)
+                        }
+                        Image(systemName: "chevron.forward")
+                            .imageScale(.small)
+                            .accessibilityHidden(true)
+                    }
+                    .font(MonetType.chip)
+                    .foregroundStyle(palette.accent)
                 }
-                .accessibilityLabel("New Canvas options")
-                .accessibilityIdentifier("home-new-canvas-button")
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("home-gallery")
             }
-
-            promptInput(connected: connected)
-
-            StylePickerView(label: "Style", selection: style, variant: .segmented, testIDPrefix: "style")
-
-            surpriseMeButton(connected: connected)
-        }
-    }
-
-    @ViewBuilder
-    private func promptInput(connected: Bool) -> some View {
-        let palette = theme.palette(for: colorScheme)
-        let canSubmit = HomeSelectors.canSubmit(prompt: prompt, connected: connected)
-
-        HStack(spacing: FentonSpacing.small) {
-            TextField("Describe your next piece…", text: $prompt)
-                .focused($promptFocused)
-                .submitLabel(.go)
-                .onSubmit { startWithPrompt() }
-                .onChange(of: prompt) { _, newValue in
-                    if newValue.count > 200 { prompt = String(newValue.prefix(200)) }
+            if recent.isEmpty {
+                Text("Finished pieces land here.")
+                    .font(MonetType.proseItalic)
+                    .foregroundStyle(palette.tertiaryText)
+            } else {
+                HStack(alignment: .top, spacing: FentonSpacing.small) {
+                    ForEach(recent) { entry in
+                        Button {
+                            environment.navigation.openGallery(from: .home, focusing: entry.pieceNumber)
+                        } label: {
+                            AuthenticatedThumbnailView(token: entry.thumbnailToken, fallbackSymbol: "photo", contentMode: .fill)
+                                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                                .clipped()
+                                .paperMat(padding: 4)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(GalleryFormatting.title(for: entry))
+                        .accessibilityIdentifier("home-recent-\(entry.pieceNumber)")
+                    }
+                    ForEach(recent.count ..< HomeSelectors.recentLimit, id: \.self) { _ in
+                        Color.clear.frame(maxWidth: .infinity)
+                    }
                 }
-                .accessibilityIdentifier("home-prompt-input")
-
-            Button {
-                startWithPrompt()
-            } label: {
-                Image(systemName: "arrow.forward")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 40, height: 40)
-                    .foregroundStyle(canSubmit ? .white : palette.tertiaryText)
-                    .background(
-                        Circle().fill(canSubmit ? palette.accent : palette.subtleSurface)
-                    )
-                    .accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .disabled(!canSubmit)
-            .accessibilityLabel("Start drawing")
-            .accessibilityIdentifier("home-prompt-submit")
         }
-        .padding(.horizontal, FentonSpacing.medium)
-        .padding(.vertical, FentonSpacing.extraSmall)
-        .background(
-            RoundedRectangle(cornerRadius: FentonRadius.medium, style: .continuous)
-                .strokeBorder(palette.divider)
-        )
+        .padding(.top, FentonSpacing.large)
     }
 
-    @ViewBuilder
-    private func surpriseMeButton(connected: Bool) -> some View {
-        let palette = theme.palette(for: colorScheme)
-        Button {
-            startSurpriseMe()
-        } label: {
-            Label("Surprise Me", systemImage: "sparkles")
-                .font(.system(.body, weight: .medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, FentonSpacing.medium)
-                .foregroundStyle(palette.text)
-                .background(
-                    RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous)
-                        .fill(palette.subtleSurface)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!connected)
-        .opacity(connected ? 1 : 0.5)
-        .sensoryFeedback(.impact(weight: .light), trigger: connected)
-        .accessibilityIdentifier("home-surprise-me")
-    }
-
-    // MARK: - Continue section
-
-    @ViewBuilder
-    private func orDivider(palette: FentonTheme.Palette) -> some View {
-        HStack(spacing: FentonSpacing.medium) {
-            Rectangle().fill(palette.divider).frame(height: 1)
-            Text("OR")
-                .font(FentonTypography.caption.weight(.medium))
-                .foregroundStyle(palette.tertiaryText)
-            Rectangle().fill(palette.divider).frame(height: 1)
-        }
-    }
-
-    @ViewBuilder
-    private func continueSection(state: StudioState, connected: Bool, palette: FentonTheme.Palette) -> some View {
-        VStack(alignment: .leading, spacing: FentonSpacing.small) {
-            Text(HomeSelectors.continueSectionHeader(state))
-                .font(.system(.body, weight: .semibold))
-
-            ContinueCard(kind: HomeSelectors.continueCardKind(state), connected: connected, onContinue: continueWork)
-
-            Button {
-                environment.navigation.openGallery(from: .home)
-            } label: {
-                HStack(spacing: FentonSpacing.extraSmall) {
-                    Image(systemName: "photo.stack")
-                        .accessibilityHidden(true)
-                    Text(state.gallery.isEmpty ? "View Gallery" : "View Gallery (\(state.gallery.count))")
-                }
-                .font(FentonTypography.caption.weight(.medium))
-                .foregroundStyle(palette.secondaryText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, FentonSpacing.small)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("home-gallery")
-        }
-    }
-
-    @ViewBuilder
     private func connectionHint(palette: FentonTheme.Palette) -> some View {
         HStack(spacing: FentonSpacing.extraSmall) {
-            Image(systemName: "cloud.slash")
-                .accessibilityHidden(true)
-            Text("Connecting…")
+            ProgressView()
+                .controlSize(.mini)
+                .tint(palette.tertiaryText)
+            Text("connecting to the studio…")
         }
-        .font(FentonTypography.caption)
+        .font(MonetType.meta)
         .foregroundStyle(palette.tertiaryText)
         .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - Actions (ux spec §1.1: Home -> Studio transitions)
-
-    private var newCanvasPresented: Binding<Bool> {
-        Binding(
-            get: { environment.navigation.activeModal == .newCanvas },
-            set: { if !$0 { environment.navigation.activeModal = nil } }
-        )
-    }
-
-    private func startWithPrompt() {
-        let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard HomeSelectors.canSubmit(prompt: prompt, connected: environment.studio.connected) else { return }
-        prompt = ""
-        promptFocused = false
-        environment.studio.send(.newCanvas(direction: trimmed, drawingStyle: style.wrappedValue, canvasWidth: nil, canvasHeight: nil))
-        environment.studio.send(.resume(direction: nil))
-        environment.navigation.screen = .studio
-    }
-
-    private func startSurpriseMe() {
-        environment.studio.send(.newCanvas(direction: nil, drawingStyle: style.wrappedValue, canvasWidth: nil, canvasHeight: nil))
-        environment.studio.send(.resume(direction: nil))
-        environment.navigation.screen = .studio
+        .padding(.top, FentonSpacing.large)
+        .accessibilityIdentifier("home-connecting")
     }
 
     private func continueWork() {
         if environment.studio.state.paused {
+            environment.studio.setPausedLocally(false)
             environment.studio.send(.resume(direction: nil))
         }
         environment.navigation.screen = .studio
     }
 }
 
-/// ux spec §5.2. A pure rendering of `ContinueCardKind` — live work is a
-/// tappable card with a WIP preview + "Continue" pill; a completed piece is
-/// a static card showing its authenticated thumbnail.
-private struct ContinueCard: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.fentonTheme) private var theme
-
-    let kind: ContinueCardKind
+/// "On the easel": the live piece's thumbnail in a mat, its title, a
+/// monospaced status line, and Watch/Continue.
+private struct EaselRow: View {
+    @Environment(AppEnvironment.self) private var environment
+    let easel: EaselModel
     let connected: Bool
     let onContinue: () -> Void
 
     var body: some View {
-        switch kind {
-        case .none:
-            EmptyView()
-        case let .live(strokes, canvasWidth, canvasHeight, styleConfig, title):
-            Button(action: onContinue) {
-                let preview = livePreview(strokes: strokes, canvasWidth: canvasWidth, canvasHeight: canvasHeight, styleConfig: styleConfig)
-                content(
-                    preview: AnyView(preview),
-                    aspectRatio: CGFloat(canvasWidth) / CGFloat(max(canvasHeight, 1)),
-                    title: title,
-                    showsContinuePill: true
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(!connected)
-            .opacity(connected ? 1 : 0.6)
-            .accessibilityIdentifier("home-continue-button")
-        case let .completed(entry):
-            content(
-                preview: AnyView(
-                    AuthenticatedThumbnailView(
-                        token: entry.thumbnailToken,
-                        fallbackSymbol: "paintbrush",
-                        fallbackText: "Recent drawing"
-                    )
-                ),
-                aspectRatio: CGFloat(entry.width) / CGFloat(max(entry.height, 1)),
-                title: entry.title ?? "#\(entry.pieceNumber)",
-                showsContinuePill: false
-            )
-            .accessibilityIdentifier("home-recent-card")
-        }
-    }
-
-    @ViewBuilder
-    private func livePreview(
-        strokes: [MonetProtocol.Path], canvasWidth: Int, canvasHeight: Int, styleConfig: DrawingStyleConfig
-    ) -> some View {
-        if strokes.isEmpty {
-            VStack(spacing: FentonSpacing.small) {
-                Image(systemName: "paintbrush")
-                    .font(.system(size: 28, weight: .light))
-                    .accessibilityHidden(true)
-                Text("Work in progress")
-                    .font(FentonTypography.caption)
-            }
-            .foregroundStyle(theme.palette(for: colorScheme).tertiaryText)
-        } else {
-            WipPreview(strokes: strokes, canvasWidth: canvasWidth, canvasHeight: canvasHeight, styleConfig: styleConfig)
-        }
-    }
-
-    @ViewBuilder
-    private func content(preview: AnyView, aspectRatio: CGFloat, title: String, showsContinuePill: Bool) -> some View {
-        let palette = theme.palette(for: colorScheme)
-        VStack(spacing: 0) {
-            preview
-                .aspectRatio(aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 4.0 / 3.0, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .background(CodeMonetDesignSystem.Extra.canvasBackground)
-
-            HStack {
-                Text(title)
-                    .font(.system(.body, weight: .semibold))
-                    .foregroundStyle(palette.text)
-                    .lineLimit(1)
-                Spacer()
-                if showsContinuePill {
-                    HStack(spacing: FentonSpacing.extraSmall) {
-                        Text("Continue")
-                        Image(systemName: "arrow.forward")
-                            .accessibilityHidden(true)
+        PaletteReader { palette in
+            VStack(alignment: .leading, spacing: FentonSpacing.small) {
+                SectionLabel("on the easel")
+                HStack(alignment: .center, spacing: 14) {
+                    preview
+                        .aspectRatio(CGFloat(easel.canvasWidth) / CGFloat(max(easel.canvasHeight, 1)), contentMode: .fit)
+                        .frame(width: 120)
+                        .paperMat()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(easel.title)
+                            .font(MonetType.pieceTitle)
+                            .foregroundStyle(palette.text)
+                            .lineLimit(2)
+                        HStack(spacing: 5) {
+                            Circle()
+                                .fill(easel.isActive ? palette.emphasis : palette.tertiaryText)
+                                .frame(width: 6, height: 6)
+                            Text(easel.statusLine)
+                                .font(MonetType.meta)
+                                .foregroundStyle(palette.tertiaryText)
+                                .lineLimit(1)
+                        }
+                        Button(action: onContinue) {
+                            HStack(spacing: 4) {
+                                Text(easel.isActive ? "Watch" : "Continue")
+                                Image(systemName: "arrow.right").accessibilityHidden(true)
+                            }
+                        }
+                        .buttonStyle(PrimaryCapsuleStyle(compact: true))
+                        .disabled(!connected)
+                        .padding(.top, 2)
+                        .accessibilityIdentifier("home-continue-button")
                     }
-                    .font(FentonTypography.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, FentonSpacing.medium)
-                    .padding(.vertical, FentonSpacing.small)
-                    .background(Capsule().fill(palette.accent))
+                    Spacer(minLength: 0)
                 }
             }
-            .padding(FentonSpacing.medium)
         }
-        .background(CodeMonetDesignSystem.Extra.canvasBackground)
-        .clipShape(RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous)
-                .strokeBorder(palette.divider, lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private var preview: some View {
+        switch easel.preview {
+        case let .painting(ref):
+            GalleryRasterImageView(
+                urlString: PaintingAssetURL.paintingAssetUrl(
+                    apiBase: environment.config.apiBaseURL.absoluteString, ref: ref, file: "preview.jpg"
+                )
+            )
+        case let .strokes(strokes, styleConfig):
+            WipPreview(strokes: strokes, canvasWidth: easel.canvasWidth, canvasHeight: easel.canvasHeight, styleConfig: styleConfig)
+        case .blank:
+            CodeMonetDesignSystem.Extra.canvasBackground
+        }
+    }
+}
+
+/// The signed-in account: initials avatar with the email and Sign out.
+private struct AccountMenu: View {
+    @Environment(AppEnvironment.self) private var environment
+
+    private var email: String? {
+        if case let .signedIn(user) = environment.auth.state { return user.email }
+        return nil
+    }
+
+    var body: some View {
+        PaletteReader { palette in
+            Menu {
+                if let email {
+                    Text(email)
+                }
+                Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                    Task { await environment.auth.signOut() }
+                }
+            } label: {
+                Text(Self.initials(email))
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(palette.secondaryText)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(palette.subtleSurface))
+                    .overlay(Circle().strokeBorder(palette.divider, lineWidth: 1))
+            }
+            .accessibilityLabel("Account")
+            .accessibilityIdentifier("home-account-menu")
+        }
+    }
+
+    static func initials(_ email: String?) -> String {
+        guard let name = email?.split(separator: "@").first, !name.isEmpty else { return "·" }
+        let parts = name.split(whereSeparator: { ".-_+".contains($0) }).prefix(2)
+        return parts.compactMap(\.first).map { String($0).uppercased() }.joined()
     }
 }

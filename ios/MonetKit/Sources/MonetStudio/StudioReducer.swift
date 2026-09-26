@@ -29,12 +29,16 @@ public enum StudioReducer {
         case let .archiveThinking(messageID, timestamp):
             let trimmed = s.thinking.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
-                let message = AgentMessage(id: messageID, type: .thinking, text: s.thinking, timestamp: timestamp)
+                let message = AgentMessage(
+                    id: messageID, type: .thinking, text: s.thinking, timestamp: timestamp, version: s.workingVersion
+                )
                 s.messages = Self.boundedPush(s.messages, message, limit: StudioState.maxMessages)
             }
             s.thinking = ""
         case let .addMessage(message):
-            s.messages = Self.boundedPush(s.messages, message, limit: StudioState.maxMessages)
+            var stamped = message
+            stamped.version = s.workingVersion
+            s.messages = Self.boundedPush(s.messages, stamped, limit: StudioState.maxMessages)
         case .clearMessages:
             s.messages = []
 
@@ -61,6 +65,10 @@ public enum StudioReducer {
             // for parity per protocol-state spec §5.3.
             s.thinking = ""
             s.currentIteration = 0
+        case let .setTitle(title):
+            s.title = title
+        case let .setPrompt(prompt):
+            s.prompt = prompt
 
         // MARK: Canvas lifecycle (§5.4)
         case .clear:
@@ -76,6 +84,9 @@ public enum StudioReducer {
             // `MessageRouter`) both reset painting to none (program-painting
             // spec §1.3).
             s.painting = PaintingState()
+            s.versions = []
+            s.title = nil
+            s.prompt = nil
         case let .loadCanvas(payload):
             // ⚑ savedCanvas snapshot rule (protocol-state spec §5.4): only
             // snapshot when we're currently on the live canvas
@@ -161,6 +172,9 @@ public enum StudioReducer {
             // how recent the version (program-painting spec §4.1 `INIT`,
             // §4.6's reconnect row).
             s.painting = PaintingState(base: payload.painting, playing: nil)
+            s.versions = Self.seedVersions(payload)
+            s.title = payload.title
+            s.prompt = payload.prompt
 
         // MARK: Performance / animation pipeline (§5.5)
         case let .enqueueWords(text):
@@ -243,8 +257,8 @@ public enum StudioReducer {
             s.performance = PerformanceState()
 
         // MARK: Program painting (program-painting spec §4.1)
-        case let .paintingVersion(incoming):
-            Self.applyPaintingVersion(incoming, to: &s)
+        case let .paintingVersion(incoming, stages, ops):
+            Self.applyPaintingVersion(incoming, stages: stages, ops: ops, to: &s)
         case let .paintingPlaybackDone(assetBase):
             guard s.painting.playing?.assetBase == assetBase else { break }
             s.painting = settlePainting(s.painting)
@@ -257,7 +271,12 @@ public enum StudioReducer {
     /// complexity in line with the rest of the file — this is a single
     /// reducer case, not a second entry point; it stays `private` and
     /// mutates `state` in place exactly as its call site would inline.
-    private static func applyPaintingVersion(_ incoming: PaintingVersionRef, to state: inout StudioState) {
+    private static func applyPaintingVersion(
+        _ incoming: PaintingVersionRef,
+        stages: [String],
+        ops: Int?,
+        to state: inout StudioState
+    ) {
         // Guard 1: gallery guard — live updates never interrupt gallery
         // viewing.
         guard state.viewingPiece == nil else { return }
@@ -271,6 +290,24 @@ public enum StudioReducer {
         if samePiece, let current, incoming.version <= current.version { return }
         state.pieceNumber = max(state.pieceNumber, incoming.pieceNumber)
         state.painting = PaintingState(base: samePiece ? current : nil, playing: incoming)
+        // Version history follows the same acceptance: a new piece starts a
+        // fresh list; the same piece appends (replacing a same-numbered
+        // entry, e.g. one seeded from `init` without stages/ops).
+        let entry = PaintingVersionSummary(ref: incoming, stages: stages, ops: ops)
+        var history = samePiece || current == nil ? state.versions : []
+        history.removeAll { $0.version >= incoming.version }
+        history.append(entry)
+        state.versions = history
+    }
+
+    /// `init`'s version history: the server's list when it sends one, else
+    /// just the current version (if any) — the rest of this session's
+    /// versions accumulate from live `painting_version` messages.
+    private static func seedVersions(_ payload: InitPayload) -> [PaintingVersionSummary] {
+        if !payload.paintingVersions.isEmpty {
+            return payload.paintingVersions.sorted { $0.version < $1.version }
+        }
+        return payload.painting.map { [PaintingVersionSummary(ref: $0)] } ?? []
     }
 
     // MARK: - Helpers

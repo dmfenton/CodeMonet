@@ -8,7 +8,7 @@ import XCTest
 ///   These exercise whatever's reachable with zero network — the Auth
 ///   screen's own local validation, and the app launching at all.
 /// - **Live-server** (`CodeMonetLiveServerUITests`): exercise the signed-in
-///   app (home, new canvas sheet, studio, gallery), which needs a real
+///   app (home composer, studio, gallery), which needs a real
 ///   `localhost:8000` dev server for the DEBUG dev-token bootstrap
 ///   (net-auth spec §4) to actually sign in. Gated behind
 ///   `CODEMONET_UITEST_LIVE_SERVER=1` so `make test-app`'s default run
@@ -71,54 +71,49 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         app.launch()
     }
 
-    /// Ux spec §5: Home is a single scrollable card with the "Start
-    /// Drawing" section and (once app-shell's toolbar entry point exists)
-    /// a way into New Canvas.
-    func testHomeScreenShowsStartDrawingControls() throws {
+    /// Home: brand header, one composer (prompt, style + size chips,
+    /// Surprise me, Begin), and the recent row with the Gallery link.
+    func testHomeScreenShowsComposer() throws {
         let homePanel = app.scrollViews["home-panel"]
         XCTAssertTrue(homePanel.waitForExistence(timeout: 15), "expected to reach Home via the DEBUG dev-token bootstrap")
-        XCTAssertTrue(app.textFields["home-prompt-input"].exists)
+        XCTAssertTrue(element("home-prompt-input").exists)
         XCTAssertTrue(app.buttons["home-prompt-submit"].exists)
+        XCTAssertFalse(app.buttons["home-prompt-submit"].isEnabled, "Begin needs a prompt")
         XCTAssertTrue(app.buttons["home-surprise-me"].exists)
+        XCTAssertTrue(app.buttons["home-style-paint"].exists)
+        XCTAssertTrue(app.buttons["home-style-plotter"].exists)
+        XCTAssertTrue(element("home-size-menu").exists)
         XCTAssertTrue(app.buttons["home-gallery"].exists)
+        XCTAssertTrue(element("home-account-menu").exists)
     }
 
-    /// Ux spec §7.2 + native improvement #1: New Canvas is a real, reachable
-    /// sheet (not the RN app's unreachable one) — presented with detents
-    /// from `RootView`'s app-shell-owned sheet wiring.
-    func testNewCanvasSheetOpensAndStarts() throws {
+    /// Begin starts a piece from the composer and enters Studio, whose nudge
+    /// bar and pause button replace the old action bar.
+    func testComposerBeginEntersStudio() throws {
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
+        let input = element("home-prompt-input")
+        input.tap()
+        input.typeText("a simple spiral")
+        app.buttons["home-prompt-submit"].tap()
 
-        app.buttons["home-new-canvas-button"].tap()
-
-        // A vertical-axis `TextField` can surface as either a text field or
-        // a text view depending on the SwiftUI/UIKit version underneath it —
-        // match by identifier regardless of element type.
-        let directionField = app.descendants(matching: .any)["new-canvas-input"]
-        XCTAssertTrue(directionField.waitForExistence(timeout: 5))
-        directionField.tap()
-        directionField.typeText("a simple spiral")
-
-        app.buttons["new-canvas-start-button"].tap()
-
-        // Starting a canvas enters Studio (ux spec §1.1).
-        XCTAssertTrue(app.descendants(matching: .any)["canvas-view"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.descendants(matching: .any)["action-bar"].exists)
+        XCTAssertTrue(element("canvas-view").waitForExistence(timeout: 10))
+        XCTAssertTrue(element("nudge-input").exists)
+        XCTAssertTrue(app.buttons["studio-pause-button"].exists)
+        XCTAssertTrue(element("studio-menu").exists)
     }
 
-    /// Ux spec §1.1: ActionBar's Home button always fully exits the studio.
-    func testStudioHomeButtonReturnsHome() throws {
+    /// Studio's back button always fully exits to Home.
+    func testStudioBackReturnsHome() throws {
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
         app.buttons["home-surprise-me"].tap()
 
-        XCTAssertTrue(app.descendants(matching: .any)["action-bar"].waitForExistence(timeout: 10))
-        app.buttons["action-home"].tap()
+        XCTAssertTrue(app.buttons["studio-back-button"].waitForExistence(timeout: 10))
+        app.buttons["studio-back-button"].tap()
 
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 10))
     }
 
-    /// Ux spec §8 (Gallery is not a peer screen — always remembers where it
-    /// came from) + §1.1 (its header Close/Home affordances).
+    /// Gallery always remembers where it came from; its back button returns there.
     func testGalleryOpensFromHomeAndCloses() throws {
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
         app.buttons["home-gallery"].tap()
@@ -127,6 +122,10 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         app.buttons["gallery-close-button"].tap()
 
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 10))
+    }
+
+    private func element(_ identifier: String) -> XCUIElement {
+        app.descendants(matching: .any)[identifier]
     }
 
     private func requireLiveServer() throws {

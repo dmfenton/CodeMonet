@@ -164,6 +164,14 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
     /// a raster piece (human vector strokes drawn on top) — both must be
     /// rendered together, raster as the base layer.
     public var imageURL: String?
+    /// Additive server fields (piece-history change): all optional so an
+    /// older server's response decodes with them `nil`/empty, and the detail
+    /// view then shows only the final image.
+    public var title: String?
+    public var prompt: String?
+    public var strokeCount: Int?
+    /// Every saved version of the piece, oldest first. Empty when absent.
+    public var versions: [PaintingVersionSummary]
 
     public init(
         strokes: [Path],
@@ -173,7 +181,11 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         drawingStyle: DrawingStyleType,
         styleConfig: DrawingStyleConfig?,
         format: GalleryPieceFormat = .strokes,
-        imageURL: String? = nil
+        imageURL: String? = nil,
+        title: String? = nil,
+        prompt: String? = nil,
+        strokeCount: Int? = nil,
+        versions: [PaintingVersionSummary] = []
     ) {
         self.strokes = strokes
         self.pieceNumber = pieceNumber
@@ -183,6 +195,10 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         self.styleConfig = styleConfig
         self.format = format
         self.imageURL = imageURL
+        self.title = title
+        self.prompt = prompt
+        self.strokeCount = strokeCount
+        self.versions = versions
     }
 
     enum CodingKeys: String, CodingKey {
@@ -194,6 +210,9 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         case styleConfig = "style_config"
         case format
         case imageURL = "image_url"
+        case title, prompt
+        case strokeCount = "stroke_count"
+        case versions
     }
 
     public init(from decoder: Decoder) throws {
@@ -206,5 +225,9 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         styleConfig = try container.decodeIfPresent(DrawingStyleConfig.self, forKey: .styleConfig)
         format = try container.decodeIfPresent(GalleryPieceFormat.self, forKey: .format) ?? .strokes
         imageURL = try container.decodeIfPresent(String.self, forKey: .imageURL)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
+        strokeCount = try container.decodeIfPresent(Int.self, forKey: .strokeCount)
+        versions = try container.decodeIfPresent([PaintingVersionSummary].self, forKey: .versions) ?? []
     }
 }

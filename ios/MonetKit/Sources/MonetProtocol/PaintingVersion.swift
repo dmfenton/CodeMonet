@@ -159,3 +159,100 @@ public struct RevealManifest: Codable, Equatable, Sendable {
         self.keyframes = keyframes
     }
 }
+
+/// One entry of a piece's version history: `init.painting.versions` and the
+/// gallery detail's `versions` (`GET /gallery/{n}/strokes`). Additive server
+/// fields — every one but `version`/`asset_base` is optional on the wire so
+/// a partial or older payload still decodes. The client also builds these
+/// itself from live `painting_version` messages when the server sends no
+/// history (a session-only version list).
+public struct PaintingVersionSummary: Codable, Equatable, Sendable, Identifiable {
+    public var version: Int
+    /// Same contract as `PaintingVersionRef.assetBase`: API-relative, ends in `/`.
+    public var assetBase: String
+    public var imageWidth: Int
+    public var imageHeight: Int
+    /// `cv.stage(...)` labels, consecutive duplicates already collapsed
+    /// server-side. Empty when unknown.
+    public var stages: [String]
+    /// Total reveal ops the render produced (`reveal.json` op count), when
+    /// the server reports it.
+    public var ops: Int?
+    public var createdAt: String?
+
+    public var id: Int { version }
+
+    public init(
+        version: Int,
+        assetBase: String,
+        imageWidth: Int,
+        imageHeight: Int,
+        stages: [String] = [],
+        ops: Int? = nil,
+        createdAt: String? = nil
+    ) {
+        self.version = version
+        self.assetBase = assetBase
+        self.imageWidth = imageWidth
+        self.imageHeight = imageHeight
+        self.stages = stages
+        self.ops = ops
+        self.createdAt = createdAt
+    }
+
+    /// A live `painting_version` (or `init.painting`) ref as a history entry.
+    public init(ref: PaintingVersionRef, stages: [String] = [], ops: Int? = nil) {
+        self.init(
+            version: ref.version,
+            assetBase: ref.assetBase,
+            imageWidth: ref.imageWidth,
+            imageHeight: ref.imageHeight,
+            stages: stages,
+            ops: ops
+        )
+    }
+
+    /// The asset-locating ref for this entry, for fetching its files.
+    public func ref(pieceNumber: Int) -> PaintingVersionRef {
+        PaintingVersionRef(
+            pieceNumber: pieceNumber,
+            version: version,
+            assetBase: assetBase,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight
+        )
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case assetBase = "asset_base"
+        case imageWidth = "image_width"
+        case imageHeight = "image_height"
+        case stages, ops
+        case createdAt = "created_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        assetBase = try container.decode(String.self, forKey: .assetBase)
+        imageWidth = try container.decodeIfPresent(Int.self, forKey: .imageWidth) ?? 0
+        imageHeight = try container.decodeIfPresent(Int.self, forKey: .imageHeight) ?? 0
+        stages = try container.decodeIfPresent([String].self, forKey: .stages) ?? []
+        ops = try container.decodeIfPresent(Int.self, forKey: .ops)
+        createdAt = try container.decodeIfPresent(String.self, forKey: .createdAt)
+    }
+}
+
+public extension RevealManifest {
+    /// Number of brush-stroke (`"s"`) ops across every keyframe — what the
+    /// UI calls "strokes" when the server sends no `ops` count.
+    var strokeOpCount: Int {
+        keyframes.reduce(0) { total, keyframe in
+            total + keyframe.ops.reduce(0) { count, op in
+                if case .stroke = op { return count + 1 }
+                return count
+            }
+        }
+    }
+}

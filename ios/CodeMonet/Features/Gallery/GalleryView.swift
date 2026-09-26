@@ -2,157 +2,184 @@ import FentonDesignSystem
 import MonetProtocol
 import SwiftUI
 
-/// Gallery grid (ux spec §8): 2-column adaptive grid of authenticated
-/// thumbnails (adaptive column count on iPad, native improvement #7), a
-/// custom 3-column header (Home button only when opened from Studio, close
-/// X always), pull-to-refresh, and empty/error states via
-/// `FentonEmptyState` (native improvement #11).
+/// Gallery: a large serif title with the piece count, style filter chips,
+/// the latest piece hung large, then a two-column grid (adaptive on iPad).
+/// Every piece shows its title and date; tapping one opens its detail.
 struct GalleryView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    /// Overrides `environment.studio.state.gallery` after a manual
-    /// pull-to-refresh, since `StudioStore` has no public API to push a
-    /// REST-fetched list back into the reducer-owned state — the server
-    /// already pushes `gallery_update` proactively, so this is a
-    /// user-triggered "catch me up now" rather than the sole source of
-    /// truth.
+    @State private var filter: GalleryFilter = .all
+    @State private var path: [Int] = []
     @State private var refreshError: String?
 
-    private var entries: [GalleryEntry] {
-        environment.studio.state.gallery.reversed()
+    private var allEntries: [GalleryEntry] {
+        GalleryFormatting.newestFirst(environment.studio.state.gallery)
     }
 
-    /// 2 fixed columns on phone (ux spec §8's `NUM_COLUMNS = 2`); adaptive
-    /// on iPad (`horizontalSizeClass == .regular`, native improvement #7) so
-    /// wider layouts get more columns instead of two oversized cells.
+    private var entries: [GalleryEntry] {
+        allEntries.filter(filter.includes)
+    }
+
     private var columns: [GridItem] {
         if horizontalSizeClass == .regular {
-            return [GridItem(.adaptive(minimum: 200), spacing: FentonSpacing.medium)]
+            return [GridItem(.adaptive(minimum: 220), spacing: FentonSpacing.medium)]
         }
-        return Array(repeating: GridItem(.flexible(), spacing: FentonSpacing.medium), count: 2)
+        return Array(repeating: GridItem(.flexible(), spacing: 14), count: 2)
     }
 
     var body: some View {
         let palette = theme.palette(for: colorScheme)
-        VStack(spacing: 0) {
-            header(palette: palette)
-
-            if entries.isEmpty {
-                emptyOrError(palette: palette)
-            } else {
-                ScrollView {
-                    LazyVGrid(columns: columns, spacing: FentonSpacing.medium) {
-                        ForEach(entries) { entry in
-                            GalleryCell(entry: entry) {
-                                select(entry)
-                            }
-                        }
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header(palette: palette)
+                    if allEntries.isEmpty {
+                        emptyOrError
+                            .frame(minHeight: 320)
+                    } else {
+                        filterChips
+                            .padding(.top, 12)
+                        pieces(palette: palette)
+                            .padding(.top, FentonSpacing.medium)
                     }
-                    .padding(FentonSpacing.large)
                 }
-                .refreshable { await refresh() }
+                .padding(.horizontal, 18)
+                .padding(.bottom, FentonSpacing.large)
+                .frame(maxWidth: 900)
+                .frame(maxWidth: .infinity)
+            }
+            .refreshable { await refresh() }
+            .background(palette.surface.ignoresSafeArea())
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: Int.self) { pieceNumber in
+                if let entry = allEntries.first(where: { $0.pieceNumber == pieceNumber }) {
+                    GalleryPieceDetailView(entry: entry)
+                }
             }
         }
-        .background(palette.surface)
-        .task { await refresh() }
+        .task {
+            if let focus = environment.navigation.galleryFocusPiece {
+                environment.navigation.galleryFocusPiece = nil
+                path = [focus]
+            }
+            await refresh()
+        }
     }
 
-    @ViewBuilder
+    // MARK: - Header
+
     private func header(palette: FentonTheme.Palette) -> some View {
-        HStack {
-            if environment.navigation.galleryOpenedFrom == .studio {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
                 Button {
-                    goHome()
+                    environment.navigation.closeGallery()
                 } label: {
-                    Image(systemName: "house")
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(palette.secondaryText)
+                        .frame(width: 32, height: 32, alignment: .leading)
+                        .contentShape(Rectangle())
                 }
-                .accessibilityIdentifier("gallery-home-button")
-                .accessibilityLabel("Home")
-            } else {
-                Color.clear.frame(width: 22, height: 22)
+                .accessibilityLabel("Back")
+                .accessibilityIdentifier("gallery-close-button")
+                Spacer()
+                if environment.navigation.galleryOpenedFrom == .studio {
+                    Button(action: goHome) {
+                        Image(systemName: "house")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundStyle(palette.secondaryText)
+                            .frame(width: 32, height: 32)
+                    }
+                    .accessibilityLabel("Home")
+                    .accessibilityIdentifier("gallery-home-button")
+                }
             }
-
-            Spacer()
             Text("Gallery")
-                .font(.system(.title3, weight: .semibold))
-            Spacer()
-
-            Button {
-                environment.navigation.closeGallery()
-            } label: {
-                Image(systemName: "xmark")
+                .font(MonetType.screenTitle)
+                .foregroundStyle(palette.text)
+                .accessibilityAddTraits(.isHeader)
+            if !allEntries.isEmpty {
+                Text(GalleryFormatting.summaryLine(for: allEntries))
+                    .font(MonetType.meta)
+                    .foregroundStyle(palette.tertiaryText)
             }
-            .accessibilityIdentifier("gallery-close-button")
-            .accessibilityLabel("Close")
         }
-        .font(.system(size: 20))
-        .foregroundStyle(palette.text)
-        .padding(.horizontal, FentonSpacing.large)
-        .padding(.vertical, FentonSpacing.medium)
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(palette.divider).frame(height: 1)
+        .padding(.top, FentonSpacing.small)
+    }
+
+    private var filterChips: some View {
+        HStack(spacing: 6) {
+            ForEach(GalleryFilter.allCases) { candidate in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { filter = candidate }
+                } label: {
+                    ChipLabel(text: candidate.label, selected: filter == candidate)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(filter == candidate ? .isSelected : [])
+                .accessibilityIdentifier("gallery-filter-\(candidate.rawValue)")
+            }
+        }
+        .sensoryFeedback(.selection, trigger: filter)
+    }
+
+    // MARK: - Pieces
+
+    @ViewBuilder
+    private func pieces(palette: FentonTheme.Palette) -> some View {
+        if let featured = entries.first {
+            VStack(alignment: .leading, spacing: 22) {
+                NavigationLink(value: featured.pieceNumber) {
+                    GalleryItemView(entry: featured, featured: true)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("gallery-item-\(featured.pieceNumber)")
+
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 18) {
+                    ForEach(entries.dropFirst()) { entry in
+                        NavigationLink(value: entry.pieceNumber) {
+                            GalleryItemView(entry: entry, featured: false)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("gallery-item-\(entry.pieceNumber)")
+                    }
+                }
+            }
+        } else {
+            Text("No \(filter.label.lowercased()) pieces yet.")
+                .font(MonetType.proseItalic)
+                .foregroundStyle(palette.tertiaryText)
+                .padding(.top, FentonSpacing.large)
         }
     }
 
     @ViewBuilder
-    private func emptyOrError(palette: FentonTheme.Palette) -> some View {
+    private var emptyOrError: some View {
         if let refreshError {
-            FentonEmptyState(
-                symbol: "exclamationmark.triangle",
-                title: "Couldn't load gallery",
-                message: refreshError
-            )
+            FentonEmptyState(symbol: "exclamationmark.triangle", title: "Couldn't load gallery", message: refreshError)
         } else {
             FentonEmptyState(
-                symbol: "photo.stack",
-                title: "No saved artwork yet",
-                message: "Finish a piece from Studio and it'll show up here."
+                symbol: "photo.on.rectangle",
+                title: "No finished pieces yet",
+                message: "Start one from Home — it lands here when the painter moves on."
             )
         }
     }
 
-    /// ux spec §1.1 "Gallery -> Studio (piece select)" row. Matches RN's
-    /// `handleGallerySelect`: a `GET /gallery/{n}/strokes` REST round-trip
-    /// (not the WS `load_canvas` message, which has no ack) so a failure is
-    /// a definite, catchable event rather than something the client would
-    /// otherwise have to guess about with a timeout. Navigates to Studio
-    /// optimistically, same as RN; on failure, pauses if running and falls
-    /// back to Home instead of leaving the user sitting on a piece that
-    /// never loaded — this screen is dismissed by that point (`screen`
-    /// switches away from `.gallery`), so, matching RN, the failure is
-    /// silent rather than surfaced as a banner here.
-    private func select(_ entry: GalleryEntry) {
-        environment.navigation.screen = .studio
-        Task {
-            do {
-                let strokes = try await environment.restClient.galleryPieceStrokes(pieceNumber: entry.pieceNumber)
-                environment.studio.applyLoadedGalleryPiece(strokes)
-            } catch {
-                pauseIfRunning()
-                environment.studio.clearViewing()
-                environment.navigation.screen = .home
-            }
-        }
-    }
+    // MARK: - Actions
 
-    /// ux spec §1.1 "Gallery -> Home" row: pause-if-running, restore the
-    /// saved live canvas (`CLEAR_VIEWING`, protocol-state spec §5.4) if a
-    /// piece was being viewed, then always land on Home (not "wherever the
-    /// gallery was opened from" — that's `closeGallery()`'s job, used by
-    /// the header's X instead).
+    /// Gallery -> Home: pause if running, restore the live canvas if a piece
+    /// was being viewed, then land on Home (ux spec §1.1).
     private func goHome() {
-        pauseIfRunning()
+        if !environment.studio.state.paused {
+            environment.studio.setPausedLocally(true)
+            environment.studio.send(.pause)
+        }
         environment.studio.clearViewing()
         environment.navigation.screen = .home
-    }
-
-    private func pauseIfRunning() {
-        guard !environment.studio.state.paused else { return }
-        environment.studio.setPausedLocally(true)
-        environment.studio.send(.pause)
     }
 
     private func refresh() async {
@@ -160,52 +187,54 @@ struct GalleryView: View {
             environment.studio.applyFetchedGallery(try await environment.restClient.gallery())
             refreshError = nil
         } catch {
-            // Keep whatever we already had; only show the error state when
-            // there's nothing else to show (see `emptyOrError`).
-            if entries.isEmpty {
+            // Keep what we have; only show the error when there's nothing else.
+            if allEntries.isEmpty {
                 refreshError = "Check your connection and try again."
             }
         }
     }
 }
 
-private struct GalleryCell: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.fentonTheme) private var theme
-
+/// One gallery piece: thumbnail in a paper mat, serif-italic title, and a
+/// monospaced date.
+private struct GalleryItemView: View {
     let entry: GalleryEntry
-    let onSelect: () -> Void
+    let featured: Bool
 
     var body: some View {
-        let palette = theme.palette(for: colorScheme)
-        Button(action: onSelect) {
-            VStack(alignment: .leading, spacing: FentonSpacing.small) {
-                AuthenticatedThumbnailView(
-                    token: entry.thumbnailToken,
-                    fallbackSymbol: "photo",
-                    contentMode: .fit
-                )
-                .aspectRatio(1, contentMode: .fit)
-                .frame(maxWidth: .infinity)
-                .background(CodeMonetDesignSystem.Extra.canvasBackground)
-                .clipShape(RoundedRectangle(cornerRadius: FentonRadius.medium, style: .continuous))
-
-                Text(GalleryFormatting.title(for: entry))
-                    .font(FentonTypography.caption.weight(.semibold))
-                    .foregroundStyle(palette.text)
-                    .lineLimit(1)
-                Text(GalleryFormatting.metaLine(for: entry))
-                    .font(FentonTypography.tag)
-                    .foregroundStyle(palette.tertiaryText)
-                    .lineLimit(1)
+        PaletteReader { palette in
+            VStack(alignment: .leading, spacing: featured ? 8 : 6) {
+                AuthenticatedThumbnailView(token: entry.thumbnailToken, fallbackSymbol: "photo", contentMode: .fit)
+                    .aspectRatio(CGFloat(entry.width) / CGFloat(max(entry.height, 1)), contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .paperMat(padding: featured ? 8 : 5)
+                if featured {
+                    HStack(alignment: .firstTextBaseline) {
+                        title(palette: palette)
+                        Spacer()
+                        date(palette: palette)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 1) {
+                        title(palette: palette)
+                        date(palette: palette)
+                    }
+                }
             }
-            .padding(FentonSpacing.small)
-            .background(
-                RoundedRectangle(cornerRadius: FentonRadius.large, style: .continuous)
-                    .fill(palette.elevatedSurface)
-            )
+            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("gallery-item-\(entry.pieceNumber)")
+    }
+
+    private func title(palette: FentonTheme.Palette) -> some View {
+        Text(GalleryFormatting.title(for: entry))
+            .font(featured ? MonetType.pieceTitle : MonetType.pieceTitleSmall)
+            .foregroundStyle(palette.text)
+            .lineLimit(featured ? 2 : 1)
+    }
+
+    private func date(palette: FentonTheme.Palette) -> some View {
+        Text(GalleryFormatting.shortDate(entry.createdAt))
+            .font(MonetType.meta)
+            .foregroundStyle(palette.tertiaryText)
     }
 }

@@ -63,6 +63,10 @@ public final class StudioStore {
     /// the socket wasn't open) would otherwise leak forever.
     private var pendingSelfStrokes: [Path] = []
     private static let maxPendingSelfStrokes = 32
+    /// The direction this device just sent with `new_canvas`, applied as the
+    /// piece's prompt once the server's `new_canvas` confirms the new piece
+    /// (see `startNewPiece`).
+    var pendingPrompt: String?
 
     public init(environment: CodeMonetEnvironment, tokenProvider: any TokenProviding) {
         socket = StudioWebSocketClient(baseURL: environment.wsBaseURL)
@@ -331,6 +335,9 @@ public final class StudioStore {
         for studioEvent in MessageRouter.route(message, environment: environment) {
             apply(studioEvent)
         }
+        if case .newCanvas = message {
+            applyPendingPrompt()
+        }
     }
 
     /// Returns `true` (and consumes the matching entry) when `path` is this
@@ -383,7 +390,7 @@ public final class StudioStore {
         }
     }
 
-    private func apply(_ event: StudioEvent) {
+    func apply(_ event: StudioEvent) {
         state = StudioReducer.reduce(state, event)
     }
 

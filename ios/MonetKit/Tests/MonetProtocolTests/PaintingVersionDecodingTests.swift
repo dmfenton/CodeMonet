@@ -22,7 +22,7 @@ struct PaintingVersionDecodingTests {
         }
         """#.utf8)
         let message = try JSONDecoder().decode(ServerMessage.self, from: json)
-        guard case let .paintingVersion(ref, stages) = message else {
+        guard case let .paintingVersion(ref, stages, ops) = message else {
             Issue.record("expected .paintingVersion")
             return
         }
@@ -34,6 +34,8 @@ struct PaintingVersionDecodingTests {
         // Server dedupes only *consecutive* duplicates before sending; the
         // client must not attempt to re-dedupe non-consecutive repeats.
         #expect(stages == ["ground", "sky", "sky", "sky", "boat"])
+        // `ops` is an additive server field: absent here, so nil.
+        #expect(ops == nil)
     }
 
     static let styleConfigJSON = """
