@@ -83,6 +83,9 @@ async def handle_nudge(workspace: ActiveWorkspace, message: dict[str, Any]) -> N
             workspace.orchestrator.clear_piece_completed()
             await workspace.start_agent_loop()
             workspace.orchestrator.wake()
+        await workspace.connections.broadcast(
+            PieceStateMessage(number=workspace.state.piece_number, completed=False)
+        )
         logger.info(f"User {workspace.user_id} nudge: {text}")
 
 

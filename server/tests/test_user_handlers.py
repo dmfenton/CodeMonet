@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from code_monet.agent import DrawingAgent
 from code_monet.types import AgentStatus, DrawingStyleType, PauseReason
 from code_monet.user_handlers import (
     handle_new_canvas,
@@ -51,6 +52,20 @@ class TestHandleNewCanvas:
         assert mock_workspace.state.canvas.drawing_style == DrawingStyleType.PLOTTER
         # Direction should be added as nudge
         mock_workspace.agent.add_nudge.assert_called_once_with("landscape")
+
+    @pytest.mark.asyncio
+    async def test_new_canvas_drops_nudge_for_previous_piece(
+        self, mock_workspace: MagicMock
+    ) -> None:
+        agent = DrawingAgent()
+        agent.add_nudge("change the old canvas")
+        mock_workspace.agent = agent
+
+        await handle_user_message(
+            mock_workspace, {"type": "new_canvas", "direction": "a new landscape"}
+        )
+
+        assert agent.pending_nudges == ["a new landscape"]
 
     @pytest.mark.asyncio
     async def test_new_canvas_with_style_plotter(self, mock_workspace: MagicMock) -> None:
