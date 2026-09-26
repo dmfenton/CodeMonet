@@ -1,9 +1,72 @@
 @testable import CodeMonet
 import FentonMobileCore
 import Foundation
+import MonetNetworking
 import MonetProtocol
 import MonetStudio
 import Testing
+
+private actor AuthTestStore: AuthSessionStore {
+    private var stored: AuthSession?
+    init(_ session: AuthSession) { stored = session }
+    func load() -> AuthSession? { stored }
+    func save(_ session: AuthSession) { stored = session }
+    func clear() { stored = nil }
+}
+
+private actor AuthTestPendingStore: PendingAuthorizationStore {
+    func load() -> PendingAuthorization? { nil }
+    func save(_ authorization: PendingAuthorization) {}
+    func clear() {}
+}
+
+private struct AuthTestIdentityClient: MagicLinkAuthenticationClient {
+    func requestMagicLink(email: String, codeChallenge: String) async throws -> MagicLinkRequestResult {
+        MagicLinkRequestResult(accepted: true)
+    }
+    func exchangeAuthorizationCode(code: String, codeVerifier: String) async throws -> AuthSession {
+        AuthSession(bearerToken: "new-sign-in", refreshToken: "new-refresh")
+    }
+    func refreshSession(refreshToken: String) async throws -> AuthSession {
+        AuthSession(bearerToken: "renewed", refreshToken: "refresh-2")
+    }
+    func fetchIdentity(bearerToken: String) async throws -> HouseholdIdentity {
+        HouseholdIdentity(email: "a@example.com")
+    }
+}
+
+@Suite("AuthService recovery")
+struct AuthServiceRecoveryTests {
+    @Test("late 401s share the Platform rotation, and a rejected replay ends only that session")
+    @MainActor
+    func lateRejectionAndRejectedReplay() async throws {
+        let store = AuthTestStore(AuthSession(
+            bearerToken: "expired",
+            refreshToken: "refresh-1",
+            expiresAt: Date().addingTimeInterval(600)
+        ))
+        let controller = AuthenticationController(
+            client: AuthTestIdentityClient(),
+            sessionStore: store,
+            pendingAuthorizationStore: AuthTestPendingStore()
+        )
+        await controller.restoreSession()
+        let apiURL = try #require(URL(string: "http://localhost:8000"))
+        let socketURL = try #require(URL(string: "ws://localhost:8000"))
+        let environment = CodeMonetEnvironment(apiBaseURL: apiURL, wsBaseURL: socketURL)
+        let auth = AuthService(environment: environment, controller: controller)
+
+        #expect(await auth.recoverRejectedToken("expired") == "renewed")
+        #expect(await auth.recoverRejectedToken("expired") == "renewed")
+        #expect(await store.load()?.refreshToken == "refresh-2")
+        await auth.rejectCurrentBearer("expired")
+        #expect(auth.bearerToken == "renewed")
+        await auth.rejectCurrentBearer("renewed")
+        #expect(auth.bearerToken == nil)
+        #expect(await store.load() == nil)
+        #expect(await auth.recoverRejectedToken("expired") == nil)
+    }
+}
 
 /// Smoke coverage proving the app target links against MonetKit correctly.
 /// Feature-specific tests belong with their owning work package (see

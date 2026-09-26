@@ -32,6 +32,7 @@ public final class StudioStore {
     /// superseded by a reconnect holding a freshly rotated token can't
     /// incorrectly sign out a session that's actually fine.
     public var onAuthenticationFailure: (@Sendable (String) async -> Void)?
+    public var onRecoveredTokenRejected: (@Sendable (String) async -> Void)?
 
     let socket: StudioWebSocketClient
     private var rest: CodeMonetRESTClient
@@ -82,6 +83,9 @@ public final class StudioStore {
             onUnauthorized: { [weak self] token in
                 await self?.onAuthenticationFailure?(token)
                 return await self?.tokenProvider.currentToken()
+            },
+            onRecoveredTokenRejected: { [weak self] token in
+                await self?.onRecoveredTokenRejected?(token)
             }
         )
     }

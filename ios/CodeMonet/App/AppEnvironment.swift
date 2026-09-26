@@ -35,6 +35,9 @@ public final class AppEnvironment {
         studio.onAuthenticationFailure = { [weak self] token in
             _ = await self?.recoverRejectedToken(token)
         }
+        studio.onRecoveredTokenRejected = { [weak self] token in
+            await self?.rejectRecoveredToken(token)
+        }
         // Single teardown for every way a session ends (including feature
         // REST 401s): drop the old socket so the next sign-in can connect,
         // and forget the previous user's thumbnails.
@@ -58,6 +61,10 @@ public final class AppEnvironment {
             scheduleRecoveryRetry(for: rejected)
         }
         return replacement
+    }
+
+    func rejectRecoveredToken(_ rejected: String) async {
+        await auth.rejectCurrentBearer(rejected)
     }
 
     private func scheduleRecoveryRetry(for rejected: String) {

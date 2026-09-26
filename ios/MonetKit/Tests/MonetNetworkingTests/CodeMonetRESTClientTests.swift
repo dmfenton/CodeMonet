@@ -67,6 +67,15 @@ private actor RecoveringTransport: HTTPTransport {
     }
 }
 
+private actor AlwaysUnauthorizedTransport: HTTPTransport {
+    private(set) var headers: [String?] = []
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        headers.append(request.value(forHTTPHeaderField: "Authorization"))
+        let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        return (Data(), response)
+    }
+}
+
 private actor SessionStore: AuthSessionStore {
     private var session: AuthSession?
     init(_ session: AuthSession) { self.session = session }
@@ -167,6 +176,29 @@ struct CodeMonetRESTClientTests {
             Issue.record("expected unauthorized response")
         } catch MobileAPIError.unauthorized {
             #expect(await transport.headers == ["Bearer expired"])
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("a second rejection reports the refreshed bearer and stops after one replay")
+    func rejectedReplacementEndsRecovery() async {
+        let transport = AlwaysUnauthorizedTransport()
+        let rejected = MutableTokenBox()
+        let client = CodeMonetRESTClient(
+            baseURL: URL(string: "http://localhost:8000")!,
+            tokenProvider: StubTokenProvider(token: "expired"),
+            transport: transport,
+            onUnauthorized: { _ in "renewed" },
+            onRecoveredTokenRejected: { token in await rejected.setToken(token) }
+        )
+
+        do {
+            _ = try await client.currentUser()
+            Issue.record("expected unauthorized response")
+        } catch MobileAPIError.unauthorized {
+            #expect(await rejected.currentToken() == "renewed")
+            #expect(await transport.headers == ["Bearer expired", "Bearer renewed"])
         } catch {
             Issue.record("unexpected error: \(error)")
         }

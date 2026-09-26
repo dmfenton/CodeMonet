@@ -20,16 +20,20 @@ public struct CodeMonetRESTClient: Sendable {
     /// A rejected bearer goes to Platform's session controller. Its returned
     /// replacement permits one replay of this authenticated read.
     private let onUnauthorized: (@Sendable (String) async -> String?)?
+    /// Code Monet also rejected the one replacement used for replay.
+    private let onRecoveredTokenRejected: (@Sendable (String) async -> Void)?
 
     public init(
         baseURL: URL,
         tokenProvider: any TokenProviding,
         transport: any HTTPTransport = URLSession.shared,
-        onUnauthorized: (@Sendable (String) async -> String?)? = nil
+        onUnauthorized: (@Sendable (String) async -> String?)? = nil,
+        onRecoveredTokenRejected: (@Sendable (String) async -> Void)? = nil
     ) {
         api = MobileAPIClient(baseURL: baseURL, transport: transport)
         self.tokenProvider = tokenProvider
         self.onUnauthorized = onUnauthorized
+        self.onRecoveredTokenRejected = onRecoveredTokenRejected
     }
 
     /// `GET /auth/me` — post-sign-in identity check (net-auth spec §0.2, §3.1).
@@ -83,7 +87,12 @@ public struct CodeMonetRESTClient: Sendable {
             else { throw MobileAPIError.unauthorized }
             // The Platform controller owns refresh and rotation. Replay only this
             // read, once, with the credential it returned for the same session.
-            return try await api.data(path: path, bearerToken: replacement)
+            do {
+                return try await api.data(path: path, bearerToken: replacement)
+            } catch MobileAPIError.unauthorized {
+                await onRecoveredTokenRejected?(replacement)
+                throw MobileAPIError.unauthorized
+            }
         }
     }
 }

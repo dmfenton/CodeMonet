@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A paint run whose program prints after it finishes, exits before exporting, or tampers with its output (removed or linked images, a replaced output directory) now returns a clear error to the agent instead of crashing the paint tool or recording a broken version; version metadata comes from the published `reveal.json`, not the program's stdout.
 - Keep the native iOS session when an access token is rejected but Platform can refresh it; retry
   the rejected read once with the rotated credential, reconnect the studio socket after any
-  feature request rotates it, and retry inconclusive socket recovery with backoff.
+  feature request rotates it, reuse that rotation for late responses from the same sign-in,
+  end the current session if Code Monet rejects the replay, and retry inconclusive socket
+  recovery with backoff.
 - Wait for the trace auto-flush task to stop, making timer shutdown and its native test deterministic.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
