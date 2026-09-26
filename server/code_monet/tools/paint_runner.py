@@ -3,8 +3,10 @@
     python -m code_monet.tools.paint_runner --program P --out DIR --width W --height H --seed S
 
 The program runs with a ready `cv` (paintlib.Canvas) and common modules in
-scope. On success the last stdout line is a JSON summary; on failure the
-traceback goes to stderr and the exit code is 1.
+scope. On success the version is in DIR (reveal.json is its record, which the
+server reads) and a JSON summary with timings goes to stderr for people running
+this by hand; stdout is the program's alone. On failure the traceback goes to
+stderr and the exit code is 1.
 """
 
 from __future__ import annotations
@@ -63,9 +65,11 @@ def main() -> int:
         return 1
     t1 = time.monotonic()
     summary = cv.export(args.out)
-    summary["paint_seconds"] = round(t1 - t0, 1)
-    summary["export_seconds"] = round(time.monotonic() - t1, 1)
-    print(json.dumps(summary))
+    timings = {
+        "paint_seconds": round(t1 - t0, 1),
+        "export_seconds": round(time.monotonic() - t1, 1),
+    }
+    print(json.dumps({**summary, **timings}), file=sys.stderr)
     return 0
 
 
