@@ -116,7 +116,7 @@ async def _run_and_record(
         sys.executable,
         "-I",
         "-m",
-        "code_monet.paintlib.runner",
+        "code_monet.paint_runner",
         "--program",
         str(run_program),
         "--out",

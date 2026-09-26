@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paintlib.runner` so the program's process never imports server config or loads SSM secrets.
+- Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paint_runner` so the program's process never imports server config or loads SSM secrets.
 - Read painting version files (asset route, gallery raster, public thumbnails, workspace render) only when they are single-link regular files whose real path stays inside `paintings/{token}/`.
-- Document the program-painting threat model and the isolation that remains missing (docs/program-painting.md).
+- Confine everything the agent executes to the user's own workspace (Landlock + seccomp; docs/agent-sandbox.md). The Claude CLI (agent and critique) runs through `code_monet/bin/claude-sandboxed` with an environment built only from its launch spec and a private per-user Claude home (`HOME`, `TMPDIR`, config, sessions). Painting programs confine themselves before running: read-only Python, writes only to their output, no network, no subprocesses. Neither can read other users' data, the server's environment or memory, or the auth database, nor signal the server. `make sandbox-e2e` checks it end to end in the server image.
 
 ## [1.41.0] - 2026-09-26
 
