@@ -23,7 +23,9 @@ concurrency:
 jobs:
   check-changes:
     name: Check for iOS changes
-    runs-on: ubuntu-latest
+    # Tag push / workflow_dispatch only: trusted pool.
+    runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 10
     outputs:
       should_build: ${{ steps.check.outputs.should_build }}
       skip_reason: ${{ steps.check.outputs.skip_reason }}
@@ -86,11 +88,33 @@ jobs:
     name: Build & Deploy iOS
     needs: check-changes
     if: needs.check-changes.outputs.should_build == 'true'
-    runs-on: macos-26 # Apple Silicon runner with Xcode 26 (iOS 26 SDK)
+    # Dedicated signing account on the laptop pool: never shared with fork PR
+    # code (this workflow only ever runs from tags / workflow_dispatch).
+    runs-on: [self-hosted, codemonet-ios, laptop, dedicated-signing]
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Acquire shared macOS CI lock
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        run: |
+          set -euo pipefail
+          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
+          for attempt in $(seq 1 360); do
+            if mkdir "$LOCK_DIR" 2>/dev/null; then
+              printf '%s\n' "$LOCK_OWNER" > "$LOCK_DIR/owner"
+              exit 0
+            fi
+            if (( attempt % 6 == 1 )); then
+              echo "Waiting for shared macOS CI lock held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for shared macOS CI lock"
+          exit 1
 
       - name: Resolve platform pin
         id: platform
@@ -129,24 +153,27 @@ jobs:
           echo "Version: $VERSION"
           echo "Build Number: $BUILD_NUMBER"
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
 
-      - name: Set up Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.2'
-          bundler-cache: true
-          working-directory: ios
+      - name: Set up Ruby (Homebrew)
+        run: |
+          RUBY_BIN="/opt/homebrew/opt/ruby@3.2/bin"
+          RUBY_GEM_BIN="/opt/homebrew/lib/ruby/gems/3.2.0/bin"
+          test -x "$RUBY_BIN/ruby"
+          echo "$RUBY_BIN" >> "$GITHUB_PATH"
+          echo "$RUBY_GEM_BIN" >> "$GITHUB_PATH"
+          export PATH="$RUBY_BIN:$RUBY_GEM_BIN:$PATH"
+          ruby -e \
+            'require "rubygems"; abort "Ruby 3.2+ required" if Gem::Version.new(RUBY_VERSION) < Gem::Version.new("3.2")'
 
       - name: Install Fastlane
         working-directory: ios
         run: |
-          gem install fastlane
+          gem install bundler -v 2.6.9
+          bundle _2.6.9_ config set path "$RUNNER_TEMP/bundle"
+          bundle _2.6.9_ install
 
       - name: Set up shared iOS signing
         uses: ./vendor/platform.dmfenton.net/.github/actions/isolated-ios-signing
@@ -174,7 +201,7 @@ jobs:
           ITC_TEAM_ID: ${{ secrets.ITC_TEAM_ID }}
           APP_VERSION: ${{ steps.version.outputs.version }}
           APP_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
-        run: fastlane ios beta
+        run: bundle _2.6.9_ exec fastlane ios beta
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
@@ -195,11 +222,24 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/codemonet.mobileprovision"
 
+      - name: Release shared macOS CI lock
+        if: always()
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        run: |
+          set -euo pipefail
+          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
+          if [[ "$(cat "$LOCK_DIR/owner" 2>/dev/null || true)" == "$LOCK_OWNER" ]]; then
+            rm -f "$LOCK_DIR/owner"
+            rmdir "$LOCK_DIR"
+          fi
+
   skip-report:
     name: Report Skipped Build
     needs: check-changes
     if: needs.check-changes.outputs.should_build == 'false'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 5
     steps:
       - name: Report skip reason
         run: |

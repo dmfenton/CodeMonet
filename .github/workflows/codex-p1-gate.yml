@@ -47,3 +47,4 @@ jobs:
     uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@fa4f28c6c58875baa140c9a4f5163509e588ddd8
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || '0' }}
+      runner_labels_json: '["self-hosted","codemonet-docker","lilserver"]'

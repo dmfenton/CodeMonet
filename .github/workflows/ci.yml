@@ -9,7 +9,8 @@ on:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     outputs:
       server: ${{ steps.filter.outputs.server }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -41,7 +42,8 @@ jobs:
 
   server:
     name: Server (Python)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 20
     needs: changes
     if: needs.changes.outputs.server == 'true'
 
@@ -113,7 +115,8 @@ jobs:
 
   app:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
 
@@ -147,7 +150,8 @@ jobs:
   # Uses pre-recorded fixtures - no API key needed, fast
   replay:
     name: Replay Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
 
@@ -170,9 +174,15 @@ jobs:
 
   docker:
     name: Docker Build
-    runs-on: ubuntu-latest
+    # Needs a Docker daemon: trusted pool only. The isolated PR pool has no
+    # Docker socket and pull-request code must never reach the trusted pool,
+    # so this is skipped entirely on pull_request (matches the platform
+    # runtime-image scan pattern: docker-daemon jobs run on trusted main code
+    # only; PR validation stays inside the unprivileged container).
+    runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 20
     needs: [changes, server]
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v6
@@ -222,12 +232,37 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    runs-on: macos-26
+    # Physical laptop runner, not isolable like the Linux PR pool: fork PRs
+    # must never run here. Same-repo PRs and pushes are trusted.
+    runs-on: [self-hosted, codemonet-ios, laptop]
+    timeout-minutes: 30
     needs: changes
-    if: needs.changes.outputs.ios == 'true'
+    if: >-
+      needs.changes.outputs.ios == 'true' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Acquire shared macOS CI lock
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        run: |
+          set -euo pipefail
+          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
+          for attempt in $(seq 1 360); do
+            if mkdir "$LOCK_DIR" 2>/dev/null; then
+              printf '%s\n' "$LOCK_OWNER" > "$LOCK_DIR/owner"
+              exit 0
+            fi
+            if (( attempt % 6 == 1 )); then
+              echo "Waiting for shared macOS CI lock held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
+            fi
+            sleep 10
+          done
+          echo "::error::Timed out waiting for shared macOS CI lock"
+          exit 1
 
       - name: Resolve platform pin
         id: platform
@@ -244,9 +279,6 @@ jobs:
         working-directory: ios/MonetKit
         run: swift test
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
@@ -256,12 +288,26 @@ jobs:
         run: |
           xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-ci-ios" \
             build CODE_SIGNING_ALLOWED=NO
+
+      - name: Release shared macOS CI lock
+        if: always()
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        run: |
+          set -euo pipefail
+          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
+          if [[ "$(cat "$LOCK_DIR/owner" 2>/dev/null || true)" == "$LOCK_OWNER" ]]; then
+            rm -f "$LOCK_DIR/owner"
+            rmdir "$LOCK_DIR"
+          fi
 
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 5
     needs: [server, app, replay, docker, ios]
     if: always()
     steps:
