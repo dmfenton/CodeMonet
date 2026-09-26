@@ -24,7 +24,7 @@ type Token = { kind: 'plain' | 'key' | 'str' | 'comment'; text: string };
 
 /**
  * The program that rendered /how-it-works/sky-and-water.jpg
- * (public/how-it-works/sky-and-water.py, run with paint_runner at 1600x1200).
+ * (public/how-it-works/sky-and-water.py, run with code_monet.paintlib.runner at 1600x1200).
  */
 const PROGRAM: Token[][] = [
   [

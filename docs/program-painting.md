@@ -20,7 +20,7 @@ random 32-char hex capability id. Files:
 | `final.png` | Final image (identical content to the last keyframe) |
 | `preview.jpg` | Final image downscaled to ≤1200px wide |
 | `reveal.json` | Stage labels and brush footprints (below) |
-| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`). The server reads `studio/painting.py` (refusing a symlink), runs a throwaway copy, and after the run writes those exact bytes here as a fresh regular file, so a program that rewrites itself cannot change what is published. The asset route serves only regular files and refuses symlinks. |
+| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`). The server reads `studio/painting.py` (refusing a symlink), runs a throwaway copy, and after the run writes those exact bytes here as a fresh regular file, so a program that rewrites itself cannot change what is published. |
 
 Served without auth (capability URL, like share tokens):
 
@@ -31,7 +31,8 @@ GET /painting-assets/{user_id}/{token}/{file}
 `file` must match `kf_\d{2}\.jpg|final\.png|preview\.jpg|reveal\.json|painting\.py`.
 Responses are immutable (`Cache-Control: public, max-age=31536000, immutable`)
 and carry `X-Content-Type-Options: nosniff`. Programs are public for pieces
-in public galleries, like their images.
+in public galleries, like their images. Only server-written files are served
+(see [Untrusted programs](#untrusted-programs)).
 
 ### reveal.json
 
@@ -61,6 +62,58 @@ canvas size). Ops, in paint order:
 - `["a", x0, y0, x1, y1]` — area op (fill, wash, glaze, smear, crisp shape):
   reveal the keyframe image inside this rectangle with a quick soft wipe
   (top to bottom).
+
+## Untrusted programs
+
+`studio/painting.py` is written by the agent, and the agent reads user
+directions and nudges, so a program must be treated as arbitrary,
+possibly prompt-injected code. Whatever it can read can end up in its
+outputs, and those outputs (images, reveal log, program) are public for
+pieces in public galleries.
+
+What the server enforces:
+
+- **Run.** `python -I -m code_monet.paintlib.runner` in a fresh temporary
+  directory (cwd, `HOME` and `TMPDIR`) with an environment of exactly `PATH`,
+  `HOME`, `TMPDIR` and `LANG` — nothing inherited from the server
+  (`program_painting.paint_env`). `-I` ignores `PYTHON*` variables and keeps
+  cwd and user site-packages off `sys.path`. The runner lives in `paintlib`
+  so the process imports only the paint library, numpy, scipy and PIL, never
+  server config (which loads secrets from SSM at import) or the agent SDK.
+  The run is killed after `PAINT_TIMEOUT_S`.
+- **Publish.** The program bytes are read before the run without following a
+  symlink, and the server itself writes them as the version's `painting.py`.
+- **Read back.** Every reader of a version file — the asset route, gallery
+  raster lookups, public thumbnails/OG images, and the workspace render — goes
+  through `workspace.assets.version_asset`: a regular, single-link file whose
+  real path is exactly `{user_dir}/paintings/{token}/{file}` (the user
+  directory may sit behind the server-configured data-volume link). Planted
+  symlinks anywhere below the user directory, hard links to other files, and
+  path escapes are refused.
+
+What is **not** isolated — the program runs as the server's OS user in the
+server container, so a scrubbed environment removes the easy leak (printing
+`os.environ`) but is not a boundary:
+
+- Filesystem: it can read and write whatever the server can — the auth
+  database, every user's workspace (including other versions' assets), the
+  Anthropic identity token under `/run/secrets/anthropic/`, and on Linux the
+  server's own environment via `/proc/<pid>/environ`. It can copy any of that
+  into its own output.
+- Network: unrestricted, including the instance metadata service; the
+  `drawing-agent` container keeps IMDS access (dmfenton/compute
+  `deploy/harden-imds.sh`), so the instance role's SSM parameters are
+  reachable.
+- Processes and resources: a daemonized child outlives the timeout; there are
+  no memory or CPU limits.
+- The paint agent also has the `Bash` tool in the same container, with the
+  same reach, so isolating `paint` alone does not bound a prompt-injected
+  agent.
+
+A real boundary needs OS-level isolation of both the paint run and the
+agent's shell: a separate user with no access to server data or secrets, no
+network, and process/memory limits (for example a sandbox container, or
+Landlock plus seccomp in the child).
 
 ## WebSocket
 

@@ -253,7 +253,7 @@ cd server && uv run python ../scripts/art-benchmark.py --label my-change --timeo
 ```
 
 Iterate on the paint library itself by writing a painting program and running
-`python -m code_monet.tools.paint_runner --program p.py --out DIR --width 1600 --height 1200`
+`python -m code_monet.paintlib.runner --program p.py --out DIR --width 1600 --height 1200`
 (from `server/`), then look at `DIR/preview.jpg`.
 
 ### Render Studies (`scripts/render-study.py`)

@@ -15,6 +15,7 @@ from code_monet.config import settings
 from code_monet.db import get_session, repository
 from code_monet.rendering import options_for_og_image, options_for_thumbnail, render_strokes_async
 from code_monet.types import DrawingStyleType, Path
+from code_monet.workspace.assets import version_asset
 from code_monet.workspace.gallery import (
     parse_drawing_style,
     piece_detail_fields,
@@ -35,8 +36,8 @@ def _raster_image(workspace_base: FilePath, user_id: str, data: dict[str, Any]) 
     token = data.get("image_token")
     if not isinstance(token, str) or not token.isalnum():
         return None
-    path = workspace_base / user_id / "paintings" / token / "final.png"
-    return str(path) if path.exists() else None
+    path = version_asset(workspace_base / user_id, token, "final.png")
+    return str(path) if path else None
 
 
 async def _load_public_piece(

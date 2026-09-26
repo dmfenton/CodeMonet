@@ -7,11 +7,11 @@ tags and native image views without auth headers, like share links.
 from __future__ import annotations
 
 import re
-import stat
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from code_monet.workspace.assets import version_asset
 from code_monet.workspace.persistence import get_user_dir
 
 router = APIRouter()
@@ -34,15 +34,8 @@ async def get_painting_asset(user_id: str, token: str, file: str) -> FileRespons
         user_dir = get_user_dir(user_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail="Not found") from e
-    paintings = user_dir / "paintings"
-    path = paintings / token / file
-    # Serve only regular files the server wrote: never follow a symlink a
-    # painting program may have planted in its output directory.
-    try:
-        mode = path.lstat().st_mode
-    except OSError as e:
-        raise HTTPException(status_code=404, detail="Not found") from e
-    if paintings.is_symlink() or path.parent.is_symlink() or not stat.S_ISREG(mode):
+    path = version_asset(user_dir, token, file)
+    if path is None:
         raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(
         path,
