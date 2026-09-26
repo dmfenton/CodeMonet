@@ -44,7 +44,7 @@ public final class AppEnvironment {
         // REST 401s): drop the old socket so the next sign-in can connect,
         // and forget the previous user's thumbnails.
         auth.onSessionEnded = { [weak studio] in
-            studio?.disconnect()
+            studio?.resetForSessionEnd()
             ThumbnailCache.shared.clear()
         }
     }

@@ -46,13 +46,16 @@ final class ThumbnailCache {
     private var images: [String: UIImage] = [:]
     private var inFlight: Set<String> = []
     private var failed: Set<String> = []
+    private var generation = 0
 
     private init() {}
 
     /// Thumbnail tokens (`piece_000001`) repeat across users; called when a session ends.
     func clear() {
+        generation += 1  // late results from the previous session are dropped
         images.removeAll()
         failed.removeAll()
+        inFlight.removeAll()
     }
 
     func image(for token: String) -> UIImage? {
@@ -68,17 +71,20 @@ final class ThumbnailCache {
     /// `.task`) — de-duplicates by token.
     func load(token: String, using rest: CodeMonetRESTClient) async {
         guard images[token] == nil, !inFlight.contains(token) else { return }
+        let gen = generation
         inFlight.insert(token)
-        defer { inFlight.remove(token) }
+        defer { if generation == gen { inFlight.remove(token) } }
+        let image: UIImage?
         do {
-            let data = try await rest.thumbnailData(pieceID: token)
-            if let image = UIImage(data: data) {
-                images[token] = image
-                failed.remove(token)
-            } else {
-                failed.insert(token)
-            }
+            image = UIImage(data: try await rest.thumbnailData(pieceID: token))
         } catch {
+            image = nil
+        }
+        guard generation == gen else { return }  // session ended mid-fetch
+        if let image {
+            images[token] = image
+            failed.remove(token)
+        } else {
             failed.insert(token)
         }
     }

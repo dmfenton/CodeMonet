@@ -25,6 +25,7 @@ struct RootView: View {
     /// Ux spec §1.2: only auto-resume on foreground if the agent was
     /// actually running immediately before backgrounding *and* the user is
     /// still in Studio. Not persisted — a fresh launch always starts false.
+    @State private var returningFromBackground = false
     @State private var wasRunningBeforeBackground = false
 
     var body: some View {
@@ -90,10 +91,14 @@ struct RootView: View {
     /// snapshot, an incoming call banner) is intentionally a no-op, matching
     /// RN's background/foreground-only hooks.
     private func handleScenePhaseChange(from oldPhase: ScenePhase, to newPhase: ScenePhase) {
+        // iOS returns background -> inactive -> active, so remember the
+        // background visit instead of requiring oldPhase == .background.
         switch newPhase {
         case .background:
+            returningFromBackground = true
             handleDidEnterBackground()
-        case .active where oldPhase == .background:
+        case .active where returningFromBackground:
+            returningFromBackground = false
             handleWillEnterForeground()
         default:
             break

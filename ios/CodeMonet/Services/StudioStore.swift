@@ -37,7 +37,7 @@ public final class StudioStore {
     private let socket: StudioWebSocketClient
     private var rest: CodeMonetRESTClient
     private let traceBuffer: TraceSpanBuffer
-    private let performer = PerformerEngine()
+    @ObservationIgnored private var performer = PerformerEngine()
     private let tokenProvider: any TokenProviding
     private var displayLink: CADisplayLink?
     private var socketTask: Task<Void, Never>?
@@ -124,6 +124,15 @@ public final class StudioStore {
     /// pushes keep replacing it, so views always read live state.
     public func applyFetchedGallery(_ gallery: [GalleryEntry]) {
         apply(.setGallery(gallery))
+    }
+
+    /// Session ended: drop the socket, pending work, and every piece of the
+    /// previous user's studio state so a new sign-in never sees it.
+    public func resetForSessionEnd() {
+        disconnect()
+        stopPlayback()
+        performer = PerformerEngine()
+        state = StudioState()
     }
 
     public func disconnect() {
@@ -435,6 +444,7 @@ public final class StudioStore {
     }
 
     private func tick() {
+        guard !state.paused else { return }  // paused means no reveal progress, like the web performer
         let result = performer.tick(state: state)
         for event in result.events { apply(event) }
         if let batchID = result.completedBatchID {

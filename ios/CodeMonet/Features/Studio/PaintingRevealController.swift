@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import Observation
 import MonetNetworking
 import MonetProtocol
 import MonetRender
@@ -19,38 +20,44 @@ import MonetRender
 /// .PaintingAssetClient` are the pieces of this that *are* unit-tested;
 /// this class is glue, kept deliberately thin.
 @MainActor
+@Observable
 final class PaintingRevealController {
-    private let assetClient: PaintingAssetClient
+    /// The one observed property: bumped when an async load lands so the
+    /// canvas re-renders even when its timeline is paused (a base-only
+    /// painting restored from `init` has nothing animating).
+    private(set) var revision = 0
+
+    @ObservationIgnored private let assetClient: PaintingAssetClient
 
     // MARK: - What's currently loaded / being loaded
 
-    private var loadedBaseKey = ""
-    private var loadedPlayingKey = ""
+    @ObservationIgnored private var loadedBaseKey = ""
+    @ObservationIgnored private var loadedPlayingKey = ""
     /// Bumped on every `startLoad`; an in-flight fetch task checks this
     /// before touching any state, so a version superseded mid-fetch can
     /// never clobber a newer one's result (mirrors RasterRevealLayer.tsx's
     /// `gen`/`genRef`).
-    private var generation = 0
+    @ObservationIgnored private var generation = 0
 
     // MARK: - What's on screen right now
 
     /// The static image shown when nothing is actively revealing — `base`'s
     /// `final.png`, decoded, or `nil` for a blank canvas.
-    private var staticImage: CGImage?
+    @ObservationIgnored private var staticImage: CGImage?
 
     // MARK: - Active reveal playback, if any
 
-    private var plan: RevealPlan?
-    private var sink: RasterRevealSink?
-    private var cursor = RevealCursor()
-    private var playbackStartedAt: Date?
-    private var playingAssetBase: String?
+    @ObservationIgnored private var plan: RevealPlan?
+    @ObservationIgnored private var sink: RasterRevealSink?
+    @ObservationIgnored private var cursor = RevealCursor()
+    @ObservationIgnored private var playbackStartedAt: Date?
+    @ObservationIgnored private var playingAssetBase: String?
     /// `playing`'s own `final.png`, fetched alongside the manifest so the
     /// reveal can end on a pixel-exact image rather than the last
     /// keyframe's (which is only ever "close" — program-painting spec
     /// §4.2's "optional: without it the last keyframe... stays").
-    private var finalImageForPlayback: CGImage?
-    private var lastRevealImage: CGImage?
+    @ObservationIgnored private var finalImageForPlayback: CGImage?
+    @ObservationIgnored private var lastRevealImage: CGImage?
 
     init(assetClient: PaintingAssetClient = PaintingAssetClient()) {
         self.assetClient = assetClient
@@ -67,6 +74,7 @@ final class PaintingRevealController {
         now: Date = Date(),
         onPlaybackDone: @escaping (String) -> Void
     ) -> CGImage? {
+        _ = revision  // register observation so async loads invalidate the view
         let baseKey = base?.assetBase ?? ""
         let playingKey = playing?.assetBase ?? ""
         if baseKey != loadedBaseKey || playingKey != loadedPlayingKey {
@@ -121,6 +129,7 @@ final class PaintingRevealController {
                     let image = try PaintingImageDecoder.decode(data)
                     guard self.generation == gen else { return }
                     self.staticImage = image
+                    self.revision += 1
                 } else {
                     guard self.generation == gen else { return }
                     self.staticImage = nil
@@ -165,6 +174,7 @@ final class PaintingRevealController {
             playbackStartedAt = Date()
             playingAssetBase = ref.assetBase
             finalImageForPlayback = finalImage
+            revision += 1
         } catch {
             // Can't animate this version at all (manifest 404, decode
             // failure, ...): show its final image directly if available and
@@ -174,6 +184,7 @@ final class PaintingRevealController {
             guard self.generation == gen else { return }
             if let image = await Self.loadFinalImage(ref, apiBaseURL: apiBaseURL, assetClient: assetClient) {
                 staticImage = image
+                revision += 1
             }
             loadedBaseKey = ref.assetBase
             loadedPlayingKey = ""
