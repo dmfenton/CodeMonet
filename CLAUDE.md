@@ -5,7 +5,8 @@
 Code Monet is an autonomous AI artist application with:
 
 - **Backend**: Python 3.12+ with FastAPI, Claude Agent SDK, WebSocket support
-- **Frontend**: React Native with Expo, TypeScript, react-native-svg
+- **iOS**: Native SwiftUI app (`ios/`), XcodeGen-generated project + `ios/MonetKit` Swift package. See `ios/ARCHITECTURE.md`.
+- **Web**: Vite web app, TypeScript, React
 
 ## Environment Setup
 
@@ -20,11 +21,12 @@ Code Monet is an autonomous AI artist application with:
 ### Workspace Structure
 
 ```
-/                    # Root workspace
-├── app/             # React Native app (Expo)
+/                    # Root npm workspace
 ├── web/             # Vite web app
-├── shared/          # Shared TypeScript library
-└── server/          # Python backend (uses uv, not npm)
+├── shared/          # Shared TypeScript library (web only)
+├── server/          # Python backend (uses uv, not npm)
+└── ios/             # Native SwiftUI app — separate toolchain (XcodeGen + Swift),
+                      # not an npm workspace. See ios/ARCHITECTURE.md, ios/Makefile.
 ```
 
 ### Key Rules
@@ -37,7 +39,6 @@ Code Monet is an autonomous AI artist application with:
 
 ```bash
 # Add to specific workspace
-npm install <package> -w app
 npm install <package> -w web
 npm install <package> -w shared
 
@@ -56,7 +57,7 @@ cd shared && npm run build
 **Dependency issues** - Clean reinstall:
 
 ```bash
-rm -rf node_modules app/node_modules web/node_modules shared/node_modules package-lock.json
+rm -rf node_modules web/node_modules shared/node_modules package-lock.json
 npm install
 ```
 
@@ -127,8 +128,9 @@ CI jobs only run when relevant code changes:
 | Job                | Runs when these paths change                     |
 | ------------------ | ------------------------------------------------ |
 | Server (Python)    | `server/**`                                      |
-| App (React Native) | `app/**`, `web/**`, `shared/**`, `package*.json` |
-| Replay Tests       | `app/**`, `web/**`, `shared/**`, `package*.json` |
+| Frontend (web)     | `web/**`, `shared/**`, `package*.json`            |
+| Replay Tests       | `web/**`, `shared/**`, `package*.json`            |
+| iOS (Swift)        | `ios/**`, `fenton-platform.lock`                  |
 | Docker Build       | `server/**` (after Server job passes)            |
 
 The "CI Success" job consolidates results - it passes if all jobs either pass or are appropriately skipped.
@@ -137,17 +139,19 @@ The "CI Success" job consolidates results - it passes if all jobs either pass or
 
 ### Live Reload (IMPORTANT)
 
-Both servers have **live reload enabled by default** - they auto-restart on file changes:
+The Python server and Vite web app both have **live reload enabled by default** - they auto-restart on file changes:
 
 - **Python server**: Uvicorn with watchfiles (reload=True in dev mode)
-- **React Native app**: Expo with Metro bundler hot reload
+- **Vite web app**: Metro-free Vite dev server with HMR
 
 **DO NOT manually restart servers after code changes.** Just save the file and wait 1-2 seconds.
+
+The native iOS app has no live reload — rebuild and relaunch it in Xcode or
+via `make ios-build` after Swift changes.
 
 ### Starting Dev Servers
 
 ```bash
-make dev       # Server + Expo app (foreground, Ctrl+C to stop)
 make dev-web   # Server + Vite web app (foreground, Ctrl+C to stop)
 make dev-stop  # Force-kill any stuck servers by port
 ```
@@ -155,7 +159,6 @@ make dev-stop  # Force-kill any stuck servers by port
 **Ports:**
 
 - Python server: http://localhost:8000
-- Expo app: http://localhost:8081
 - Vite web: http://localhost:5173
 
 Both have live reload - no restarts needed for code changes.
@@ -170,20 +173,20 @@ Both have live reload - no restarts needed for code changes.
 
 ### Simulator Screenshots (Debugging)
 
-Use `/screenshot` to capture the iOS simulator screen when debugging mobile issues.
+Use `/screenshot` to capture the native iOS app's Simulator screen when debugging mobile issues.
 
 Screenshots are saved to `screenshots/` (gitignored) and displayed for analysis.
 
-### App Screenshots (Web/Expo)
+### App Screenshots (Web)
 
-Use `/app-screenshot` or `scripts/app-screenshot.py` to capture the Expo app running in web mode:
+Use `/app-screenshot` or `scripts/app-screenshot.py` to capture the Vite web app:
 
 ```bash
 # Basic screenshot
-uv run python scripts/app-screenshot.py --expo-port 5173
+uv run python scripts/app-screenshot.py
 
 # With auth (loads user workspace)
-uv run python scripts/app-screenshot.py --auth --expo-port 5173
+uv run python scripts/app-screenshot.py --auth
 
 # Wait for content and specific selector
 uv run python scripts/app-screenshot.py --auth --wait 3 --selector "[data-testid='canvas-view']"
@@ -191,8 +194,6 @@ uv run python scripts/app-screenshot.py --auth --wait 3 --selector "[data-testid
 # Custom viewport (iPhone 15 Pro Max)
 uv run python scripts/app-screenshot.py --viewport 430x932
 ```
-
-**Ports:** Use `--expo-port 5173` for Vite web, `--expo-port 8081` for Expo web.
 
 **Prerequisites:** `cd server && uv sync --extra dev && uv run playwright install chromium`
 
@@ -286,9 +287,6 @@ Watch a full agent run end-to-end and produce judgeable artifacts:
 # From repo root (or use cd server + ../scripts/...)
 uv run --project server python scripts/visual-flow-test.py "draw a simple line"
 
-# Use Vite web app (port 5173) instead of Expo (8081)
-uv run --project server python scripts/visual-flow-test.py "draw shapes" --expo-port 5173
-
 # Show browser window for debugging
 uv run --project server python scripts/visual-flow-test.py "draw a cat" --no-headless
 ```
@@ -316,7 +314,7 @@ incomplete client canvas.
 | `--interval N` | 1.0 | Screenshot interval in seconds |
 | `--timeout N` | 120 | Max test duration in seconds |
 | `--output DIR` | auto | Custom output directory |
-| `--expo-port N` | 8081 | App port (8081 mobile, 5173 web) |
+| `--expo-port N` | 5173 | Vite dev server port |
 | `--web` | auto | Force Vite-web mode (auto for port 5173) |
 | `--viewport WxH` | per app | 390x844 mobile, 1280x900 web |
 | `--no-headless` | false | Show browser window |
@@ -347,17 +345,18 @@ uv run python scripts/ws-client.py watch
 #### 2. Plan
 
 Use `EnterPlanMode` for non-trivial changes. Consider:
-- Which codebase? `app/src/` (mobile) vs `web/src/` (web) vs `shared/src/`
+- Which codebase? `ios/CodeMonet` (native iOS, Swift) vs `web/src/` (web) vs `shared/src/` (web only)
 - Rebuild shared after changes: `cd shared && npm run build`
 
 #### 3. Code
 
-Implement the fix. Run typecheck:
+Implement the fix. Run typecheck / build:
 
 ```bash
-npm run -w app typecheck    # Mobile app
 npm run -w web typecheck    # Web app
 npm run -w shared build     # Rebuild shared if changed
+make ios-kit-test           # MonetKit Swift package (fast, no simulator)
+make ios-build              # Full Xcode Simulator build, if project.yml or app target changed
 ```
 
 #### 4. Remote Control (Set Up Test State)
@@ -380,25 +379,15 @@ uv run python scripts/ws-client.py pause
 
 | Method | Use For |
 |--------|---------|
-| `/app-screenshot` | Capture Expo/Vite web app |
-| `/screenshot` | Capture iOS simulator |
-
-**Critical: Two different web servers**
-
-| Port | Server | Codebase | Test For |
-|------|--------|----------|----------|
-| 8081 | Expo Web | `app/src/` | Mobile UI (HomePanel, GalleryModal, Canvas) |
-| 5173 | Vite | `web/src/` | Web app (studio, homepage) |
+| `/app-screenshot` | Capture the Vite web app (port 5173) |
+| `/screenshot` | Capture the native iOS app in Simulator |
 
 ```bash
-# Mobile app (port 8081)
-/app-screenshot --auth --wait 3 --expo-port 8081
-
-# Web app (port 5173)
-/app-screenshot --auth --wait 3 --expo-port 5173
+# Web app
+/app-screenshot --auth --wait 3
 
 # Wait for specific element
-/app-screenshot --auth --selector "[data-testid='home-panel']" --expo-port 8081
+/app-screenshot --auth --selector "[data-testid='canvas-view']"
 ```
 
 Then use Read tool on `server/screenshots/app-*.png` to view.
@@ -421,11 +410,10 @@ If screenshot shows issues:
 
 | Skill | Purpose |
 |-------|---------|
-| `/dev` | Start dev servers (server + Expo mobile on 8081) |
 | `/dev-web` | Start dev servers (server + Vite web on 5173) |
 | `/diagnose` | X-Ray traces and CloudWatch logs |
-| `/app-screenshot` | Screenshot Expo/Vite web app |
-| `/screenshot` | Screenshot iOS simulator |
+| `/app-screenshot` | Screenshot the Vite web app |
+| `/screenshot` | Screenshot the native iOS app in Simulator |
 | `/remote` | Run commands on prod via SSM |
 | `/pr` | Create PR, run code review |
 | `/release` | Cut a release |
@@ -434,16 +422,6 @@ If screenshot shows issues:
 #### Quick Reference
 
 **TestIDs for `--selector`:**
-
-Mobile app (port 8081):
-
-| Element | Selector |
-|---------|----------|
-| HomePanel | `[data-testid="home-panel"]` |
-| Canvas | `[data-testid="canvas-view"]` |
-| Continue button | `[data-testid="home-continue-button"]` |
-| Gallery button | `[data-testid="home-gallery"]` |
-| Surprise Me | `[data-testid="home-surprise-me"]` |
 
 Web studio (port 5173, `/studio`):
 
@@ -460,8 +438,6 @@ Web studio (port 5173, `/studio`):
 **Common Issues:**
 
 - **Agent auto-starts**: Workspaces persist. Use `ws-client.py pause` first.
-- **Wrong screen**: Mobile app `inStudio` state. Background app returns to HomePanel.
-- **Wrong port**: 8081 for mobile features, 5173 for web features.
 - **Stale code**: Rebuild shared library after changes.
 
 ## Code Standards
@@ -484,16 +460,17 @@ Web studio (port 5173, `/studio`):
 ## Testing Requirements
 
 - Backend: pytest with async support
-- Frontend: Jest + React Native Testing Library
+- Web: Vitest (`web/src/test/`)
+- Native iOS: `swift test` in `ios/MonetKit` (see `ios/ARCHITECTURE.md`)
 - All new features need tests
-- Run `make test` before committing
+- Run `make test` before committing (server + web + MonetKit)
 
 ## Integration & E2E Tests
 
 Multiple test types validate different layers of the system:
 
 ```bash
-make test-e2e              # Run all integration tests (SDK + replay, no iOS simulator)
+make test-e2e              # Run all integration tests (SDK + replay)
 ```
 
 ### API Key from SSM
@@ -517,14 +494,14 @@ These tests catch SDK breaking changes (e.g., parameter renames) before producti
 
 ### WebSocket Message Replay Tests
 
-Record-and-replay tests that validate app reducer handles real server messages correctly.
+Record-and-replay tests that validate the web app's reducer handles real server messages correctly.
 
 ```bash
 make test-record-fixture   # Record new fixtures (API key from SSM)
-make test-replay           # Replay fixtures through app reducer (fast, no API)
+make test-replay           # Replay fixtures through the web reducer (fast, no API)
 ```
 
-**Fixtures location:** `server/tests/fixtures/` (symlinked to `app/src/__tests__/fixtures/server/`)
+**Fixtures location:** `server/tests/fixtures/` (symlinked to `web/src/test/fixtures/server/`)
 
 Re-record fixtures when:
 
@@ -532,84 +509,15 @@ Re-record fixtures when:
 - New message types are added
 - Reducer logic changes
 
-### iOS Simulator Tests (Maestro)
+### Native iOS Tests
 
-See next section for Maestro-based E2E tests that require iOS simulator.
-
-## E2E Testing (Maestro)
-
-E2E tests use [Maestro](https://maestro.mobile.dev/) to test iOS simulator flows.
-
-### Running E2E Tests
-
-```bash
-make e2e              # Run all E2E tests
-make e2e-install      # Install Maestro + Java dependencies
-./scripts/e2e.sh auth.yaml  # Run single test
-```
-
-### Test Structure
-
-```
-app/e2e/
-├── flows/           # Test files
-│   ├── auth.yaml    # Magic link flow (runs first, needs clean state)
-│   ├── action-bar.yaml
-│   ├── canvas.yaml
-│   └── websocket.yaml
-└── helpers/
-    └── inject-auth.yaml  # Shared auth injection helper
-```
-
-### Key Learnings
-
-**Simulator state:**
-
-- `simctl erase` required before auth test - Keychain persists across app uninstall
-- Auth injection uses `simctl launch` then `simctl openurl` (app must be running for deep links)
-
-**Maestro tips:**
-
-- Use `testID` props, not text matching (icons break text selectors)
-- Use `optional: true` for dialogs that may or may not appear
-- `extendedWaitUntil` with timeout for async operations
-- Coordinate taps (`point: "95%,52%"`) are fragile - prefer testIDs
-
-**iOS-specific:**
-
-- "Open in App?" dialog appears on fresh simulator - handle with optional tap
-- `back` command doesn't work for modals - use testID on close button
-- Swipe gestures can interfere with subsequent button taps
-
-### Adding TestIDs
-
-Add `testID` prop to React Native components for E2E selection:
-
-```tsx
-<Pressable testID="my-button" onPress={handlePress}>
-```
-
-**Current testIDs:**
-
-- AuthScreen: `email-input`, `code-input`, `auth-submit-button`
-- Canvas: `canvas-view`
-- StatusPill: `status-pill`
-- ActionBar: `action-bar`, `action-draw`, `action-nudge`, `action-new`, `action-gallery`, `action-pause`
-- StartPanel: `surprise-me-button`
-- NudgeModal: `nudge-close-button`
-
-### Rebuilding After TestID Changes
-
-TestIDs are compiled into the native app. After adding new testIDs:
-
-```bash
-rm -rf ~/Library/Developer/Xcode/DerivedData/CodeMonet-*
-cd app && npx expo prebuild --platform ios --clean
-xcodebuild -workspace ios/CodeMonet.xcworkspace -scheme CodeMonet \
-  -configuration Debug -sdk iphonesimulator \
-  -destination "platform=iOS Simulator,id=$(xcrun simctl list devices -j | python3 -c "import sys,json; print([d['udid'] for r,devs in json.load(sys.stdin)['devices'].items() if 'iOS-18' in r for d in devs if 'iPhone 16 Pro' in d['name']][0])")" \
-  build
-```
+`ios/MonetKit` has its own fixture replay tests (protocol decode + reducer,
+against the same `server/tests/fixtures/*.json`) — see
+`ios/ARCHITECTURE.md` §1 (work package 1). Run with `make ios-kit-test`.
+`ios/CodeMonetUITests` covers app-shell XCTest UI flows against a booted
+Simulator (`make ios-test`); a `-devToken` launch argument marks a test as
+requiring a reachable local dev server (`localhost:8000`) rather than gating
+any app behavior — see `docs/ios-deployment.md`.
 
 ## Common Tasks
 
@@ -633,16 +541,17 @@ xcodebuild -workspace ios/CodeMonet.xcworkspace -scheme CodeMonet \
 
 1. Add type to `PathType` enum in `server/code_monet/types.py`
 2. Add interpolation in `server/code_monet/interpolation.py`
-3. Add SVG rendering in `app/src/components/Canvas.tsx`
+3. Add rendering in `web/src/renderers/` (web) and `ios/MonetKit/Sources/MonetRender` (native iOS)
 
 ## File Locations
 
 | Directory | Description | Details |
 |-----------|-------------|---------|
 | `server/code_monet/` | Python backend (FastAPI, agent, WebSocket) | See `server/CLAUDE.md` |
-| `app/src/` | React Native mobile app | Components, hooks, utils |
+| `ios/CodeMonet/` | Native SwiftUI iOS app | See `ios/ARCHITECTURE.md` |
+| `ios/MonetKit/` | Standalone Swift package (protocol, reducer, performer, renderer, networking) | See `ios/ARCHITECTURE.md` |
 | `web/src/` | Vite web app | Canvas, debug panel, action bar |
-| `shared/src/` | Shared TypeScript library | See `shared/CLAUDE.md` |
+| `shared/src/` | Shared TypeScript library (web only) | See `shared/CLAUDE.md` |
 
 ---
 

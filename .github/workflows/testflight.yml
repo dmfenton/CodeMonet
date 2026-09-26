@@ -16,14 +16,6 @@ on:
         type: boolean
         default: false
 
-env:
-  # Production URLs (API uses /api prefix - nginx proxies /api/* to backend)
-  EXPO_PUBLIC_API_URL: 'https://monet.dmfenton.net/api'
-  EXPO_PUBLIC_WS_URL: 'wss://monet.dmfenton.net/ws'
-  # Sentry
-  SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
-  SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-
 concurrency:
   group: codemonet-testflight
   cancel-in-progress: false
@@ -66,7 +58,7 @@ jobs:
           echo "Comparing $PREVIOUS_TAG to $CURRENT_TAG"
 
           # Check for changes in iOS-related paths (code that affects the iOS app)
-          IOS_PATHS="app/ shared/ package.json package-lock.json"
+          IOS_PATHS="ios/ fenton-platform.lock"
 
           CHANGED_FILES=$(git diff --name-only "$PREVIOUS_TAG" "$CURRENT_TAG")
           echo "Changed files:"
@@ -87,7 +79,7 @@ jobs:
           else
             echo "No iOS-related changes detected, skipping build"
             echo "should_build=false" >> $GITHUB_OUTPUT
-            echo "skip_reason=No changes in app/, shared/, or dependency files since $PREVIOUS_TAG" >> $GITHUB_OUTPUT
+            echo "skip_reason=No changes in ios/ or fenton-platform.lock since $PREVIOUS_TAG" >> $GITHUB_OUTPUT
           fi
 
   build-ios:
@@ -99,6 +91,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Resolve platform pin
+        id: platform
+        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout Fenton platform
+        uses: actions/checkout@v6
+        with:
+          repository: dmfenton/platform.dmfenton.net
+          ref: ${{ steps.platform.outputs.sha }}
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          path: vendor/platform.dmfenton.net
 
       - name: Extract version from tag
         id: version
@@ -125,51 +129,24 @@ jobs:
           echo "Version: $VERSION"
           echo "Build Number: $BUILD_NUMBER"
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '24'
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build shared library
-        run: npm run build -w shared
-
-      - name: Run prebuild
-        working-directory: app
-        env:
-          APP_VERSION: ${{ steps.version.outputs.version }}
-          APP_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          # Disable Sentry source map auto-upload (enable when SENTRY_AUTH_TOKEN is configured)
-          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
-        run: npx expo prebuild --platform ios --clean
-
-      - name: Remove prebuild-generated Gemfile.lock
-        working-directory: app
-        # Prebuild runs bundle install with the runner's default Bundler 4,
-        # which writes an empty CHECKSUMS entry for default gems (rake).
-        # setup-ruby then reinstalls in frozen mode and rejects it (exit 16).
-        # The lockfile is gitignored and regenerated every run, so drop it
-        # and let setup-ruby resolve fresh.
-        run: rm -f Gemfile.lock
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.2'
           bundler-cache: true
-          working-directory: app
+          working-directory: ios
 
       - name: Install Fastlane
-        working-directory: app
+        working-directory: ios
         run: |
           gem install fastlane
-
-      - name: Install CocoaPods dependencies
-        working-directory: app/ios
-        run: pod install
 
       - name: Set up shared iOS signing
         uses: dmfenton/platform.dmfenton.net/.github/actions/isolated-ios-signing@7c5b9b0e57bbcba96f4ded32623c589314b4ddf4
@@ -187,7 +164,7 @@ jobs:
           echo "IOS_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
 
       - name: Build and upload to TestFlight
-        working-directory: app
+        working-directory: ios
         env:
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
@@ -195,16 +172,15 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           ITC_TEAM_ID: ${{ secrets.ITC_TEAM_ID }}
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-          # Disable Sentry source map auto-upload (enable when SENTRY_AUTH_TOKEN is configured)
-          SENTRY_DISABLE_AUTO_UPLOAD: 'true'
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
         run: fastlane ios beta
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
           name: CodeMonet-${{ steps.version.outputs.version }}.ipa
-          path: app/build/CodeMonet.ipa
+          path: ios/build/CodeMonet.ipa
           retention-days: 30
 
       - name: Clean up shared iOS signing

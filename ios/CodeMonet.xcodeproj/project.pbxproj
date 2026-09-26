@@ -48,7 +48,6 @@
 		BA4835DB5CC9E34A940E0C2A /* LiveStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */; };
 		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
 		D148D506115831798F412C22 /* CanvasSizeProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */; };
-		D2E9421CE9635D149E9E9C62 /* E2ERoundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E2BBA512FFAF2E4B6F825356 /* ActionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FBE71A271190830A2BC772 /* ActionBarView.swift */; };
 		E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12336794874A19B003081A3 /* CodeMonetApp.swift */; };
@@ -83,7 +82,6 @@
 		0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveStatusView.swift; sourceTree = "<group>"; };
 		1DFBA460C8BDEADA2CA5EC44 /* StudioPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioPresentation.swift; sourceTree = "<group>"; };
 		1F335A83678298111142386B /* CodeMonetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetTests.swift; sourceTree = "<group>"; };
-		2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = E2ERoundTests.swift; sourceTree = "<group>"; };
 		2279D8BC1717425C6A89565F /* IdleParticlesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleParticlesView.swift; sourceTree = "<group>"; };
 		2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectorsTests.swift; sourceTree = "<group>"; };
 		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
@@ -215,7 +213,6 @@
 			isa = PBXGroup;
 			children = (
 				02C8194A21E9DDB7E6E5124F /* CodeMonetUITests.swift */,
-				2073BF1314AFD1F9AE122FFF /* E2ERoundTests.swift */,
 				91DB036202BA768B628019C3 /* Features */,
 			);
 			path = CodeMonetUITests;
@@ -546,7 +543,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				66C00DCA9EA9160B7DE335A5 /* CodeMonetUITests.swift in Sources */,
-				D2E9421CE9635D149E9E9C62 /* E2ERoundTests.swift in Sources */,
 				B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

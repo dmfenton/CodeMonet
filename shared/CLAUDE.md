@@ -1,10 +1,12 @@
 # Shared Library - TypeScript Standards
 
-Standards for the platform-agnostic shared library used by app/ and web/.
+Standards for the platform-agnostic shared library used by web/. (The native
+iOS app has its own equivalent types and reducer in `ios/MonetKit` — see
+`ios/ARCHITECTURE.md` — rather than consuming this package.)
 
 ## Purpose
 
-This library contains code that works identically on React Native and web:
+This library contains the web app's canvas state machine and protocol types:
 
 - Canvas state reducer
 - WebSocket message handlers
@@ -173,7 +175,7 @@ return useMemo(
 
 ## Testing
 
-Shared library tests go in `app/src/__tests__/` since shared/ doesn't have its own test setup. Test through the consuming app.
+Shared library tests go in `web/src/test/` since shared/ doesn't have its own test setup. Test through the consuming web app.
 
 ## File Organization
 
@@ -197,28 +199,3 @@ shared/src/
     └── handlers.ts    # Message routing
 ```
 
-## App Component Organization
-
-The app/ codebase uses component folders for complex components:
-
-```
-app/src/components/
-├── messages/          # MessageStream subcomponents
-│   ├── MessageBubble.tsx      # Dispatcher by message type
-│   ├── MessageCodeExecution.tsx
-│   ├── MessageError.tsx
-│   ├── MessageIteration.tsx
-│   ├── MessagePieceComplete.tsx
-│   ├── MessageThinking.tsx
-│   ├── styles.ts              # Shared styles
-│   ├── types.ts               # Shared types
-│   └── useMessageAnimation.ts # Entry animation hook
-├── home/              # HomePanel subcomponents
-│   ├── ContinueCard.tsx
-│   └── PromptInput.tsx
-└── splash/            # SplashScreen subcomponents
-    ├── BrushStroke.tsx
-    ├── GradientOrb.tsx
-    ├── PaintSplatter.tsx
-    └── useSplashAnimation.ts
-```

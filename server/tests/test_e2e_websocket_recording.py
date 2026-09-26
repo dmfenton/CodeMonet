@@ -14,7 +14,7 @@ Usage:
         --fixture-name my_custom_fixture
 
 The recorded fixtures are saved to server/tests/fixtures/ and symlinked
-to app/src/__tests__/fixtures/ for use in app reducer tests.
+to web/src/test/fixtures/server/ for use in the web app's reducer tests.
 """
 
 from __future__ import annotations

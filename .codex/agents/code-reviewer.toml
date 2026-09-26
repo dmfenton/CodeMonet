@@ -17,13 +17,14 @@ Execute these passes sequentially. Do not skip passes.
 
 1. Run `git status` to identify changed files
 2. Run `git diff` to see pending changes (or `gh pr diff <number>` for PR review)
-3. Categorize files by area (server/, app/)
+3. Categorize files by area (server/, web/, shared/, ios/)
 
 ### Pass 2: Automated Checks
 
 1. Backend: `make lint-server && make typecheck-server`
-2. Frontend: `make lint-app && make typecheck-app`
-3. Report any failures before proceeding
+2. Frontend: `make lint-web && make typecheck-web`
+3. iOS (if ios/ changed): `make ios-kit-test`
+4. Report any failures before proceeding
 
 ### Pass 3: Design Review
 

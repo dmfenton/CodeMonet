@@ -5,7 +5,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
-const sourceFiles = ['{app,shared,web}/**/*.{ts,tsx}'];
+const sourceFiles = ['{shared,web}/**/*.{ts,tsx}'];
 const reactErrorRules = Object.fromEntries(
   Object.entries(eslintReact.configs.recommended.rules).filter(([, setting]) => {
     const severity = Array.isArray(setting) ? setting[0] : setting;
@@ -15,14 +15,7 @@ const reactErrorRules = Object.fromEntries(
 
 export default [
   {
-    ignores: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/coverage/**',
-      'app/.expo/**',
-      'app/babel.config.js',
-      'app/metro.config.js',
-    ],
+    ignores: ['**/node_modules/**', '**/dist/**', '**/coverage/**'],
   },
   {
     files: sourceFiles,
@@ -71,18 +64,6 @@ export default [
     files: ['web/src/test/**/*.ts', 'web/src/**/*.test.{ts,tsx}'],
     languageOptions: {
       parserOptions: { projectService: false },
-    },
-  },
-  {
-    files: ['app/**/*.{ts,tsx}'],
-    rules: {
-      ...tseslint.plugin.configs['recommended-type-checked'].rules,
-      '@typescript-eslint/no-unsafe-argument': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'off',
-      '@typescript-eslint/no-unsafe-call': 'off',
-      '@typescript-eslint/no-unsafe-member-access': 'off',
-      '@typescript-eslint/no-unsafe-return': 'off',
-      '@typescript-eslint/no-redundant-type-constituents': 'off',
     },
   },
 ];

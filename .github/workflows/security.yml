@@ -26,7 +26,6 @@ jobs:
             javascript:
               - 'package.json'
               - 'package-lock.json'
-              - 'app/package.json'
               - 'shared/package.json'
               - 'web/package.json'
             python:
