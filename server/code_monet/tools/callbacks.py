@@ -18,7 +18,6 @@ DrawCallback = Callable[["list[Path]", bool], Awaitable[None]]
 GetCanvasCallback = Callable[[], bytes]
 AddStrokesCallback = Callable[["list[Path]"], Awaitable[None]]
 WorkspaceDirCallback = Callable[[], str]
-PieceTitleCallback = Callable[[str], Awaitable[None]]
 PaintCallback = Callable[[], "Awaitable[PaintResult]"]
 
 # Global callbacks - will be set by the agent
@@ -26,7 +25,6 @@ _draw_callback: DrawCallback | None = None
 _get_canvas_callback: GetCanvasCallback | None = None
 _add_strokes_callback: AddStrokesCallback | None = None
 _get_workspace_dir_callback: WorkspaceDirCallback | None = None
-_set_piece_title_callback: PieceTitleCallback | None = None
 _paint_callback: PaintCallback | None = None
 
 # Global canvas dimensions
@@ -69,12 +67,6 @@ def set_workspace_dir_callback(callback: WorkspaceDirCallback | None) -> None:
     _get_workspace_dir_callback = callback
 
 
-def set_piece_title_callback(callback: PieceTitleCallback | None) -> None:
-    """Set the callback function for saving the piece title."""
-    global _set_piece_title_callback
-    _set_piece_title_callback = callback
-
-
 def set_paint_callback(callback: PaintCallback | None) -> None:
     """Set the callback that runs the painting program and publishes the version."""
     global _paint_callback
@@ -110,11 +102,6 @@ def get_add_strokes_callback() -> AddStrokesCallback | None:
 def get_workspace_dir_callback() -> WorkspaceDirCallback | None:
     """Get the current workspace directory callback."""
     return _get_workspace_dir_callback
-
-
-def get_piece_title_callback() -> PieceTitleCallback | None:
-    """Get the current piece title callback."""
-    return _set_piece_title_callback
 
 
 def get_canvas_dimensions() -> tuple[int, int]:

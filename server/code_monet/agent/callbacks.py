@@ -11,7 +11,6 @@ from code_monet.tools import (
     set_draw_callback,
     set_get_canvas_callback,
     set_paint_callback,
-    set_piece_title_callback,
     set_workspace_dir_callback,
 )
 
@@ -56,13 +55,6 @@ def setup_tool_callbacks(
         return state.workspace_dir
 
     set_workspace_dir_callback(get_workspace_dir)
-
-    # Set up piece title callback for name_piece tool
-    async def set_piece_title(title: str) -> None:
-        state.current_piece_title = title
-        await state.save()
-
-    set_piece_title_callback(set_piece_title)
 
     # Set canvas dimensions
     set_canvas_dimensions(canvas_width, canvas_height)

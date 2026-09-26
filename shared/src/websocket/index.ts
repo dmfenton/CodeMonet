@@ -15,7 +15,9 @@ export {
   handlePaintingVersion,
   handlePaused,
   handlePieceState,
+  handlePieceTitle,
   handleThinkingDelta,
+  handleTurnState,
   routeMessage,
 } from './handlers';
 

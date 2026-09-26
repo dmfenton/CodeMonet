@@ -38,6 +38,9 @@ public struct InitPayload: Codable, Equatable, Sendable {
     /// The direction the current piece was started with: top-level
     /// `init.prompt`, else `init.painting.prompt` (both additive fields).
     public var prompt: String?
+    /// `init.turn_active`: whether an agent turn is running at connect time.
+    /// Absent (older server) decodes as `false`.
+    public var turnActive: Bool
 
     enum CodingKeys: String, CodingKey {
         case strokes, gallery, status, paused
@@ -49,6 +52,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         case styleConfig = "style_config"
         case painting
         case title, prompt
+        case turnActive = "turn_active"
     }
 
     /// The additive keys `init.painting` may carry beside the ref fields.
@@ -83,7 +87,8 @@ public struct InitPayload: Codable, Equatable, Sendable {
         painting: PaintingVersionRef? = nil,
         title: String? = nil,
         paintingVersions: [PaintingVersionSummary] = [],
-        prompt: String? = nil
+        prompt: String? = nil,
+        turnActive: Bool = false
     ) {
         self.strokes = strokes
         self.gallery = gallery
@@ -99,6 +104,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         self.title = title
         self.paintingVersions = paintingVersions
         self.prompt = prompt
+        self.turnActive = turnActive
     }
 
     /// Custom decode: `canvas_width`/`canvas_height` are documented as always
@@ -125,6 +131,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         let extras = painting == nil ? nil : try container.decodeIfPresent(PaintingExtras.self, forKey: .painting)
         paintingVersions = extras?.versions ?? []
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? extras?.prompt
+        turnActive = (try? container.decodeIfPresent(Bool.self, forKey: .turnActive)) ?? false
     }
 }
 
@@ -283,6 +290,13 @@ public enum ServerMessage: Equatable, Sendable {
     /// version list. `ops` is the render's total reveal-op count, an
     /// additive server field (`nil` from a server that doesn't send it).
     case paintingVersion(PaintingVersionRef, stages: [String], ops: Int? = nil)
+    /// An agent turn started (`true`) or ended (`false`, also after a
+    /// failed turn). The painter counts as working while a turn is active,
+    /// even when nothing is streaming.
+    case turnState(active: Bool)
+    /// The agent named a piece (`name_piece`); the single authority for a
+    /// live title change (`init.title` seeds it on connect).
+    case pieceTitle(pieceNumber: Int, title: String)
     /// Any `type` this build doesn't recognize. Carries the raw type string
     /// so a caller can at least log what arrived.
     case unknown(type: String)
@@ -335,6 +349,11 @@ extension ServerMessage: Decodable {
                 batchID: envelope.batchID,
                 pieceNumber: envelope.pieceNumber
             )
+        case "turn_state":
+            self = .turnState(active: try TurnStateEnvelope(from: decoder).active)
+        case "piece_title":
+            let envelope = try PieceTitleEnvelope(from: decoder)
+            self = .pieceTitle(pieceNumber: envelope.pieceNumber, title: envelope.title)
         case "painting_version":
             let envelope = try PaintingVersionEnvelope(from: decoder)
             self = .paintingVersion(envelope.ref, stages: envelope.stages, ops: envelope.ops)
@@ -371,6 +390,15 @@ private struct AgentStrokesReadyEnvelope: Decodable {
         case count
         case batchID = "batch_id"
         case pieceNumber = "piece_number"
+    }
+}
+private struct TurnStateEnvelope: Decodable { let active: Bool }
+private struct PieceTitleEnvelope: Decodable {
+    let pieceNumber: Int
+    let title: String
+    enum CodingKeys: String, CodingKey {
+        case pieceNumber = "piece_number"
+        case title
     }
 }
 private struct PaintingVersionEnvelope: Decodable {

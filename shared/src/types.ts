@@ -535,6 +535,21 @@ export interface InitMessage {
   title?: string | null;
   /** Direction the current piece was started with (additive; may be absent). */
   prompt?: string | null;
+  /** An agent turn is running right now (additive; absent = false). */
+  turn_active?: boolean;
+}
+
+/** Server -> client: an agent turn started or ended (false after every turn). */
+export interface TurnStateMessage {
+  type: 'turn_state';
+  active: boolean;
+}
+
+/** Server -> client: the agent named a piece (name_piece). */
+export interface PieceTitleMessage {
+  type: 'piece_title';
+  piece_number: number;
+  title: string;
 }
 
 // ============================================================================
@@ -744,7 +759,9 @@ export type ServerMessage =
   | ErrorMessage
   | IterationMessage
   | AgentStrokesReadyMessage
-  | PaintingVersionMessage;
+  | PaintingVersionMessage
+  | TurnStateMessage
+  | PieceTitleMessage;
 
 // WebSocket messages - Client to Server
 export interface ClientStrokeMessage {

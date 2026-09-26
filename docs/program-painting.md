@@ -112,8 +112,8 @@ immediately without animating. `versions` lists every version of the current
 piece, oldest first (the last entry is the latest). `init` also carries
 top-level `"title"` (set by the agent's `name_piece` tool, else `null`) and
 `"prompt"` (the `direction` of the `new_canvas` that started the piece, else
-`null`) whether or not a version exists yet. The title is not broadcast when
-the agent names the piece; clients see it on the next `init` or in the gallery.
+`null`) whether or not a version exists yet. When the agent names the piece,
+the title is also broadcast live as `piece_title` (see below).
 
 `new_canvas` and `clear` reset the painting to none (blank canvas) and its
 version list to empty. `new_canvas` with a `direction` records it as the new
@@ -125,6 +125,20 @@ painting was reset is discarded rather than recorded into the new piece.
 latest version under the legacy `painting` key so an older server can load it.
 Pieces in progress when version history shipped have only their latest version
 in history.
+
+### Turn state and title
+
+The server is the authority for whether the painter is working and what the
+piece is called:
+
+- `{"type": "turn_state", "active": true|false}` when an agent turn starts and
+  ends (always `false` after a turn, even one that failed). `init.turn_active`
+  reports the state at connect time. Clients show the painter as thinking while
+  a turn is active and nothing else is streaming, instead of idle.
+- `{"type": "piece_title", "piece_number": 12, "title": "Harbor Fog"}` after a
+  successful `name_piece`: the naming agent's orchestrator stores the title in
+  its own workspace and broadcasts it. `init.title` seeds it on connect; clients
+  ignore a title for a different piece and do not read it from the tool call.
 
 ## Client playback
 

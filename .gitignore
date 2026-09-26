@@ -71,6 +71,8 @@ deploy/.env
 *.bak
 *.tmp
 data/
+# A worktree may symlink server/data to shared dev data; never commit it.
+/server/data
 .claude/settings.local.json
 screenshots/
 

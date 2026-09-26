@@ -72,6 +72,11 @@ public enum StudioReducer {
             s.title = title
         case let .setPrompt(prompt):
             s.prompt = prompt
+        case let .setTurnActive(active):
+            s.turnActive = active
+        case let .pieceTitle(pieceNumber, title):
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            if pieceNumber == s.pieceNumber, !trimmed.isEmpty { s.title = trimmed }
 
         // MARK: Canvas lifecycle (§5.4)
         case .clear:
@@ -294,6 +299,7 @@ public enum StudioReducer {
         s.gallery = payload.gallery
         s.pieceNumber = payload.pieceNumber
         s.paused = payload.paused
+        s.turnActive = payload.turnActive
         s.canvasWidth = payload.canvasWidth
         s.canvasHeight = payload.canvasHeight
         s.viewingPiece = nil

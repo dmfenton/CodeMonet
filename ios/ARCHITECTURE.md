@@ -389,8 +389,8 @@ Contract changes (all additive on the wire; flagged per §4 rule 1):
 - `AgentMessage` gained `version` (stamped by the reducer: work toward vN is
   everything after v(N-1) arrived) and `AgentMessageType.userNudge`.
 - `StudioState` gained `versions` (seeded from `init`, accumulated from
-  `painting_version`, reset on `clear`/`new_canvas`), `title` (init or a
-  completed `name_piece` input), `prompt`; events `.setTitle`/`.setPrompt`.
+  `painting_version`, reset on `clear`/`new_canvas`), `title` (`init.title`,
+  then `piece_title` — see §9), `prompt`; events `.setTitle`/`.setPrompt`.
 - `MessageRouter` archives pending thinking when a tool call starts, so the
   notebook interleaves thought and tool lines.
 - `StudioState.notebook` is the notebook's own log (bounded to
@@ -402,3 +402,20 @@ Contract changes (all additive on the wire; flagged per §4 rule 1):
 - Additive `versions` arrays decode element-wise (`LossyArray`): a malformed
   entry is skipped, never failing `init` or the gallery detail.
 - `PaintingAssetClient.text(at:)` fetches a version's `painting.py`.
+
+## 9. Live status and title (`turn_state`, `piece_title`)
+
+- `ServerMessage.turnState(active:)` (`{"type": "turn_state", "active": Bool}`,
+  sent when an agent turn starts and ends — always `false` after a turn, even
+  a failed one) and `InitPayload.turnActive` (`init.turn_active`, absent →
+  `false`) set `StudioState.turnActive`.
+- `StudioSelectors.agentStatus` keeps its priority (paused > error > thinking >
+  executing > drawing) but returns `.thinking` instead of `.idle` while
+  `turnActive`: the painter is working through a silent gap, or the client
+  reconnected mid-turn. The Studio pill and Home easel line
+  (`StudioPresentation.statusPill`) apply the same rule.
+- `ServerMessage.pieceTitle(pieceNumber:title:)` (`{"type": "piece_title",
+  "piece_number", "title"}`, sent after `name_piece` stores the title) sets
+  `StudioState.title` only for the current piece. It is the single live
+  authority: the client no longer reads titles out of `name_piece` tool
+  calls; `init.title` seeds the title on connect.

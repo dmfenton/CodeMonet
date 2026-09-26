@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
+from code_monet.tools.naming import normalize_title
 from code_monet.tools.quality_gate import (
     get_quality_gate_snapshot,
     is_finish_gate_blocked,
@@ -28,7 +29,9 @@ from code_monet.types import (
     PausedMessage,
     PauseReason,
     PieceStateMessage,
+    PieceTitleMessage,
     ThinkingDeltaMessage,
+    TurnStateMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +115,8 @@ class AgentOrchestrator:
     # Track piece completion - prevents auto-starting new turns
     _piece_completed: bool = field(default=False)
     _quality_gate_revision_turns: int = field(default=0)
+    # True while run_turn is in progress; reported in init and turn_state
+    _turn_active: bool = field(default=False)
 
     def __post_init__(self) -> None:
         # Set up the agent's draw callback to use our _draw_paths method
@@ -228,6 +233,15 @@ class AgentOrchestrator:
             on_error=self._handle_error,
         )
 
+    @property
+    def turn_active(self) -> bool:
+        """True while an agent turn is running (the painter is working)."""
+        return self._turn_active
+
+    async def _set_turn_active(self, active: bool) -> None:
+        self._turn_active = active
+        await self.broadcaster.broadcast(TurnStateMessage(active=active))
+
     async def _handle_thinking(self, text: str, iteration: int) -> None:
         """Handle streaming thinking updates (delta only)."""
         if text:
@@ -287,6 +301,18 @@ class AgentOrchestrator:
             )
         )
 
+    async def _record_piece_title(self, tool_input: dict[str, Any] | None) -> None:
+        """Store and announce a successful name_piece title for this workspace."""
+        title = normalize_title((tool_input or {}).get("title"))
+        if title is None:
+            return
+        state = self.agent.get_state()
+        state.current_piece_title = title
+        await state.save()
+        await self.broadcaster.broadcast(
+            PieceTitleMessage(piece_number=state.piece_number, title=title)
+        )
+
     async def _handle_tool_complete(
         self,
         tool_name: str,
@@ -301,6 +327,8 @@ class AgentOrchestrator:
         client-side stroke rendering (hasInProgressEvents checks for return_code).
         """
         logger.info(f"Tool completed via PostToolUse hook: {tool_name} (iteration {iteration})")
+        if tool_name == "name_piece" and return_code == 0:
+            await self._record_piece_title(tool_input)
         await self.broadcaster.broadcast(
             CodeExecutionMessage(
                 status="completed",
@@ -342,11 +370,15 @@ class AgentOrchestrator:
         thinking_text = ""
 
         # Consume events from agent - drawing happens in PostToolUse hook
-        async for event in self.agent.run_turn(callbacks=callbacks):
-            if isinstance(event, AgentTurnComplete):
-                done = event.done
-                thinking_text = event.thinking or ""
-                logger.info(f"Turn complete. Piece done: {done}")
+        await self._set_turn_active(True)
+        try:
+            async for event in self.agent.run_turn(callbacks=callbacks):
+                if isinstance(event, AgentTurnComplete):
+                    done = event.done
+                    thinking_text = event.thinking or ""
+                    logger.info(f"Turn complete. Piece done: {done}")
+        finally:
+            await self._set_turn_active(False)
 
         # Log turn end with thinking
         if self.file_logger:

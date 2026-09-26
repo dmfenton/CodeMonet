@@ -332,14 +332,15 @@ describe('notebook', () => {
     ]);
   });
 
-  it('takes the title from a successful name_piece result, not the call', () => {
+  it('does not take the title from name_piece tool calls (server piece_title is authority)', () => {
     const input = { tool_input: { title: 'Lilies, late' } };
-    const started = play(painting(), tool('started', 'name_piece', input));
-    expect(started.pieceTitle).toBeNull();
-    const failed = play(started, tool('completed', 'name_piece', { ...input, return_code: 1 }));
-    expect(failed.pieceTitle).toBeNull();
-    const s = play(started, tool('completed', 'name_piece', input));
-    expect(s.pieceTitle).toBe('Lilies, late');
+    const s = play(
+      painting(),
+      tool('started', 'name_piece', input),
+      tool('completed', 'name_piece', input)
+    );
+    expect(s.pieceTitle).toBeNull();
+    // The notebook still shows what the agent did
     expect(s.notebook[0]).toMatchObject({ kind: 'tool', detail: 'Lilies, late' });
   });
 

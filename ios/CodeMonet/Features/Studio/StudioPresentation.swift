@@ -36,6 +36,9 @@ enum StudioPresentation {
             if state.painting.playing != nil || hasStrokesPending(state) {
                 return StatusPill(label: state.drawingStyle == .paint ? "painting" : "drawing", isActive: true)
             }
+            // Same rule as `StudioSelectors.agentStatus`: a turn the server
+            // reports as running reads as thinking, not idle.
+            if state.turnActive { return StatusPill(label: "thinking", isActive: true) }
             return StatusPill(label: "idle", isActive: false)
         }
     }
