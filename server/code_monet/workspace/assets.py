@@ -2,19 +2,28 @@
 
 from __future__ import annotations
 
+import re
 import stat
 from pathlib import Path
+
+_TOKEN = re.compile(r"[0-9a-f]{32}")  # secrets.token_hex(16), from program_painting
+_FILE = re.compile(r"[a-z0-9_]+\.[a-z]+")
 
 
 def version_asset(user_dir: Path, token: str, file: str) -> Path | None:
     """`{user_dir}/paintings/{token}/{file}` if it is safe to read and publish.
 
     A painting program runs with the server's filesystem access, so it may have
-    planted symlinks (anywhere under the user directory) or hard links to other
-    files. Accept only a single-link regular file whose real path is exactly
-    that location; the user directory itself may sit behind a server-configured
-    link (the data volume).
+    planted symlinks (below the user directory) or hard links to other files,
+    which would keep exposing whatever those files hold later. Accept only a
+    well-formed token and file name naming a single-link regular file whose real
+    path is exactly that location; the user directory itself may sit behind a
+    server-configured link (the data volume). This refuses live links, not
+    copies: the program can still write any bytes it can read (see
+    docs/program-painting.md).
     """
+    if not _TOKEN.fullmatch(token) or not _FILE.fullmatch(file):
+        return None
     path = user_dir / "paintings" / token / file
     try:
         info = path.lstat()

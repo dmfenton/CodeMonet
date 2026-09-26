@@ -34,7 +34,7 @@ _UUID_PATTERN = re.compile(
 def _raster_image(workspace_base: FilePath, user_id: str, data: dict[str, Any]) -> str | None:
     """Final image path of a raster (program-painting) piece, if present."""
     token = data.get("image_token")
-    if not isinstance(token, str) or not token.isalnum():
+    if not isinstance(token, str):
         return None
     path = version_asset(workspace_base / user_id, token, "final.png")
     return str(path) if path else None

@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from code_monet.program_painting import PaintFailure, run_painting_program
 from code_monet.routes import paintings as paintings_routes
+from code_monet.routes.public_gallery import _raster_image
 from code_monet.types import DrawingStyleType
 from code_monet.workspace import WorkspaceState
 from code_monet.workspace.assets import version_asset
@@ -27,7 +28,7 @@ seen = {
     "env": dict(os.environ),
     "cwd": os.getcwd(),
     "isolated": sys.flags.isolated,
-    "modules": sorted(m for m in sys.modules if m.startswith("code_monet")),
+    "modules": sorted(m for m in sys.modules if m.split(".")[0] in {"code_monet", "boto3", "claude_agent_sdk"}),
 }
 raise RuntimeError("PROBE " + json.dumps(seen))
 """
@@ -138,10 +139,18 @@ class TestVersionAsset:
 
     def test_path_escape_is_refused(self, tmp_path: FilePath) -> None:
         user_dir = tmp_path / "u"
-        _version_dir(user_dir)
+        (_version_dir(user_dir) / "final.png").write_bytes(b"png")
+        (user_dir / "paintings" / "final.png").write_bytes(b"png")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        (elsewhere / "final.png").write_bytes(b"png")
         (tmp_path / "secret.png").write_bytes(b"png")
 
         assert version_asset(user_dir, "..", "../../secret.png") is None
+        assert version_asset(user_dir, str(elsewhere), "final.png") is None
+        for token in ("", "."):
+            assert version_asset(user_dir, token, "final.png") is None
+        assert version_asset(user_dir, TOKEN, f"../{TOKEN}/final.png") is None
 
 
 class TestAssetReaders:
@@ -173,6 +182,11 @@ class TestAssetReaders:
         (vdir / "final.png").symlink_to(other)
 
         assert workspace.raster_final({"image_token": TOKEN}) is None
+        (tmp_path / "final.png").write_bytes(b"png")
+        assert workspace.raster_final({"image_token": str(tmp_path)}) is None
+        assert (
+            _raster_image(workspace.paintings_dir.parent.parent, "x", {"image_token": "/"}) is None
+        )
         (vdir / "final.png").unlink()
         (vdir / "final.png").write_bytes(b"png")
         assert workspace.raster_final({"image_token": TOKEN}) == (TOKEN, str(vdir / "final.png"))

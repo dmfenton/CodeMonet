@@ -82,14 +82,17 @@ What the server enforces:
   server config (which loads secrets from SSM at import) or the agent SDK.
   The run is killed after `PAINT_TIMEOUT_S`.
 - **Publish.** The program bytes are read before the run without following a
-  symlink, and the server itself writes them as the version's `painting.py`.
-- **Read back.** Every reader of a version file — the asset route, gallery
-  raster lookups, public thumbnails/OG images, and the workspace render — goes
-  through `workspace.assets.version_asset`: a regular, single-link file whose
-  real path is exactly `{user_dir}/paintings/{token}/{file}` (the user
-  directory may sit behind the server-configured data-volume link). Planted
-  symlinks anywhere below the user directory, hard links to other files, and
-  path escapes are refused.
+  symlink, and the server itself writes them as the version's `painting.py`
+  (a child process that outlives the run could still overwrite it; see below).
+- **Read back.** Every reader that serves or publishes a version file — the
+  asset route, gallery raster lookups, public thumbnails/OG images, and the
+  workspace render — goes through `workspace.assets.version_asset`: a
+  well-formed token and file name, and a regular, single-link file whose real
+  path is exactly `{user_dir}/paintings/{token}/{file}` (the user directory may
+  sit behind the server-configured data-volume link). Planted symlinks below
+  the user directory, hard links to other files, and path escapes are refused.
+  This stops *live* links that would keep exposing a file's later contents;
+  it cannot stop a program from copying bytes it can read into its output.
 
 What is **not** isolated — the program runs as the server's OS user in the
 server container, so a scrubbed environment removes the easy leak (printing

@@ -76,7 +76,7 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
 
     # The program runs from a throwaway copy it may freely rewrite; what gets
     # published is `source`, the bytes read before the run.
-    with tempfile.TemporaryDirectory(prefix="paint-run-") as run_dir:
+    with tempfile.TemporaryDirectory(prefix="paint-run-", ignore_cleanup_errors=True) as run_dir:
         run_program = FilePath(run_dir) / "painting.py"
         run_program.write_bytes(source)
         return await _run_and_record(
