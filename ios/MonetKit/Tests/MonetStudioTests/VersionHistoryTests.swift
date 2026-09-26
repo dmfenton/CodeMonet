@@ -125,25 +125,6 @@ struct VersionHistoryTests {
         #expect(StudioReducer.reduce(viewing, .clearViewing).versions == state.versions)
     }
 
-    @Test("a completed name_piece call sets the title; a failed one doesn't")
-    func namePieceSetsTitle() {
-        let input = JSONValue.object(["title": .string("  Poplars at dusk ")])
-        let started = CodeExecutionPayload(
-            status: .started, toolName: "name_piece", toolInput: input, stdout: nil, stderr: nil, returnCode: nil, iteration: 1
-        )
-        var completed = started
-        completed.status = .completed
-        completed.returnCode = 0
-        var state = route(.codeExecution(started), StudioState())
-        #expect(state.title == nil)
-        state = route(.codeExecution(completed), state)
-        #expect(state.title == "Poplars at dusk")
-
-        var failed = completed
-        failed.returnCode = 1
-        #expect(route(.codeExecution(failed), StudioState()).title == nil)
-    }
-
     @Test("title fallback: title, then truncated prompt, then Piece N")
     func titleFallback() {
         #expect(PieceTitle.resolve(title: "Lilies", prompt: "p", pieceNumber: 3) == "Lilies")

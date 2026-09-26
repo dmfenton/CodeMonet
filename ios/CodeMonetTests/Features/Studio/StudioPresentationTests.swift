@@ -20,6 +20,17 @@ struct StudioPresentationTests {
         #expect(StudioPresentation.statusPill(for: state).label == "viewing")
     }
 
+    @Test("an active turn with nothing streaming reads as thinking, on the pill and the easel line")
+    func activeTurnPill() {
+        var state = StudioState()
+        state.paused = false
+        state.turnActive = true
+        #expect(StudioPresentation.statusPill(for: state) == .init(label: "thinking", isActive: true))
+        #expect(StudioPresentation.easelStatusLine(for: state) == "thinking")
+        state.paused = true
+        #expect(StudioPresentation.statusPill(for: state) == .init(label: "paused", isActive: false))
+    }
+
     @Test("an open tool call names the activity: critique, painting, looking")
     func executingPills() {
         var state = StudioState()

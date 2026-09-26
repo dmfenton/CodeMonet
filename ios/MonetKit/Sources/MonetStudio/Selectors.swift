@@ -16,7 +16,9 @@ public enum AgentStatus: Equatable, Sendable {
 /// ux spec §2). All are `O(small)` snapshots safe to call on every render.
 public enum StudioSelectors {
     /// Priority: paused > error(last message) > thinking > executing >
-    /// drawing > idle.
+    /// drawing > idle — except that while the server reports an agent turn
+    /// in progress (`turnActive`), "idle" reads as thinking: the painter is
+    /// working through a silent gap, or we reconnected mid-turn.
     public static func agentStatus(_ state: StudioState) -> AgentStatus {
         if state.paused { return .paused }
         if state.messages.last?.type == .error { return .error }
@@ -26,7 +28,7 @@ public enum StudioSelectors {
         // A program-painting reveal in progress also counts as "drawing"
         // (program-painting spec §4.1 `deriveAgentStatus`).
         if state.painting.playing != nil { return .drawing }
-        return .idle
+        return state.turnActive ? .thinking : .idle
     }
 
     /// Shown only while nothing at all has been drawn yet (protocol-state

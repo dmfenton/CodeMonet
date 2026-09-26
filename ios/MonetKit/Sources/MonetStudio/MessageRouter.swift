@@ -104,9 +104,6 @@ public enum MessageRouter {
                 events.append(.archiveThinking(messageID: environment.nextID(), timestamp: environment.now()))
             }
             events.append(.addMessage(message))
-            if let title = Self.pieceTitle(from: payload) {
-                events.append(.setTitle(title))
-            }
             return events
         case let .error(text, details):
             let message = AgentMessage(
@@ -140,19 +137,13 @@ public enum MessageRouter {
             // `stages`/`ops` are display-only (program-painting spec §4.2):
             // they ride along into the version history, never playback.
             return [.paintingVersion(ref, stages: stages, ops: ops)]
+        case let .turnState(active):
+            return [.setTurnActive(active)]
+        case let .pieceTitle(pieceNumber, title):
+            return [.pieceTitle(pieceNumber: pieceNumber, title: title)]
         case .unknown:
             return []
         }
-    }
-
-    /// The server doesn't broadcast a title when the agent names the piece;
-    /// a successful `name_piece` call's own input is that title.
-    static func pieceTitle(from payload: CodeExecutionPayload) -> String? {
-        guard payload.toolName == "name_piece", payload.status == .completed, (payload.returnCode ?? 0) == 0,
-              case let .object(fields)? = payload.toolInput, case let .string(title)? = fields["title"]
-        else { return nil }
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Applies the gallery/stale-piece/piece-sync guards from protocol-state

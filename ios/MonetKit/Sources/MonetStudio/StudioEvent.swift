@@ -36,6 +36,10 @@ public enum StudioEvent: Equatable, Sendable {
     case resetTurn
     /// The live piece's title (a completed `name_piece` call).
     case setTitle(String?)
+    /// An agent turn started or ended (`turn_state`).
+    case setTurnActive(Bool)
+    /// `piece_title`: applied only when `pieceNumber` is the current piece.
+    case pieceTitle(pieceNumber: Int, title: String)
     /// The direction the live piece was started with (this device's own
     /// `new_canvas` request, applied once the server confirms the new piece).
     case setPrompt(String?)

@@ -141,6 +141,10 @@ public struct StudioState: Equatable, Sendable {
     /// short window the status selectors read. Kept across a reconnect to
     /// the same piece; reset with the piece.
     public var notebook: [AgentMessage] = []
+    /// Whether an agent turn is running (`init.turn_active`, `turn_state`).
+    /// Keeps the painter reading as working through silent gaps and after a
+    /// mid-turn reconnect; `false` from servers that don't send it.
+    public var turnActive = false
 
     public init() {}
 
