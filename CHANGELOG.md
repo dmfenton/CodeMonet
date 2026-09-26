@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
 - Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
+- Adopt the shared platform `FentonIdentityClient` in place of the app's own `CodeMonetIdentityClient`, removing duplicated Fenton Identity PKCE/token-exchange code; app-specific `GET /auth/me` identity mapping stays in `AuthService`. No behavior change. Bumps `fenton-platform.lock`, which also moves the server's `fenton-platform` Python dependency and drops `AuthenticationController`'s now-removed `refreshRotationStore` parameter (upstream replaced the persisted rotation marker with single-flight in-memory refresh coalescing).
 
 ### Fixed
 
