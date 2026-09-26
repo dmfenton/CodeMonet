@@ -60,10 +60,18 @@ declare global {
 }
 
 function App(): React.ReactElement {
-  const { state, dispatch, handleMessage, startStroke, addPoint, endStroke, toggleDrawing, setPaused } =
-    useCanvas();
+  const {
+    state,
+    dispatch,
+    handleMessage,
+    startStroke,
+    addPoint,
+    endStroke,
+    toggleDrawing,
+    setPaused,
+  } = useCanvas();
 
-  const { accessToken } = useAuth();
+  const { accessToken, recoverSession } = useAuth();
   const { logMessage, ...debug } = useDebug({ token: accessToken });
 
   // Derive status from messages
@@ -135,7 +143,11 @@ function App(): React.ReactElement {
     []
   );
 
-  const { status: wsStatus, send } = useWebSocket({ onMessage, token: accessToken });
+  const { status: wsStatus, send } = useWebSocket({
+    onMessage,
+    token: accessToken,
+    onAuthError: recoverSession,
+  });
 
   // Callback when stroke animation completes
   const sendRef = useRef<((msg: { type: 'animation_done'; batch_id: number }) => void) | null>(
@@ -179,23 +191,32 @@ function App(): React.ReactElement {
     send({ type: 'pause' });
   }, [setPaused, send]);
 
-  const handleStart = useCallback((direction?: string, canvas?: CanvasDimensions) => {
-    setPaused(false);
-    send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle, ...canvas });
-    send({ type: 'resume' });
-  }, [setPaused, send, state.drawingStyle]);
+  const handleStart = useCallback(
+    (direction?: string, canvas?: CanvasDimensions) => {
+      setPaused(false);
+      send({ type: 'new_canvas', direction, drawing_style: state.drawingStyle, ...canvas });
+      send({ type: 'resume' });
+    },
+    [setPaused, send, state.drawingStyle]
+  );
 
-  const handleNewCanvas = useCallback((canvas?: CanvasDimensions) => {
-    send({ type: 'new_canvas', drawing_style: state.drawingStyle, ...canvas });
-  }, [send, state.drawingStyle]);
+  const handleNewCanvas = useCallback(
+    (canvas?: CanvasDimensions) => {
+      send({ type: 'new_canvas', drawing_style: state.drawingStyle, ...canvas });
+    },
+    [send, state.drawingStyle]
+  );
 
-  const handleStyleChange = useCallback((style: DrawingStyleType) => {
-    dispatch({
-      type: 'SET_STYLE',
-      drawingStyle: style,
-      styleConfig: getStyleConfig(style),
-    });
-  }, [dispatch]);
+  const handleStyleChange = useCallback(
+    (style: DrawingStyleType) => {
+      dispatch({
+        type: 'SET_STYLE',
+        drawingStyle: style,
+        styleConfig: getStyleConfig(style),
+      });
+    },
+    [dispatch]
+  );
 
   // Keep sendRef in sync for stroke completion callback
   useEffect(() => {
@@ -237,7 +258,9 @@ function App(): React.ReactElement {
           </div>
         </div>
         <div className="header-center">
-          <div className={`status-pill ${agentStatus}`} data-testid="status-pill">{STATUS_LABELS[agentStatus]}</div>
+          <div className={`status-pill ${agentStatus}`} data-testid="status-pill">
+            {STATUS_LABELS[agentStatus]}
+          </div>
         </div>
         <div className="header-right">
           <span className="piece-count">Piece #{state.pieceNumber}</span>
