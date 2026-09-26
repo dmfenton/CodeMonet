@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path as FilePath
 from typing import Any
 
+from code_monet.program_painting import paint_env
 from code_monet.types import BRUSH_PRESETS, Path, PathType
 
 from .path_parsing import parse_path_data
@@ -1366,75 +1367,81 @@ def output_svg_paths(svg_d_strings: list):
 {code}
 """
 
-    # Write code to temp file and execute
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
-        f.write(full_code)
-        temp_path = FilePath(f.name)
+    # Agent-written code is untrusted: it runs from a throwaway directory with no
+    # server environment, like a paint run (see docs/program-painting.md).
+    with tempfile.TemporaryDirectory(prefix="svg-run-", ignore_cleanup_errors=True) as tmp:
+        run_dir = FilePath(tmp)
+        script = run_dir / "generate.py"
+        script.write_text(full_code, encoding="utf-8")
+        return await _run_script(script, canvas_width, canvas_height)
+
+
+async def _run_script(script: FilePath, canvas_width: int, canvas_height: int) -> dict[str, Any]:
+    run_dir = script.parent
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-I",
+        str(script),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=run_dir,
+        env=paint_env(run_dir),
+    )
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(temp_path),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-
-        try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=PYTHON_TIMEOUT)
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return {
-                "stdout": "",
-                "stderr": f"Code execution timed out after {PYTHON_TIMEOUT} seconds",
-                "return_code": -1,
-                "paths": [],
-            }
-
-        stdout_str = stdout.decode("utf-8", errors="replace")
-        stderr_str = stderr.decode("utf-8", errors="replace")
-
-        # Parse output for paths
-        paths: list[Path] = []
-        if proc.returncode == 0 and stdout_str.strip():
-            try:
-                # Find JSON in output (last line or full output)
-                lines = stdout_str.strip().split("\n")
-                json_str = None
-                for line in reversed(lines):
-                    line = line.strip()
-                    if line.startswith("{"):
-                        json_str = line
-                        break
-
-                if json_str:
-                    output = json.loads(json_str)
-
-                    # Handle paths array
-                    if "paths" in output:
-                        for path_data in output["paths"]:
-                            parsed = parse_path_data(
-                                path_data,
-                                canvas_width=canvas_width,
-                                canvas_height=canvas_height,
-                            )
-                            if parsed:
-                                paths.append(parsed)
-
-                    # Handle svg_paths array (d-strings)
-                    if "svg_paths" in output:
-                        for d_string in output["svg_paths"]:
-                            if isinstance(d_string, str) and d_string.strip():
-                                paths.append(Path(type=PathType.SVG, points=[], d=d_string))
-
-            except json.JSONDecodeError as e:
-                stderr_str += f"\nFailed to parse JSON output: {e}"
-
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=PYTHON_TIMEOUT)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
         return {
-            "stdout": stdout_str,
-            "stderr": stderr_str,
-            "return_code": proc.returncode or 0,
-            "paths": paths,
+            "stdout": "",
+            "stderr": f"Code execution timed out after {PYTHON_TIMEOUT} seconds",
+            "return_code": -1,
+            "paths": [],
         }
-    finally:
-        temp_path.unlink(missing_ok=True)
+
+    stdout_str = stdout.decode("utf-8", errors="replace")
+    stderr_str = stderr.decode("utf-8", errors="replace")
+
+    # Parse output for paths
+    paths: list[Path] = []
+    if proc.returncode == 0 and stdout_str.strip():
+        try:
+            # Find JSON in output (last line or full output)
+            lines = stdout_str.strip().split("\n")
+            json_str = None
+            for line in reversed(lines):
+                line = line.strip()
+                if line.startswith("{"):
+                    json_str = line
+                    break
+
+            if json_str:
+                output = json.loads(json_str)
+
+                # Handle paths array
+                if "paths" in output:
+                    for path_data in output["paths"]:
+                        parsed = parse_path_data(
+                            path_data,
+                            canvas_width=canvas_width,
+                            canvas_height=canvas_height,
+                        )
+                        if parsed:
+                            paths.append(parsed)
+
+                # Handle svg_paths array (d-strings)
+                if "svg_paths" in output:
+                    for d_string in output["svg_paths"]:
+                        if isinstance(d_string, str) and d_string.strip():
+                            paths.append(Path(type=PathType.SVG, points=[], d=d_string))
+
+        except json.JSONDecodeError as e:
+            stderr_str += f"\nFailed to parse JSON output: {e}"
+
+    return {
+        "stdout": stdout_str,
+        "stderr": stderr_str,
+        "return_code": proc.returncode or 0,
+        "paths": paths,
+    }

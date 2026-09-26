@@ -112,6 +112,9 @@ server container, so a scrubbed environment removes the easy leak (printing
 - The paint agent also has the `Bash` tool in the same container, with the
   same reach, so isolating `paint` alone does not bound a prompt-injected
   agent.
+- Plotter mode's `generate_svg` code (`tools/python_sandbox.py`) runs the
+  same way — `python -I` from a throwaway directory with `paint_env` — so it
+  has the same scrubbed environment and the same residual reach.
 
 A real boundary needs OS-level isolation of both the paint run and the
 agent's shell: a separate user with no access to server data or secrets, no
