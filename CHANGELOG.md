@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
+
 ## [1.41.0] - 2026-09-26
 
 ### Added
