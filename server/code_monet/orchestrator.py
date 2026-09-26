@@ -28,7 +28,9 @@ from code_monet.types import (
     PausedMessage,
     PauseReason,
     PieceStateMessage,
+    PieceTitleMessage,
     ThinkingDeltaMessage,
+    TurnStateMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -112,6 +114,8 @@ class AgentOrchestrator:
     # Track piece completion - prevents auto-starting new turns
     _piece_completed: bool = field(default=False)
     _quality_gate_revision_turns: int = field(default=0)
+    # True while run_turn is in progress; reported in init and turn_state
+    _turn_active: bool = field(default=False)
 
     def __post_init__(self) -> None:
         # Set up the agent's draw callback to use our _draw_paths method
@@ -226,6 +230,23 @@ class AgentOrchestrator:
             on_code_start=self._handle_code_start,
             on_code_result=self._handle_code_result,
             on_error=self._handle_error,
+            on_piece_titled=self._handle_piece_titled,
+        )
+
+    @property
+    def turn_active(self) -> bool:
+        """True while an agent turn is running (the painter is working)."""
+        return self._turn_active
+
+    async def _set_turn_active(self, active: bool) -> None:
+        self._turn_active = active
+        await self.broadcaster.broadcast(TurnStateMessage(active=active))
+
+    async def _handle_piece_titled(self, title: str) -> None:
+        """Tell clients the piece's name as soon as the agent picks it."""
+        state = self.agent.get_state()
+        await self.broadcaster.broadcast(
+            PieceTitleMessage(piece_number=state.piece_number, title=title)
         )
 
     async def _handle_thinking(self, text: str, iteration: int) -> None:
@@ -342,11 +363,15 @@ class AgentOrchestrator:
         thinking_text = ""
 
         # Consume events from agent - drawing happens in PostToolUse hook
-        async for event in self.agent.run_turn(callbacks=callbacks):
-            if isinstance(event, AgentTurnComplete):
-                done = event.done
-                thinking_text = event.thinking or ""
-                logger.info(f"Turn complete. Piece done: {done}")
+        await self._set_turn_active(True)
+        try:
+            async for event in self.agent.run_turn(callbacks=callbacks):
+                if isinstance(event, AgentTurnComplete):
+                    done = event.done
+                    thinking_text = event.thinking or ""
+                    logger.info(f"Turn complete. Piece done: {done}")
+        finally:
+            await self._set_turn_active(False)
 
         # Log turn end with thinking
         if self.file_logger:

@@ -126,6 +126,19 @@ latest version under the legacy `painting` key so an older server can load it.
 Pieces in progress when version history shipped have only their latest version
 in history.
 
+### Turn state and title
+
+The server is the authority for whether the painter is working and what the
+piece is called:
+
+- `{"type": "turn_state", "active": true|false}` when an agent turn starts and
+  ends (always `false` after a turn, even one that failed). `init.turn_active`
+  reports the state at connect time. Clients show the painter as thinking while
+  a turn is active and nothing else is streaming, instead of idle.
+- `{"type": "piece_title", "piece_number": 12, "title": "Harbor Fog"}` right
+  after `name_piece` stores the title. `init.title` seeds it on connect; clients
+  ignore a title for a different piece and do not read it from the tool call.
+
 ## Client playback
 
 - The canvas shows a **base image**: the previous version's final (or the blank

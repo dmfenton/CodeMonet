@@ -105,6 +105,21 @@ class IterationMessage(BaseModel):
     max: int = 5  # Maximum iterations
 
 
+class TurnStateMessage(BaseModel):
+    """An agent turn started or ended; clients show the painter as working while active."""
+
+    type: Literal["turn_state"] = "turn_state"
+    active: bool
+
+
+class PieceTitleMessage(BaseModel):
+    """The agent named the current piece (name_piece)."""
+
+    type: Literal["piece_title"] = "piece_title"
+    piece_number: int
+    title: str
+
+
 class AgentStrokesReadyMessage(BaseModel):
     """Agent strokes are ready to be fetched via REST API."""
 
@@ -183,6 +198,8 @@ ServerMessage = (
     | IterationMessage
     | AgentStrokesReadyMessage
     | PaintingVersionMessage
+    | TurnStateMessage
+    | PieceTitleMessage
 )
 
 ClientMessage = (

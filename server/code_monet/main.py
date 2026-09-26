@@ -161,7 +161,9 @@ def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
     }
 
 
-async def _init_message(state: WorkspaceState, *, paused: bool) -> dict[str, Any]:
+async def _init_message(
+    state: WorkspaceState, *, paused: bool, turn_active: bool = False
+) -> dict[str, Any]:
     """Full current state for a newly connected client."""
     gallery_entries = await state.list_gallery()
     drawing_style = state.canvas.drawing_style
@@ -171,6 +173,7 @@ async def _init_message(state: WorkspaceState, *, paused: bool) -> dict[str, Any
         "gallery": [entry.model_dump() for entry in gallery_entries],
         "status": state.status.value,
         "paused": paused,
+        "turn_active": turn_active,
         "piece_number": state.piece_number,
         "canvas_width": state.canvas.width,
         "canvas_height": state.canvas.height,
@@ -254,7 +257,11 @@ async def websocket_endpoint(
 
     try:
         # Send current state to new client
-        init = await _init_message(workspace.state, paused=workspace.agent.paused)
+        init = await _init_message(
+            workspace.state,
+            paused=workspace.agent.paused,
+            turn_active=bool(workspace.orchestrator and workspace.orchestrator.turn_active),
+        )
         await workspace.connections.send_to(websocket, init)
         logger.info(
             f"User {user_id}: sent init with {len(workspace.state.canvas.strokes)} strokes, "
