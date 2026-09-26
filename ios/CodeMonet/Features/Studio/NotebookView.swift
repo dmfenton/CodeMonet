@@ -3,9 +3,10 @@ import MonetProtocol
 import MonetStudio
 import SwiftUI
 
-/// The painter's notebook: thinking as serif prose, tool calls as compact
-/// monospaced lines, critiques and the user's nudges as ruled blocks, each
-/// grouped under the version it works toward.
+/// The painter's notebook: thinking as serif prose, the server's own tool
+/// calls as compact monospaced lines (housekeeping runs collapsed into one
+/// quiet line, `Notebook.grouped`), critiques and the user's nudges as ruled
+/// blocks, each grouped under the version it works toward.
 struct NotebookView: View {
     let entries: [NotebookEntry]
     /// Show version separators (paint mode — plotter has no versions).
@@ -18,7 +19,8 @@ struct NotebookView: View {
     @State private var followsBottom = true
 
     var body: some View {
-        PaletteReader { palette in
+        let entries = Notebook.grouped(self.entries)
+        return PaletteReader { palette in
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
@@ -42,7 +44,7 @@ struct NotebookView: View {
                     .padding(.vertical, FentonSpacing.small)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: scrollKey) {
+                .onChange(of: Self.scrollKey(entries)) {
                     guard followsBottom else { return }
                     withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                 }
@@ -56,9 +58,10 @@ struct NotebookView: View {
     private static let bottomID = "notebook-bottom"
 
     /// Changes whenever the notebook grows (new entry or longer live thought).
-    private var scrollKey: String {
+    private static func scrollKey(_ entries: [NotebookEntry]) -> String {
         guard let last = entries.last else { return "" }
         if case let .thought(text) = last.kind { return "\(entries.count)-\(text.count)" }
+        if case let .housekeeping(names) = last.kind { return "\(entries.count)-\(names.count)" }
         return "\(entries.count)-\(last.id)"
     }
 
@@ -86,7 +89,14 @@ struct NotebookView: View {
         case let .tool(call):
             toolLine(call, palette: palette)
         case let .critique(text):
-            RuledBlock(label: "critique", text: text, color: palette.emphasis, collapsible: true)
+            CritiqueBlock(summary: CritiqueSummary(parsing: text))
+        case let .housekeeping(names):
+            Text("› " + NotebookText.housekeepingLine(names))
+                .font(MonetType.meta)
+                .foregroundStyle(palette.tertiaryText)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel("Housekeeping: \(names.joined(separator: ", "))")
         case let .nudge(text):
             RuledBlock(label: "you", text: text, color: palette.accent)
         case let .error(message, detail):
@@ -103,7 +113,7 @@ struct NotebookView: View {
         let count = call.producedVersion.flatMap(strokes)
         return HStack(spacing: 6) {
             Text("›")
-            Text(StudioPresentation.toolLine(call, strokes: count))
+            Text(NotebookText.toolLine(call, strokes: count))
                 .lineLimit(1)
             if call.inProgress {
                 ProgressView().controlSize(.mini).tint(palette.tertiaryText)
@@ -160,7 +170,84 @@ private func markdown(_ text: String) -> AttributedString {
     )) ?? AttributedString(text)
 }
 
-/// A left-ruled block with a small monospaced label (critique, you, error).
+/// A critique: "critique · pass" (accent) or "critique · fail" (emphasis),
+/// the cleaned body in regular serif with inline markdown and bullets,
+/// clamped to four lines with More/Less when longer.
+private struct CritiqueBlock: View {
+    let summary: CritiqueSummary
+
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var clampedHeight: CGFloat = 0
+    private static let collapsedLines = 4
+
+    var body: some View {
+        PaletteReader { palette in
+            let color = summary.verdict == .pass ? palette.accent : palette.emphasis
+            VStack(alignment: .leading, spacing: 4) {
+                Text(summary.label)
+                    .font(MonetType.label)
+                    .foregroundStyle(color)
+                bodyText(palette: palette)
+                    .lineLimit(expanded ? nil : Self.collapsedLines)
+                    .background(alignment: .topLeading) {
+                        bodyText(palette: palette)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .hidden()
+                            .background(GeometryReader { Color.clear.preference(key: FullHeightKey.self, value: $0.size.height) })
+                    }
+                    .background(GeometryReader { Color.clear.preference(key: ClampedHeightKey.self, value: $0.size.height) })
+                    .onPreferenceChange(FullHeightKey.self) { fullHeight = $0 }
+                    .onPreferenceChange(ClampedHeightKey.self) { clampedHeight = $0 }
+                if expanded || fullHeight > clampedHeight + 1 {
+                    Button(expanded ? "Less" : "More") {
+                        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                    }
+                    .font(MonetType.label)
+                    .foregroundStyle(palette.accent)
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("critique-more")
+                }
+            }
+            .padding(.leading, 10)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(color).frame(width: 2)
+            }
+            .accessibilityElement(children: .contain)
+        }
+    }
+
+    private func bodyText(palette: FentonTheme.Palette) -> some View {
+        var text = AttributedString()
+        for (index, line) in summary.lines.enumerated() {
+            if index > 0 { text += AttributedString("\n") }
+            switch line {
+            case let .paragraph(content):
+                text += markdown(content)
+            case let .bullet(content, level):
+                text += AttributedString(String(repeating: "    ", count: level) + "•  ")
+                text += markdown(content)
+            }
+        }
+        return Text(text)
+            .font(MonetType.prose)
+            .foregroundStyle(palette.secondaryText)
+            .lineSpacing(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct FullHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct ClampedHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+/// A left-ruled block with a small monospaced label (you, error).
 private struct RuledBlock: View {
     let label: String
     let text: String

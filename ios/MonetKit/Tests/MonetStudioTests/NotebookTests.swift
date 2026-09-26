@@ -76,6 +76,7 @@ struct NotebookTests {
             case .nudge: "nudge"
             case .error: "error"
             case .pieceComplete: "done"
+            case .housekeeping: "housekeeping"
             }
         }
         #expect(kinds == ["thought", "tool:paint", "thought", "critique", "nudge", "tool:paint", "thought"])

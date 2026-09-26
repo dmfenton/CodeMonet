@@ -75,49 +75,4 @@ enum StudioPresentation {
         default: "working"
         }
     }
-
-    // MARK: - Notebook tool lines
-
-    /// Lowercase tool name for the notebook's monospaced tool lines.
-    static func toolName(_ toolName: String?) -> String {
-        switch toolName {
-        case "view_canvas": "look at canvas"
-        case "critique_canvas": "critique"
-        case "generate_svg": "generate svg"
-        case "draw_paths": "draw paths"
-        case "name_piece": "name piece"
-        case "sign_canvas": "sign"
-        case "mark_piece_done": "mark done"
-        case let name?: name.replacingOccurrences(of: "_", with: " ").lowercased()
-        case nil: "tool"
-        }
-    }
-
-    /// "paint v4 · 318 strokes · 2.1s", "look at canvas · 0.4s",
-    /// "paint…" (running), "paint · failed". `strokes` is only shown for a
-    /// call that produced a version.
-    static func toolLine(_ call: NotebookToolCall, strokes: Int?) -> String {
-        let name = toolName(call.toolName)
-        if call.inProgress {
-            if let version = call.producedVersion { return "\(name) v\(version)…" }
-            return "\(name)…"
-        }
-        if call.failed { return "\(name) · failed" }
-        var head = name
-        if let version = call.producedVersion { head += " v\(version)" }
-        var parts = [head]
-        if call.producedVersion != nil, let strokes {
-            parts.append("\(strokes.formatted()) stroke\(strokes == 1 ? "" : "s")")
-        }
-        if let duration = call.durationMs { parts.append(formatDuration(milliseconds: duration)) }
-        return parts.joined(separator: " · ")
-    }
-
-    /// "0.4s", "12.0s", "1m 04s".
-    static func formatDuration(milliseconds: Double) -> String {
-        let seconds = max(0, milliseconds) / 1000
-        if seconds < 60 { return String(format: "%.1fs", seconds) }
-        let whole = Int(seconds.rounded())
-        return String(format: "%dm %02ds", whole / 60, whole % 60)
-    }
 }

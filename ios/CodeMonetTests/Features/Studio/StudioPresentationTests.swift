@@ -57,25 +57,6 @@ struct StudioPresentationTests {
         #expect(StudioPresentation.currentTool(messages: [makeMessage(type: .thinking)]) == nil)
     }
 
-    // MARK: - Tool lines
-
-    @Test("a finished paint line reads 'paint v4 · 318 strokes · 2.1s'")
-    func paintLine() {
-        let call = NotebookToolCall(toolName: "paint", inProgress: false, durationMs: 2100, producedVersion: 4)
-        #expect(StudioPresentation.toolLine(call, strokes: 318) == "paint v4 · 318 strokes · 2.1s")
-        #expect(StudioPresentation.toolLine(call, strokes: nil) == "paint v4 · 2.1s")
-    }
-
-    @Test("running, failed, and non-paint tool lines")
-    func otherLines() {
-        #expect(StudioPresentation.toolLine(NotebookToolCall(toolName: "paint", inProgress: true), strokes: nil) == "paint…")
-        let failed = NotebookToolCall(toolName: "paint", inProgress: false, failed: true)
-        #expect(StudioPresentation.toolLine(failed, strokes: 9) == "paint · failed")
-        let look = NotebookToolCall(toolName: "view_canvas", inProgress: false, durationMs: 400)
-        #expect(StudioPresentation.toolLine(look, strokes: 12) == "look at canvas · 0.4s")
-        #expect(StudioPresentation.formatDuration(milliseconds: 64_000) == "1m 04s")
-    }
-
     // MARK: - Fixtures
 
     private func makeMessage(

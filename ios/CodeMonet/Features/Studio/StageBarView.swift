@@ -2,40 +2,84 @@ import FentonDesignSystem
 import MonetProtocol
 import MonetStudio
 import SwiftUI
+import UIKit
 
 /// The painter's passes for one version, filling in as they reveal:
 /// finished stages in the accent, the stage being revealed in emphasis,
 /// pending stages in the divider color. Widths follow each stage's op count.
+/// Each segment carries its label only when every label fits in full
+/// (`StageBar.labelsFit`); otherwise one caption sits under the bar
+/// (`StageBar.caption`: "stage 4 of 8 · harbor" / "8 stages · final touches").
 struct StageBarView: View {
     let segments: [StageSegment]
 
+    private static let spacing: CGFloat = 3
+
+    /// Width of one character of the (monospaced) label font.
+    private static var characterWidth: CGFloat {
+        let size = UIFont.preferredFont(forTextStyle: .caption2).pointSize
+        let font = UIFont.monospacedSystemFont(ofSize: size, weight: .medium)
+        return ("0" as NSString).size(withAttributes: [.font: font]).width
+    }
+
+    @State private var width: CGFloat = 0
+
     var body: some View {
         PaletteReader { palette in
-            GeometryReader { proxy in
-                let spacing: CGFloat = 3
-                let available = max(0, proxy.size.width - spacing * CGFloat(max(segments.count - 1, 0)))
-                HStack(alignment: .top, spacing: spacing) {
-                    ForEach(segments) { segment in
-                        VStack(alignment: .leading, spacing: 4) {
+            let showsLabels = StageBar.labelsFit(
+                segments, totalWidth: Double(width), spacing: Double(Self.spacing), characterWidth: Double(Self.characterWidth)
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                GeometryReader { proxy in
+                    let available = max(0, proxy.size.width - Self.spacing * CGFloat(max(segments.count - 1, 0)))
+                    HStack(alignment: .top, spacing: Self.spacing) {
+                        ForEach(segments) { segment in
                             Capsule()
                                 .fill(color(segment.progress, palette: palette))
-                                .frame(height: 4)
-                            Text(segment.label)
-                                .font(MonetType.label)
-                                .foregroundStyle(segment.progress == .current ? palette.emphasis : palette.tertiaryText)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
+                                .frame(width: available * segment.fraction, height: 4)
                         }
-                        .frame(width: available * segment.fraction, alignment: .leading)
                     }
+                    .onAppear { width = proxy.size.width }
+                    .onChange(of: proxy.size.width) { _, newWidth in width = newWidth }
+                }
+                .frame(height: 4)
+                if showsLabels {
+                    labels(palette: palette)
+                } else {
+                    caption(palette: palette)
                 }
             }
-            .frame(height: 22)
             .animation(.easeInOut(duration: 0.25), value: segments)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityText)
             .accessibilityIdentifier("studio-stage-bar")
         }
+    }
+
+    private func labels(palette: FentonTheme.Palette) -> some View {
+        let available = max(0, width - Self.spacing * CGFloat(max(segments.count - 1, 0)))
+        return HStack(alignment: .top, spacing: Self.spacing) {
+            ForEach(segments) { segment in
+                Text(segment.label)
+                    .font(MonetType.label)
+                    .foregroundStyle(segment.progress == .current ? palette.emphasis : palette.tertiaryText)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(width: available * segment.fraction, alignment: .leading)
+            }
+        }
+    }
+
+    private func caption(palette: FentonTheme.Palette) -> some View {
+        let caption = StageBar.caption(segments)
+        let current = segments.first { $0.progress == .current }
+        let lead = current.map { String(caption.dropLast($0.label.count)) } ?? caption
+        return (Text(lead).foregroundStyle(palette.tertiaryText)
+            + Text(current?.label ?? "").foregroundStyle(palette.emphasis))
+            .font(MonetType.label)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .accessibilityIdentifier("studio-stage-caption")
     }
 
     private func color(_ progress: StageSegment.Progress, palette: FentonTheme.Palette) -> Color {
@@ -93,7 +137,13 @@ struct VersionChipsView: View {
                         )
                     )
                     .onAppear { proxy.scrollTo(versions.last?.version, anchor: .trailing) }
-                    .onChange(of: versions.count) { proxy.scrollTo(versions.last?.version, anchor: .trailing) }
+                    .onChange(of: versions.count) {
+                        // A new version becomes live (and selected) unless one is pinned.
+                        withAnimation { proxy.scrollTo(selected ?? versions.last?.version, anchor: .trailing) }
+                    }
+                    .onChange(of: selected) { _, newValue in
+                        withAnimation { proxy.scrollTo(newValue, anchor: .center) }
+                    }
                 }
                 if pinnedVersion != nil {
                     Button {
