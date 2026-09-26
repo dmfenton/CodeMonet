@@ -162,20 +162,21 @@ public final class AuthService {
         state = .signedOut
     }
 
-    /// Signs out only if `expected` still matches the bearer token
-    /// currently in use — net-auth spec §9.2 point 2's
-    /// `signOut(ifTokenMatches:)` pattern (`FentonMobileCore
-    /// .AuthenticationController` has the equivalent
-    /// `signOut(ifBearerTokenMatches:)`, but that only clears *its own*
-    /// session; this wraps `AuthService.signOut()` instead so the DEBUG
-    /// dev-token and `state` also get cleared consistently). Guards
-    /// against a delayed WS auth-failure event from a socket already
-    /// abandoned by a newer reconnect holding a freshly rotated, valid
-    /// token — that stale event must not sign out a session that's
-    /// actually fine.
-    public func signOut(ifBearerTokenMatches expected: String) async {
-        guard bearerToken == expected else { return }
-        await signOut()
+    /// Let Platform decide whether a rejected access token can be refreshed.
+    /// A stale failure from a superseded session cannot affect the current one.
+    /// Returns the replacement for one replay of a rejected read, if available.
+    public func recoverRejectedToken(_ rejected: String) async -> String? {
+        guard bearerToken == rejected else { return nil }
+        if debugToken != nil {
+            await signOut()
+            return nil
+        }
+        let survived = await controller.handleUnauthorizedRequest(bearerToken: rejected)
+        guard survived else {
+            state = .signedOut
+            return nil
+        }
+        return controller.session?.bearerToken
     }
 
     private func syncStateFromController() async {
@@ -199,12 +200,26 @@ public final class AuthService {
     /// the server's 503 during an identity outage) keeps the session and retries.
     private func verifyIdentityMapping() async {
         var delay: Duration = .seconds(2)
+        var refreshedAfterRejection = false
         while !Task.isCancelled {
             do {
                 let user = try await restClient.currentUser()
                 state = .signedIn(user)
                 return
             } catch MobileAPIError.unauthorized {
+                if !refreshedAfterRejection, let rejected = controller.session?.bearerToken {
+                    let replacement = await recoverRejectedToken(rejected)
+                    if case .signedOut = state { return }
+                    if let replacement {
+                        refreshedAfterRejection = replacement != rejected
+                        if replacement == rejected {
+                            if !state.isSignedIn { state = .restoring }
+                            try? await Task.sleep(for: delay)
+                            delay = min(delay * 2, .seconds(30))
+                        }
+                        continue
+                    }
+                }
                 await controller.signOut()
                 state = .error("Identity could not be mapped to a CodeMonet user")
                 return

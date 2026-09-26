@@ -25,7 +25,7 @@ extension AppEnvironment {
         CodeMonetRESTClient(
             baseURL: config.apiBaseURL,
             tokenProvider: FeatureAuthTokenProvider(auth: auth),
-            onUnauthorized: { [weak auth] token in await auth?.signOut(ifBearerTokenMatches: token) }
+            onUnauthorized: { [weak auth] token in await auth?.recoverRejectedToken(token) }
         )
     }
 }

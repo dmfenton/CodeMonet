@@ -29,16 +29,11 @@ public final class AppEnvironment {
         self.auth = auth
         let studio = StudioStore(environment: config, tokenProvider: AuthServiceTokenProvider(auth: auth))
         self.studio = studio
-        // Net-auth spec §9.2 point 2: a live 4001 close means the cached
-        // session is no longer valid server-side — sign the user out so
-        // RootView drops back to AuthView rather than sitting on a dead
-        // socket. StudioStore only knows `TokenProviding`, never the
-        // concrete `AuthService`, so this wiring has to happen here.
-        // `ifBearerTokenMatches` guards against a delayed 4001 from a
-        // socket already superseded by a reconnect with a valid, rotated
-        // token (see `AuthService.signOut(ifBearerTokenMatches:)`).
-        studio.onAuthenticationFailure = { [weak auth] token in
-            await auth?.signOut(ifBearerTokenMatches: token)
+        // Platform owns the refresh verdict. A rotated credential reconnects
+        // the socket; a transient failure leaves the saved session intact.
+        studio.onAuthenticationFailure = { [weak auth, weak studio] token in
+            guard let replacement = await auth?.recoverRejectedToken(token), replacement != token else { return }
+            await studio?.reconnectWithLatestToken()
         }
         // Single teardown for every way a session ends (including feature
         // REST 401s): drop the old socket so the next sign-in can connect,

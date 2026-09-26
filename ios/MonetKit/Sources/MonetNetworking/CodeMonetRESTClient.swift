@@ -17,20 +17,15 @@ public protocol TokenProviding: Sendable {
 public struct CodeMonetRESTClient: Sendable {
     private let api: MobileAPIClient
     private let tokenProvider: any TokenProviding
-    /// Net-auth spec §6/§9.2 point 2: a 401/403 (`MobileAPIError
-    /// .unauthorized`, which covers both — see `APIClient.swift`) should
-    /// trigger the same reactive-auth-failure handling as a live WS 4001.
-    /// Fired with the bearer token this call was made with, so the caller
-    /// can gate a sign-out against it still being the current token
-    /// (`AuthService.signOut(ifBearerTokenMatches:)`) — a nil-token call
-    /// (no session to begin with) never fires this.
-    private let onUnauthorized: (@Sendable (String) async -> Void)?
+    /// A rejected bearer goes to Platform's session controller. Its returned
+    /// replacement permits one replay of this authenticated read.
+    private let onUnauthorized: (@Sendable (String) async -> String?)?
 
     public init(
         baseURL: URL,
         tokenProvider: any TokenProviding,
         transport: any HTTPTransport = URLSession.shared,
-        onUnauthorized: (@Sendable (String) async -> Void)? = nil
+        onUnauthorized: (@Sendable (String) async -> String?)? = nil
     ) {
         api = MobileAPIClient(baseURL: baseURL, transport: transport)
         self.tokenProvider = tokenProvider
@@ -69,23 +64,26 @@ public struct CodeMonetRESTClient: Sendable {
     /// `pieceID` is the gallery entry's `thumbnail_token`, formatted
     /// `piece_NNNNNN`.
     public func thumbnailData(pieceID: String) async throws -> Data {
-        let token = await tokenProvider.currentToken()
-        do {
-            return try await api.data(path: "/gallery/thumbnail/\(pieceID).png", bearerToken: token)
-        } catch MobileAPIError.unauthorized {
-            if let token { await onUnauthorized?(token) }
-            throw MobileAPIError.unauthorized
-        }
+        try await authenticatedData(path: "/gallery/thumbnail/\(pieceID).png")
     }
 
     private func get<Response: Decodable & Sendable>(_ path: String, as type: Response.Type) async throws -> Response {
+        let data = try await authenticatedData(path: path)
+        return try api.decode(data, as: type)
+    }
+
+    private func authenticatedData(path: String) async throws -> Data {
         let token = await tokenProvider.currentToken()
         do {
-            let data = try await api.data(path: path, bearerToken: token)
-            return try api.decode(data, as: type)
+            return try await api.data(path: path, bearerToken: token)
         } catch MobileAPIError.unauthorized {
-            if let token { await onUnauthorized?(token) }
-            throw MobileAPIError.unauthorized
+            guard let token,
+                  let replacement = await onUnauthorized?(token),
+                  replacement != token
+            else { throw MobileAPIError.unauthorized }
+            // The Platform controller owns refresh and rotation. Replay only this
+            // read, once, with the credential it returned for the same session.
+            return try await api.data(path: path, bearerToken: replacement)
         }
     }
 }
