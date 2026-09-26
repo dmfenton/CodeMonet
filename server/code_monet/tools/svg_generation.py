@@ -5,29 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from claude_agent_sdk import tool
-
-from .callbacks import (
-    get_add_strokes_callback,
-    get_canvas_dimensions,
-    get_draw_callback,
-    inject_canvas_image,
-)
+from .context import ToolContext, ToolSpec
 from .python_sandbox import run_python_code
-from .quality_gate import (
-    finish_block_message,
-    note_drawing,
-)
 
 logger = logging.getLogger(__name__)
 
 AUTO_CANVAS_IMAGE_PATH_LIMIT = 160
 
 
-async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
-    """Handle generate_svg tool call (testable without decorator).
+async def handle_generate_svg(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Handle generate_svg tool call.
 
     Args:
+        ctx: The calling agent's tool context
         args: Dictionary with 'code' (Python code string) and optional 'done' (bool)
 
     Returns:
@@ -35,7 +25,7 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
     """
     code = args.get("code", "")
     done = args.get("done", False)
-    block_done_message = finish_block_message() if done else None
+    block_done_message = ctx.gate.finish_block_message() if done else None
     effective_done = done and block_done_message is None
 
     if not code or not isinstance(code, str):
@@ -45,8 +35,7 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Run the Python code
-    canvas_width, canvas_height = get_canvas_dimensions()
-    result = await run_python_code(code, canvas_width, canvas_height)
+    result = await run_python_code(code, ctx.canvas_width, ctx.canvas_height)
 
     stdout = result["stdout"]
     stderr = result["stderr"]
@@ -66,18 +55,15 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Add strokes to state immediately (so canvas image includes them)
-    _add_strokes_callback = get_add_strokes_callback()
-    _draw_callback = get_draw_callback()
-
     logger.info(
-        f"generate_svg: {len(paths)} paths, add_strokes={'set' if _add_strokes_callback else 'None'}"
+        f"generate_svg: {len(paths)} paths, add_strokes={'set' if ctx.add_strokes else 'None'}"
     )
-    if paths and _add_strokes_callback is not None:
-        await _add_strokes_callback(paths)
-        note_drawing(len(paths))
+    if paths and ctx.add_strokes is not None:
+        await ctx.add_strokes(paths)
+        ctx.gate.note_drawing(len(paths))
         response_parts.append(f"Successfully generated and drew {len(paths)} paths.")
     elif paths:
-        note_drawing(len(paths))
+        ctx.gate.note_drawing(len(paths))
         response_parts.append(f"Code executed and generated {len(paths)} paths.")
     elif not paths:
         response_parts.append(
@@ -85,11 +71,9 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
             "Make sure to call output_paths() or output_svg_paths() at the end."
         )
     # Call the draw callback for animation (strokes already in state)
-    logger.info(
-        f"generate_svg: triggering animation, callback={'set' if _draw_callback else 'None'}"
-    )
-    if paths and _draw_callback is not None:
-        await _draw_callback(paths, effective_done)
+    logger.info(f"generate_svg: triggering animation, callback={'set' if ctx.draw else 'None'}")
+    if paths and ctx.draw is not None:
+        await ctx.draw(paths, effective_done)
 
     if effective_done:
         response_parts.append("Piece marked as complete.")
@@ -106,14 +90,14 @@ async def handle_generate_svg(args: dict[str, Any]) -> dict[str, Any]:
     # Inject canvas image for small batches. Large generated batches can exceed SDK
     # transport limits; the agent can call view_canvas explicitly when it needs inspection.
     if 0 < len(paths) <= AUTO_CANVAS_IMAGE_PATH_LIMIT:
-        inject_canvas_image(content)
+        ctx.inject_canvas_image(content)
     elif paths:
         content[0]["text"] += " Canvas image omitted for dense batch; call view_canvas to inspect."
 
     return {"content": content}
 
 
-@tool(
+generate_svg = ToolSpec(
     "generate_svg",
     """Run Python code to generate SVG paths programmatically. Use this for algorithmic, mathematical, or complex generative drawings.
 
@@ -256,7 +240,5 @@ output_paths(paths)
         },
         "required": ["code"],
     },
+    handle_generate_svg,
 )
-async def generate_svg(args: dict[str, Any]) -> dict[str, Any]:
-    """Generate SVG paths using Python code."""
-    return await handle_generate_svg(args)

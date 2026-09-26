@@ -9,19 +9,16 @@ This package provides all drawing tools used by the agent:
 - imagine: Generate AI reference images
 - sign_canvas: Add artist signature
 - name_piece: Title the artwork
+- paint: Run the painting program (paint mode)
+
+Each tool is a `ToolSpec` whose handler takes the calling agent's `ToolContext`;
+`create_drawing_server(ctx)` binds every tool to one agent's context.
 """
 
 from claude_agent_sdk import create_sdk_mcp_server
+from claude_agent_sdk.types import McpSdkServerConfig
 
-from .callbacks import inject_canvas_image as _inject_canvas_image
-from .callbacks import (
-    set_add_strokes_callback,
-    set_canvas_dimensions,
-    set_draw_callback,
-    set_get_canvas_callback,
-    set_paint_callback,
-    set_workspace_dir_callback,
-)
+from .context import ToolContext, ToolHandler, ToolSpec
 from .critique import critique_canvas, handle_critique_canvas
 from .drawing import (
     draw_paths,
@@ -35,14 +32,7 @@ from .image_generation import handle_imagine, imagine
 from .naming import handle_name_piece, name_piece
 from .paint import handle_paint, paint
 from .path_parsing import parse_path_data
-from .quality_gate import (
-    consume_mark_piece_done_accepted,
-    get_quality_gate_snapshot,
-    is_finish_gate_blocked,
-    quality_gate_prompt_context,
-    record_critique_result,
-    reset_quality_gate,
-)
+from .quality_gate import QualityGateState
 from .signature import (
     _generate_signature_paths,
     _transform_svg_path,
@@ -51,47 +41,39 @@ from .signature import (
 )
 from .svg_generation import generate_svg, handle_generate_svg
 
+DRAWING_TOOLS: tuple[ToolSpec, ...] = (
+    draw_paths,
+    mark_piece_done,
+    generate_svg,
+    view_canvas,
+    critique_canvas,
+    imagine,
+    sign_canvas,
+    name_piece,
+    paint,
+)
 
-def create_drawing_server():
-    """Create the MCP server with drawing tools."""
+
+def create_drawing_server(ctx: ToolContext) -> McpSdkServerConfig:
+    """Create the MCP server whose tools all act on one agent's context."""
     return create_sdk_mcp_server(
         name="drawing",
         version="1.0.0",
-        tools=[
-            draw_paths,
-            mark_piece_done,
-            generate_svg,
-            view_canvas,
-            critique_canvas,
-            imagine,
-            sign_canvas,
-            name_piece,
-            paint,
-        ],
+        tools=[spec.bind(ctx) for spec in DRAWING_TOOLS],
     )
 
 
 __all__ = [
-    # Server factory
+    # Server factory and per-agent context
     "create_drawing_server",
-    # Callbacks
-    "set_draw_callback",
-    "set_get_canvas_callback",
-    "set_add_strokes_callback",
-    "set_workspace_dir_callback",
-    "set_paint_callback",
-    "handle_paint",
-    "set_canvas_dimensions",
-    "_inject_canvas_image",
+    "DRAWING_TOOLS",
+    "QualityGateState",
+    "ToolContext",
+    "ToolHandler",
+    "ToolSpec",
     # Path parsing
     "parse_path_data",
-    "consume_mark_piece_done_accepted",
-    "get_quality_gate_snapshot",
-    "is_finish_gate_blocked",
-    "quality_gate_prompt_context",
-    "record_critique_result",
-    "reset_quality_gate",
-    # Drawing handlers (for testing)
+    # Handlers (for testing and the OpenAI backend)
     "handle_draw_paths",
     "handle_mark_piece_done",
     "handle_view_canvas",
@@ -100,10 +82,11 @@ __all__ = [
     "handle_imagine",
     "handle_sign_canvas",
     "handle_name_piece",
+    "handle_paint",
     # Signature helpers (for testing)
     "_generate_signature_paths",
     "_transform_svg_path",
-    # Tool functions
+    # Tool specs
     "draw_paths",
     "mark_piece_done",
     "generate_svg",
@@ -112,4 +95,5 @@ __all__ = [
     "imagine",
     "sign_canvas",
     "name_piece",
+    "paint",
 ]

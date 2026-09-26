@@ -4,23 +4,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from claude_agent_sdk import tool
-
 from code_monet.program_painting import PaintFailure, PaintSuccess
 
-from .callbacks import get_paint_callback, image_content_from_png
+from .context import ToolContext, ToolSpec, image_content_from_png
 
 
-async def handle_paint(_args: dict[str, Any]) -> dict[str, Any]:
+async def handle_paint(ctx: ToolContext, _args: dict[str, Any]) -> dict[str, Any]:
     """Run studio/painting.py; return the rendered image or the program's error."""
-    run = get_paint_callback()
-    if run is None:
+    if ctx.paint is None:
         return {
             "content": [{"type": "text", "text": "Error: painting studio unavailable"}],
             "is_error": True,
         }
 
-    result = await run()
+    result = await ctx.paint()
     match result:
         case PaintFailure(error=error, seconds=seconds):
             return {
@@ -43,7 +40,7 @@ async def handle_paint(_args: dict[str, Any]) -> dict[str, Any]:
             }
 
 
-@tool(
+paint = ToolSpec(
     "paint",
     """Run your painting program (studio/painting.py) and see the result.
 
@@ -52,6 +49,5 @@ Each successful run becomes a new version of the painting that viewers watch pai
 stage by stage. Returns the rendered image, or the program's traceback on error.
 Edit the program with Write/Edit, then call paint again.""",
     {},
+    handle_paint,
 )
-async def paint(args: dict[str, Any]) -> dict[str, Any]:
-    return await handle_paint(args)

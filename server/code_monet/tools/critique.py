@@ -7,13 +7,12 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query, tool
+from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
 
 from code_monet.anthropic_wif import anthropic_claude_environment
 from code_monet.config import settings
 
-from .callbacks import get_active_reference_png, get_canvas_callback
-from .quality_gate import critique_gate_message, critique_history, record_critique_result
+from .context import ToolContext, ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +105,9 @@ async def _critique_prompt(
     }
 
 
-async def _run_critique(brief: str, canvas: bytes, reference: bytes | None) -> str:
+async def _run_critique(
+    brief: str, canvas: bytes, reference: bytes | None, history: list[str]
+) -> str:
     options = ClaudeAgentOptions(
         tools=[],
         allowed_tools=[],
@@ -121,7 +122,7 @@ async def _run_critique(brief: str, canvas: bytes, reference: bytes | None) -> s
     )
     text_parts: list[str] = []
     async for message in query(
-        prompt=_critique_prompt(brief, canvas, reference, critique_history()), options=options
+        prompt=_critique_prompt(brief, canvas, reference, history), options=options
     ):
         if isinstance(message, AssistantMessage):
             text_parts.extend(
@@ -132,7 +133,7 @@ async def _run_critique(brief: str, canvas: bytes, reference: bytes | None) -> s
     return "\n".join(text_parts).strip()
 
 
-async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
+async def handle_critique_canvas(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Critique the current canvas against a visual brief (and reference, if any)."""
     brief = args.get("brief", "")
     if not isinstance(brief, str) or not brief.strip():
@@ -141,7 +142,7 @@ async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    get_canvas = get_canvas_callback()
+    get_canvas = ctx.get_canvas
     if get_canvas is None:
         return {
             "content": [{"type": "text", "text": "Error: Canvas not available"}],
@@ -157,18 +158,20 @@ async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    reference_png = get_active_reference_png()
-    critique = await _run_critique(brief.strip(), png_bytes, reference_png)
+    reference_png = ctx.active_reference_png()
+    critique = await _run_critique(
+        brief.strip(), png_bytes, reference_png, ctx.gate.critique_history()
+    )
     if not critique:
         critique = "VERDICT: FAIL\nFINDINGS:\n- Critique model returned no text.\nREQUIRED_REVISIONS:\n- Call view_canvas and revise manually."
 
-    verdict = record_critique_result(critique)
-    critique = f"{critique}\n\n{critique_gate_message(verdict)}"
+    verdict = ctx.gate.record_critique_result(critique)
+    critique = f"{critique}\n\n{ctx.gate.critique_gate_message(verdict)}"
 
     return {"content": [{"type": "text", "text": critique}]}
 
 
-@tool(
+critique_canvas = ToolSpec(
     "critique_canvas",
     """Strictly critique the current rendered canvas against a visual brief. Use before signing any serious piece. Pass a concise brief listing required subject nouns, the intended value structure, focal area, palette/mood, and likely failure modes. If a reference image exists, the critic compares the canvas against it. If VERDICT is FAIL, revise before signing.""",
     {
@@ -181,7 +184,5 @@ async def handle_critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
         },
         "required": ["brief"],
     },
+    handle_critique_canvas,
 )
-async def critique_canvas(args: dict[str, Any]) -> dict[str, Any]:
-    """Critique the current canvas."""
-    return await handle_critique_canvas(args)

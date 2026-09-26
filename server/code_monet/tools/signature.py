@@ -5,17 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from claude_agent_sdk import tool
-
 from code_monet.types import Path, PathType
 
-from .callbacks import (
-    get_add_strokes_callback,
-    get_canvas_dimensions,
-    get_draw_callback,
-    inject_canvas_image,
-)
-from .quality_gate import finish_block_message
+from .context import ToolContext, ToolSpec
 
 # Tiny "CM" monogram. The previous long cursive signature competed with the painting.
 _SIGNATURE_SVG = """M 34 13 C 25 3 8 8 6 25 C 4 42 24 48 36 36
@@ -71,6 +63,7 @@ def _transform_svg_path(d: str, scale: float, offset_x: float, offset_y: float) 
 
 
 def _generate_signature_paths(
+    canvas_size: tuple[int, int],
     position: str = "bottom_right",
     size: str = "medium",
     color: str | None = None,
@@ -78,6 +71,7 @@ def _generate_signature_paths(
     """Generate signature paths for "Code Monet" at the specified position.
 
     Args:
+        canvas_size: Canvas (width, height) in pixels
         position: Where to place the signature (bottom_right, bottom_left, bottom_center)
         size: Size of signature (small, medium, large)
         color: Optional color for the signature (hex string)
@@ -92,11 +86,9 @@ def _generate_signature_paths(
     sig_width = _SIGNATURE_WIDTH * scale
     sig_height = _SIGNATURE_HEIGHT * scale
 
-    # Position calculations using canvas dimensions from globals
     margin = 20.0
-    dims = get_canvas_dimensions()
-    canvas_w: float = float(dims[0])
-    canvas_h: float = float(dims[1])
+    canvas_w = float(canvas_size[0])
+    canvas_h = float(canvas_size[1])
     offset_x: float
     offset_y: float
     if position == "bottom_left":
@@ -138,7 +130,7 @@ def _generate_signature_paths(
     return paths
 
 
-async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
+async def handle_sign_canvas(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Handle sign_canvas tool call.
 
     Adds a small "CM" monogram to the canvas.
@@ -152,7 +144,7 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     position = args.get("position", "bottom_right")
     size = args.get("size", "small")
     color = args.get("color")
-    block_message = finish_block_message()
+    block_message = ctx.gate.finish_block_message()
     if block_message is not None:
         return {
             "content": [{"type": "text", "text": block_message}],
@@ -170,7 +162,9 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
         size = "small"
 
     # Generate signature paths
-    signature_paths = _generate_signature_paths(position, size, color)
+    signature_paths = _generate_signature_paths(
+        (ctx.canvas_width, ctx.canvas_height), position, size, color
+    )
 
     if not signature_paths:
         return {
@@ -179,14 +173,12 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     # Add signature strokes to state
-    _add_strokes_callback = get_add_strokes_callback()
-    if _add_strokes_callback is not None:
-        await _add_strokes_callback(signature_paths)
+    if ctx.add_strokes is not None:
+        await ctx.add_strokes(signature_paths)
 
     # Trigger animation (don't mark done - let agent do that separately)
-    _draw_callback = get_draw_callback()
-    if _draw_callback is not None:
-        await _draw_callback(signature_paths, False)
+    if ctx.draw is not None:
+        await ctx.draw(signature_paths, False)
 
     # Build response
     content: list[dict[str, Any]] = [
@@ -197,12 +189,12 @@ async def handle_sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
     ]
 
     # Inject canvas image to show the result
-    inject_canvas_image(content)
+    ctx.inject_canvas_image(content)
 
     return {"content": content}
 
 
-@tool(
+sign_canvas = ToolSpec(
     "sign_canvas",
     """Add a small, subtle CM monogram to the canvas.
 
@@ -241,7 +233,5 @@ Size options:
         },
         "required": [],
     },
+    handle_sign_canvas,
 )
-async def sign_canvas(args: dict[str, Any]) -> dict[str, Any]:
-    """Sign the canvas with 'Code Monet'."""
-    return await handle_sign_canvas(args)

@@ -9,12 +9,9 @@ from typing import Any, Protocol
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
+from code_monet.tools import ToolContext
 from code_monet.tools.naming import normalize_title
-from code_monet.tools.quality_gate import (
-    get_quality_gate_snapshot,
-    is_finish_gate_blocked,
-    parse_critique_verdict,
-)
+from code_monet.tools.quality_gate import parse_critique_verdict
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -54,6 +51,8 @@ class DrawingAgentBackend(Protocol):
     """Backend contract shared by Claude and OpenAI drawing agents."""
 
     pending_nudges: list[str]
+    # The agent's own tool state (finish gate, reference image, turn bindings)
+    tool_context: ToolContext
 
     @property
     def paused(self) -> bool:
@@ -412,7 +411,7 @@ class AgentOrchestrator:
             self._piece_completed = True
         elif self._should_auto_revise_quality_gate():
             self._quality_gate_revision_turns += 1
-            gate = get_quality_gate_snapshot()
+            gate = self.agent.tool_context.gate.snapshot()
             logger.info(
                 "Quality gate blocked; scheduling auto-revision turn %s/%s (verdict=%s)",
                 self._quality_gate_revision_turns,
@@ -420,14 +419,14 @@ class AgentOrchestrator:
                 gate.get("last_verdict"),
             )
             self._wake_event.set()
-        elif not is_finish_gate_blocked():
+        elif not self.agent.tool_context.gate.is_blocked():
             self._quality_gate_revision_turns = 0
 
         return done
 
     def _should_auto_revise_quality_gate(self) -> bool:
         """Continue drawing while a failed critique blocks finishing."""
-        if not is_finish_gate_blocked():
+        if not self.agent.tool_context.gate.is_blocked():
             return False
         if self.agent.paused:
             return False

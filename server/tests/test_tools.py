@@ -1,14 +1,11 @@
 """Tests for the drawing tools module."""
 
-from collections.abc import Generator
-
 import pytest
 
 from code_monet.tools import (
+    ToolContext,
     _generate_signature_paths,
-    _inject_canvas_image,
     _transform_svg_path,
-    get_quality_gate_snapshot,
     handle_critique_canvas,
     handle_draw_paths,
     handle_generate_svg,
@@ -17,24 +14,15 @@ from code_monet.tools import (
     handle_sign_canvas,
     handle_view_canvas,
     parse_path_data,
-    quality_gate_prompt_context,
-    record_critique_result,
-    reset_quality_gate,
-    set_add_strokes_callback,
-    set_canvas_dimensions,
-    set_draw_callback,
-    set_get_canvas_callback,
 )
 from code_monet.tools.naming import normalize_title
-from code_monet.tools.quality_gate import critique_gate_message
 from code_monet.types import Path, PathType
 
 
-@pytest.fixture(autouse=True)
-def reset_tool_quality_gate() -> Generator[None]:
-    reset_quality_gate()
-    yield
-    reset_quality_gate()
+@pytest.fixture
+def ctx() -> ToolContext:
+    """A fresh agent tool context (turn bindings unset, finish gate closed)."""
+    return ToolContext()
 
 
 class TestParsePathData:
@@ -129,7 +117,7 @@ class TestHandleDrawPaths:
     """Tests for handle_draw_paths function."""
 
     @pytest.mark.asyncio
-    async def test_draw_paths_success(self) -> None:
+    async def test_draw_paths_success(self, ctx: ToolContext) -> None:
         collected_paths: list[Path] = []
         done_flag = False
 
@@ -138,7 +126,7 @@ class TestHandleDrawPaths:
             collected_paths.extend(paths)
             done_flag = done
 
-        set_draw_callback(callback)
+        ctx.draw = callback
 
         args = {
             "paths": [
@@ -155,7 +143,7 @@ class TestHandleDrawPaths:
             "done": False,
         }
 
-        result = await handle_draw_paths(args)
+        result = await handle_draw_paths(ctx, args)
 
         assert result["content"][0]["text"] == "Successfully drew 2 paths."
         assert "is_error" not in result
@@ -163,45 +151,44 @@ class TestHandleDrawPaths:
         assert done_flag is False
 
     @pytest.mark.asyncio
-    async def test_draw_paths_with_done(self) -> None:
+    async def test_draw_paths_with_done(self, ctx: ToolContext) -> None:
         done_flag = False
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
         async def callback(_paths: list[Path], done: bool) -> None:
             nonlocal done_flag
             done_flag = done
 
-        set_draw_callback(callback)
+        ctx.draw = callback
 
         args = {
             "paths": [{"type": "line", "points": [{"x": 0, "y": 0}, {"x": 100, "y": 100}]}],
             "done": True,
         }
 
-        result = await handle_draw_paths(args)
+        result = await handle_draw_paths(ctx, args)
 
         assert "Piece marked as complete" in result["content"][0]["text"]
         assert done_flag is True
 
     @pytest.mark.asyncio
-    async def test_draw_paths_invalid_input(self) -> None:
-        set_draw_callback(None)
+    async def test_draw_paths_invalid_input(self, ctx: ToolContext) -> None:
 
         args = {"paths": "not an array"}
 
-        result = await handle_draw_paths(args)
+        result = await handle_draw_paths(ctx, args)
 
         assert result["is_error"] is True
         assert "must be an array" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_draw_paths_partial_errors(self) -> None:
+    async def test_draw_paths_partial_errors(self, ctx: ToolContext) -> None:
         collected_paths: list[Path] = []
 
         async def callback(paths: list[Path], _done: bool) -> None:
             collected_paths.extend(paths)
 
-        set_draw_callback(callback)
+        ctx.draw = callback
 
         args = {
             "paths": [
@@ -210,7 +197,7 @@ class TestHandleDrawPaths:
             ],
         }
 
-        result = await handle_draw_paths(args)
+        result = await handle_draw_paths(ctx, args)
 
         # Should report error but still parse valid paths
         assert "1 errors" in result["content"][0]["text"]
@@ -221,51 +208,49 @@ class TestHandleMarkPieceDone:
     """Tests for handle_mark_piece_done function."""
 
     @pytest.mark.asyncio
-    async def test_mark_piece_done(self) -> None:
+    async def test_mark_piece_done(self, ctx: ToolContext) -> None:
         done_flag = False
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
         async def callback(_paths: list[Path], done: bool) -> None:
             nonlocal done_flag
             done_flag = done
 
-        set_draw_callback(callback)
+        ctx.draw = callback
 
-        result = await handle_mark_piece_done()
+        result = await handle_mark_piece_done(ctx, {})
 
         assert "Piece marked as complete" in result["content"][0]["text"]
         assert done_flag is True
 
     @pytest.mark.asyncio
-    async def test_mark_piece_done_no_callback(self) -> None:
-        set_draw_callback(None)
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+    async def test_mark_piece_done_no_callback(self, ctx: ToolContext) -> None:
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
-        result = await handle_mark_piece_done()
+        result = await handle_mark_piece_done(ctx, {})
 
         assert "Piece marked as complete" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_mark_piece_done_requires_passing_critique(self) -> None:
-        set_draw_callback(None)
+    async def test_mark_piece_done_requires_passing_critique(self, ctx: ToolContext) -> None:
 
-        result = await handle_mark_piece_done()
+        result = await handle_mark_piece_done(ctx, {})
 
         assert result["is_error"] is True
         assert "critique_canvas first" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_mark_piece_done_blocked_after_failed_critique(self) -> None:
+    async def test_mark_piece_done_blocked_after_failed_critique(self, ctx: ToolContext) -> None:
         done_flag = False
 
         async def callback(_paths: list[Path], done: bool) -> None:
             nonlocal done_flag
             done_flag = done
 
-        set_draw_callback(callback)
-        record_critique_result("VERDICT: FAIL\nFINDINGS:\n- weak silhouette")
+        ctx.draw = callback
+        ctx.gate.record_critique_result("VERDICT: FAIL\nFINDINGS:\n- weak silhouette")
 
-        result = await handle_mark_piece_done()
+        result = await handle_mark_piece_done(ctx, {})
 
         assert result["is_error"] is True
         assert "Finish blocked" in result["content"][0]["text"]
@@ -276,15 +261,15 @@ class TestHandleViewCanvas:
     """Tests for handle_view_canvas function."""
 
     @pytest.mark.asyncio
-    async def test_view_canvas_returns_mcp_image_content(self) -> None:
+    async def test_view_canvas_returns_mcp_image_content(self, ctx: ToolContext) -> None:
         png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
 
         def get_canvas() -> bytes:
             return png_bytes
 
-        set_get_canvas_callback(get_canvas)
+        ctx.get_canvas = get_canvas
 
-        result = await handle_view_canvas()
+        result = await handle_view_canvas(ctx, {})
 
         assert result["content"][0]["type"] == "text"
         assert "Inspect the actual rendered canvas" in result["content"][0]["text"]
@@ -297,10 +282,9 @@ class TestHandleViewCanvas:
         assert base64.standard_b64decode(content["data"]) == png_bytes
 
     @pytest.mark.asyncio
-    async def test_view_canvas_no_callback(self) -> None:
-        set_get_canvas_callback(None)
+    async def test_view_canvas_no_callback(self, ctx: ToolContext) -> None:
 
-        result = await handle_view_canvas()
+        result = await handle_view_canvas(ctx, {})
 
         assert result["is_error"] is True
         assert "Canvas not available" in result["content"][0]["text"]
@@ -310,23 +294,22 @@ class TestHandleCritiqueCanvas:
     """Tests for handle_critique_canvas validation paths."""
 
     @pytest.mark.asyncio
-    async def test_critique_canvas_requires_brief(self) -> None:
-        result = await handle_critique_canvas({"brief": ""})
+    async def test_critique_canvas_requires_brief(self, ctx: ToolContext) -> None:
+        result = await handle_critique_canvas(ctx, {"brief": ""})
 
         assert result["is_error"] is True
         assert "brief must be a non-empty string" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_critique_canvas_requires_canvas_callback(self) -> None:
-        set_get_canvas_callback(None)
+    async def test_critique_canvas_requires_canvas_callback(self, ctx: ToolContext) -> None:
 
-        result = await handle_critique_canvas({"brief": "dominant silhouette must read"})
+        result = await handle_critique_canvas(ctx, {"brief": "dominant silhouette must read"})
 
         assert result["is_error"] is True
         assert "Canvas not available" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_failed_critique_blocks_finish_tools_until_pass(self) -> None:
+    async def test_failed_critique_blocks_finish_tools_until_pass(self, ctx: ToolContext) -> None:
         collected_strokes: list[Path] = []
         done_flag = False
 
@@ -337,21 +320,20 @@ class TestHandleCritiqueCanvas:
             nonlocal done_flag
             done_flag = done
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(draw_callback)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(800, 600)
+        ctx.add_strokes = add_strokes
+        ctx.draw = draw_callback
 
-        record_critique_result("VERDICT: FAIL\nFINDINGS:\n- flat cap")
+        ctx.gate.record_critique_result("VERDICT: FAIL\nFINDINGS:\n- flat cap")
 
-        sign_result = await handle_sign_canvas({})
+        sign_result = await handle_sign_canvas(ctx, {})
         assert sign_result["is_error"] is True
         assert collected_strokes == []
 
-        name_result = await handle_name_piece({"title": "Premature Title"})
+        name_result = await handle_name_piece(ctx, {"title": "Premature Title"})
         assert name_result["is_error"] is True
 
         draw_result = await handle_draw_paths(
+            ctx,
             {
                 "paths": [
                     {
@@ -360,19 +342,19 @@ class TestHandleCritiqueCanvas:
                     }
                 ],
                 "done": True,
-            }
+            },
         )
         assert "Finish blocked" in draw_result["content"][0]["text"]
         assert len(collected_strokes) == 1
         assert done_flag is False
 
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
-        sign_result = await handle_sign_canvas({})
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+        sign_result = await handle_sign_canvas(ctx, {})
         assert "is_error" not in sign_result or sign_result["is_error"] is False
         assert len(collected_strokes) > 1
 
-    def test_failed_critique_builds_next_turn_context(self) -> None:
-        record_critique_result(
+    def test_failed_critique_builds_next_turn_context(self, ctx: ToolContext) -> None:
+        ctx.gate.record_critique_result(
             "VERDICT: FAIL\n"
             "FINDINGS:\n"
             "- Subject reads as a smooth ramp instead of a hooked form with a tunnel.\n"
@@ -380,67 +362,67 @@ class TestHandleCritiqueCanvas:
             "- Rebuild body, lip, and opening."
         )
 
-        context = quality_gate_prompt_context()
+        context = ctx.gate.prompt_context()
 
         assert context is not None
         assert "Finish gate is blocked" in context
         assert "smooth ramp" in context
         assert "structural revision" in context
         assert "Do not sign, name, or mark done" in context
-        assert get_quality_gate_snapshot()["blocked_by_failure"] is True
+        assert ctx.gate.snapshot()["blocked_by_failure"] is True
 
-    def test_failed_critique_message_is_binding(self) -> None:
-        message = critique_gate_message("FAIL")
+    def test_failed_critique_message_is_binding(self, ctx: ToolContext) -> None:
+        message = ctx.gate.critique_gate_message("FAIL")
 
         assert "FINISH GATE: BLOCKED" in message
         assert "structural revision" in message
 
-    def test_consecutive_failures_trigger_repaint_directive(self) -> None:
+    def test_consecutive_failures_trigger_repaint_directive(self, ctx: ToolContext) -> None:
         """After 3 FAILs the gate orders an opaque repaint, not more texture."""
         for _ in range(2):
-            record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
+            ctx.gate.record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
 
         # Two failures: still ordinary revision guidance.
-        assert "OVERWORK ALERT" not in critique_gate_message("FAIL")
-        context = quality_gate_prompt_context()
+        assert "OVERWORK ALERT" not in ctx.gate.critique_gate_message("FAIL")
+        context = ctx.gate.prompt_context()
         assert context is not None
         assert "OVERWORK ALERT" not in context
 
-        record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
+        ctx.gate.record_critique_result("VERDICT: FAIL\nFINDINGS:\n- values collapse")
 
         # Third consecutive failure: repaint directive becomes binding.
-        assert get_quality_gate_snapshot()["consecutive_failures"] == 3
-        assert "OVERWORK ALERT" in critique_gate_message("FAIL")
-        context = quality_gate_prompt_context()
+        assert ctx.gate.snapshot()["consecutive_failures"] == 3
+        assert "OVERWORK ALERT" in ctx.gate.critique_gate_message("FAIL")
+        context = ctx.gate.prompt_context()
         assert context is not None
         assert "OVERWORK ALERT" in context
         assert "fill_opacity=1.0" in context
 
-    def test_pass_resets_consecutive_failures(self) -> None:
+    def test_pass_resets_consecutive_failures(self, ctx: ToolContext) -> None:
         for _ in range(3):
-            record_critique_result("VERDICT: FAIL\nFINDINGS:\n- mud")
-        assert get_quality_gate_snapshot()["consecutive_failures"] == 3
+            ctx.gate.record_critique_result("VERDICT: FAIL\nFINDINGS:\n- mud")
+        assert ctx.gate.snapshot()["consecutive_failures"] == 3
 
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- reads cleanly")
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- reads cleanly")
 
-        assert get_quality_gate_snapshot()["consecutive_failures"] == 0
-        assert "OVERWORK ALERT" not in critique_gate_message("FAIL")
+        assert ctx.gate.snapshot()["consecutive_failures"] == 0
+        assert "OVERWORK ALERT" not in ctx.gate.critique_gate_message("FAIL")
 
 
 class TestInjectCanvasImage:
-    """Tests for _inject_canvas_image helper function."""
+    """Tests for ToolContext.inject_canvas_image."""
 
-    def test_inject_canvas_image_adds_image_to_content(self) -> None:
+    def test_inject_canvas_image_adds_image_to_content(self, ctx: ToolContext) -> None:
         # Create a simple PNG image (minimal valid PNG bytes)
         png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82"
 
         def get_canvas() -> bytes:
             return png_bytes
 
-        set_get_canvas_callback(get_canvas)
+        ctx.get_canvas = get_canvas
 
         content: list[dict] = []
-        _inject_canvas_image(content)
+        ctx.inject_canvas_image(content)
 
         assert len(content) == 1
         assert content[0]["type"] == "image"
@@ -451,34 +433,33 @@ class TestInjectCanvasImage:
         decoded = base64.standard_b64decode(content[0]["data"])
         assert decoded == png_bytes
 
-    def test_inject_canvas_image_no_callback(self) -> None:
-        set_get_canvas_callback(None)
+    def test_inject_canvas_image_no_callback(self, ctx: ToolContext) -> None:
 
         content: list[dict] = []
-        _inject_canvas_image(content)
+        ctx.inject_canvas_image(content)
 
         # Should not add anything if callback is not set
         assert len(content) == 0
 
-    def test_inject_canvas_image_handles_exception(self) -> None:
+    def test_inject_canvas_image_handles_exception(self, ctx: ToolContext) -> None:
         def failing_callback() -> bytes:
             raise RuntimeError("Canvas render failed")
 
-        set_get_canvas_callback(failing_callback)
+        ctx.get_canvas = failing_callback
 
         content: list[dict] = []
         # Should not raise, just log warning
-        _inject_canvas_image(content)
+        ctx.inject_canvas_image(content)
 
         # Should not add anything on error
         assert len(content) == 0
 
 
 class TestAddStrokesCallback:
-    """Tests for set_add_strokes_callback functionality."""
+    """Tests for the add_strokes turn binding."""
 
     @pytest.mark.asyncio
-    async def test_add_strokes_callback_called_before_draw(self) -> None:
+    async def test_add_strokes_callback_called_before_draw(self, ctx: ToolContext) -> None:
         call_order: list[str] = []
         collected_strokes: list[Path] = []
 
@@ -489,38 +470,35 @@ class TestAddStrokesCallback:
         async def draw_callback(_paths: list[Path], _done: bool) -> None:
             call_order.append("draw")
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(draw_callback)
-        set_get_canvas_callback(None)  # Disable image injection for this test
+        ctx.add_strokes = add_strokes
+        ctx.draw = draw_callback
 
         args = {
             "paths": [{"type": "line", "points": [{"x": 0, "y": 0}, {"x": 100, "y": 100}]}],
         }
 
-        await handle_draw_paths(args)
+        await handle_draw_paths(ctx, args)
 
         # add_strokes should be called before draw
         assert call_order == ["add_strokes", "draw"]
         assert len(collected_strokes) == 1
 
     @pytest.mark.asyncio
-    async def test_add_strokes_not_called_when_no_paths(self) -> None:
+    async def test_add_strokes_not_called_when_no_paths(self, ctx: ToolContext) -> None:
         strokes_called = False
 
         async def add_strokes(_paths: list[Path]) -> None:
             nonlocal strokes_called
             strokes_called = True
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
+        ctx.add_strokes = add_strokes
 
         # All paths invalid
         args = {
             "paths": [{"type": "invalid", "points": []}],
         }
 
-        await handle_draw_paths(args)
+        await handle_draw_paths(ctx, args)
 
         # Should not call add_strokes when no valid paths
         assert strokes_called is False
@@ -530,17 +508,16 @@ class TestGenerateSvgHelpers:
     """Tests for Python sandbox drawing helpers exposed to the agent."""
 
     @pytest.mark.asyncio
-    async def test_filled_shape_helpers_output_paths(self) -> None:
+    async def test_filled_shape_helpers_output_paths(self, ctx: ToolContext) -> None:
         collected_strokes: list[Path] = []
 
         async def add_strokes(paths: list[Path]) -> None:
             collected_strokes.extend(paths)
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
+        ctx.add_strokes = add_strokes
 
         result = await handle_generate_svg(
+            ctx,
             {
                 "code": """
 paths = [
@@ -550,7 +527,7 @@ paths = [
 ]
 output_paths(paths)
 """
-            }
+            },
         )
 
         assert "is_error" not in result
@@ -561,8 +538,9 @@ output_paths(paths)
         assert collected_strokes[2].color == "#000000"
 
     @pytest.mark.asyncio
-    async def test_generic_painterly_helpers_output_paths(self) -> None:
+    async def test_generic_painterly_helpers_output_paths(self, ctx: ToolContext) -> None:
         result = await handle_generate_svg(
+            ctx,
             {
                 "code": """
 paths = []
@@ -598,7 +576,7 @@ paths.extend(reflection_field(380, 250, 80, 50, count=4))
 paths.extend(radial_cluster(500, 260, count=5, rx=30, ry=20))
 output_paths(paths)
 """
-            }
+            },
         )
 
         assert "is_error" not in result
@@ -606,18 +584,19 @@ output_paths(paths)
         assert "Successfully generated and drew" in text or "Code executed" in text
 
     @pytest.mark.asyncio
-    async def test_composition_helpers_output_transferable_structure(self) -> None:
+    async def test_composition_helpers_output_transferable_structure(
+        self, ctx: ToolContext
+    ) -> None:
         collected_strokes: list[Path] = []
 
         async def add_strokes(paths: list[Path]) -> None:
             collected_strokes.extend(paths)
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(1200, 420)
+        ctx.add_strokes = add_strokes
+        ctx.canvas_width, ctx.canvas_height = 1200, 420
 
         result = await handle_generate_svg(
+            ctx,
             {
                 "code": """
 import random
@@ -673,7 +652,7 @@ paths.extend(small_figure_silhouette(900, 275, scale=1.2, ground=True))
 paths.extend(small_figure_with_prop(1010, 265, scale=1.1, prop_angle=0.08, ground=True))
 output_paths(paths)
 """
-            }
+            },
         )
 
         assert "is_error" not in result
@@ -720,15 +699,13 @@ class TestGenerateSignaturePaths:
 
     def test_generates_paths(self) -> None:
         """Test that signature paths are generated."""
-        set_canvas_dimensions(800, 600)
-        paths = _generate_signature_paths()
+        paths = _generate_signature_paths((800, 600))
         assert len(paths) > 0
         assert all(p.type == PathType.SVG for p in paths)
 
     def test_default_position_bottom_right(self) -> None:
         """Test default position is bottom-right corner."""
-        set_canvas_dimensions(800, 600)
-        paths = _generate_signature_paths()
+        paths = _generate_signature_paths((800, 600))
         # All paths should have d-strings with coordinates near bottom-right
         for p in paths:
             assert p.d is not None
@@ -737,9 +714,8 @@ class TestGenerateSignaturePaths:
 
     def test_size_affects_stroke_width(self) -> None:
         """Test that size parameter affects stroke width."""
-        set_canvas_dimensions(800, 600)
-        small_paths = _generate_signature_paths(size="small")
-        large_paths = _generate_signature_paths(size="large")
+        small_paths = _generate_signature_paths((800, 600), size="small")
+        large_paths = _generate_signature_paths((800, 600), size="large")
         # Larger size should have larger stroke width
         assert small_paths[0].stroke_width is not None
         assert large_paths[0].stroke_width is not None
@@ -747,8 +723,7 @@ class TestGenerateSignaturePaths:
 
     def test_color_is_applied(self) -> None:
         """Test that custom color is applied to paths."""
-        set_canvas_dimensions(800, 600)
-        paths = _generate_signature_paths(color="#FF0000")
+        paths = _generate_signature_paths((800, 600), color="#FF0000")
         assert all(p.color == "#FF0000" for p in paths)
 
 
@@ -756,10 +731,10 @@ class TestHandleSignCanvas:
     """Tests for handle_sign_canvas function."""
 
     @pytest.mark.asyncio
-    async def test_sign_canvas_success(self) -> None:
+    async def test_sign_canvas_success(self, ctx: ToolContext) -> None:
         """Test successful signing."""
         collected_strokes: list[Path] = []
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
         async def add_strokes(paths: list[Path]) -> None:
             collected_strokes.extend(paths)
@@ -767,41 +742,31 @@ class TestHandleSignCanvas:
         async def draw_callback(_paths: list[Path], _done: bool) -> None:
             pass
 
-        set_add_strokes_callback(add_strokes)
-        set_draw_callback(draw_callback)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(800, 600)
+        ctx.add_strokes = add_strokes
+        ctx.draw = draw_callback
 
-        result = await handle_sign_canvas({})
+        result = await handle_sign_canvas(ctx, {})
 
         assert "is_error" not in result or result["is_error"] is False
         assert len(collected_strokes) > 0
         assert "Signed the canvas" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_sign_canvas_with_position(self) -> None:
+    async def test_sign_canvas_with_position(self, ctx: ToolContext) -> None:
         """Test signing with different positions."""
-        set_add_strokes_callback(None)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(800, 600)
 
         for position in ["bottom_right", "bottom_left", "bottom_center"]:
-            record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
-            result = await handle_sign_canvas({"position": position})
+            ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+            result = await handle_sign_canvas(ctx, {"position": position})
             assert "is_error" not in result or result["is_error"] is False
             assert position.replace("_", " ") in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_sign_canvas_invalid_position_fallback(self) -> None:
+    async def test_sign_canvas_invalid_position_fallback(self, ctx: ToolContext) -> None:
         """Test that invalid position falls back to bottom_right."""
-        set_add_strokes_callback(None)
-        set_draw_callback(None)
-        set_get_canvas_callback(None)
-        set_canvas_dimensions(800, 600)
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
-        result = await handle_sign_canvas({"position": "invalid_position"})
+        result = await handle_sign_canvas(ctx, {"position": "invalid_position"})
         assert "is_error" not in result or result["is_error"] is False
         assert "bottom right" in result["content"][0]["text"]
 
@@ -810,24 +775,24 @@ class TestHandleNamePiece:
     """name_piece validates and confirms; the orchestrator stores the title."""
 
     @pytest.mark.asyncio
-    async def test_name_piece_success(self) -> None:
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
+    async def test_name_piece_success(self, ctx: ToolContext) -> None:
+        ctx.gate.record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
 
-        result = await handle_name_piece({"title": "Whispers at Dusk"})
+        result = await handle_name_piece(ctx, {"title": "Whispers at Dusk"})
 
         assert "is_error" not in result or result["is_error"] is False
         assert "Whispers at Dusk" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_name_piece_empty_title(self) -> None:
-        result = await handle_name_piece({"title": "   "})
+    async def test_name_piece_empty_title(self, ctx: ToolContext) -> None:
+        result = await handle_name_piece(ctx, {"title": "   "})
 
         assert result.get("is_error") is True
         assert "provide a title" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
-    async def test_name_piece_missing_title(self) -> None:
-        result = await handle_name_piece({})
+    async def test_name_piece_missing_title(self, ctx: ToolContext) -> None:
+        result = await handle_name_piece(ctx, {})
 
         assert result.get("is_error") is True
 

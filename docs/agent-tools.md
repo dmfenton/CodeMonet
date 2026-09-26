@@ -261,55 +261,54 @@ Tools behave differently based on the active drawing style:
 
 ## Tool Implementation
 
-Tools are defined in `server/code_monet/tools.py` using the Claude Agent SDK's `@tool` decorator. The MCP server is created via:
+Tools live in `server/code_monet/tools/`. Each is a `ToolSpec` (name, description,
+input schema, handler) whose handler takes the calling agent's `ToolContext`. One
+server process runs many users' agents at once, so there is no module-level tool
+state: every agent owns a `ToolContext` and its own MCP server, bound to it:
 
 ```python
-from claude_agent_sdk import create_sdk_mcp_server, tool
+from code_monet.tools import DRAWING_TOOLS, ToolContext
 
-def create_drawing_server():
+def create_drawing_server(ctx: ToolContext):
     return create_sdk_mcp_server(
         name="drawing",
         version="1.0.0",
-        tools=[
-            draw_paths,
-            mark_piece_done,
-            generate_svg,
-            view_canvas,
-            imagine,
-        ],
+        tools=[spec.bind(ctx) for spec in DRAWING_TOOLS],
     )
 ```
 
-### Callbacks
+The OpenAI backend calls the same handlers directly with its own context.
 
-Tools use callbacks set by the agent for state access:
+### Tool context
 
-- `set_draw_callback`: Trigger path animation
-- `set_get_canvas_callback`: Get current canvas image
-- `set_add_strokes_callback`: Add strokes to state
-- `set_workspace_dir_callback`: Get user workspace directory
+`ToolContext` (`tools/context.py`) holds everything a tool call may touch:
+
+- Turn bindings, set by the agent at the start of each turn with `bind_turn(...)`:
+  `draw` (queue paths for animation), `get_canvas` (current canvas image),
+  `add_strokes` (add strokes to state), `paint` (run the painting program),
+  `workspace_dir`, and the canvas size.
+- Piece state, kept across turns until `reset_piece()`: the finish gate
+  (`gate`, a `QualityGateState`) and the latest `imagine` reference image.
 
 ---
 
 ## Adding New Tools
 
-1. **Define handler function** in `tools.py`:
+1. **Define the handler** in a `tools/` module:
 
    ```python
-   async def handle_my_tool(args: dict[str, Any]) -> dict[str, Any]:
-       # Process args and return content
+   async def handle_my_tool(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+       # Act only through ctx; never through module-level state
        return {"content": [{"type": "text", "text": "Success"}]}
    ```
 
-2. **Create decorated tool**:
+2. **Declare the tool**:
 
    ```python
-   @tool("my_tool", "Tool description", {schema})
-   async def my_tool(args: dict[str, Any]) -> dict[str, Any]:
-       return await handle_my_tool(args)
+   my_tool = ToolSpec("my_tool", "Tool description", {schema}, handle_my_tool)
    ```
 
-3. **Register in `create_drawing_server`**
+3. **Add it to `DRAWING_TOOLS`** in `tools/__init__.py` (and to the agent's allowed tools)
 
 4. **Update TypeScript types** in `shared/src/types.ts`:
    - Add to `ToolName` union type
