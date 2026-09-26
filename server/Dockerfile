@@ -1,12 +1,18 @@
-FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de AS build
+FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS claude-cli
+
+WORKDIR /opt/claude
+COPY server/claude-cli/package*.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && cp node_modules/@anthropic-ai/claude-code-linux-*-musl/claude ./claude \
+    && ./claude --version
+
+FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df AS build
 
 WORKDIR /app/server
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache build-base
 
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
@@ -15,7 +21,7 @@ COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/pytho
 
 RUN uv sync --frozen --no-dev --no-cache
 
-FROM python:3.12-slim@sha256:57cd7c3a7a273101a6485ba99423ee568157882804b1124b4dd04266317710de
+FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
 
 # Build args for version info
 ARG APP_VERSION=dev
@@ -36,10 +42,11 @@ COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
 COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
+COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude
 
-# The SDK source distribution omits Claude Code. Fail the build unless the
-# glibc wheel supplied a runnable bundled CLI.
-RUN .venv/bin/python -c "import os, subprocess; from pathlib import Path; import claude_agent_sdk; cli = Path(claude_agent_sdk.__file__).parent / '_bundled' / 'claude'; assert cli.is_file() and os.access(cli, os.X_OK), 'Claude SDK bundled CLI is missing'; subprocess.run([str(cli), '--version'], check=True)"
+# Alpine installs the SDK source distribution, which has no bundled CLI.
+# Verify the SDK resolves the separately locked musl executable.
+RUN .venv/bin/python -c "import subprocess; from claude_agent_sdk import ClaudeAgentOptions; from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport; cli = SubprocessCLITransport('', ClaudeAgentOptions())._find_cli(); assert cli == '/usr/local/bin/claude', cli; subprocess.run([cli, '--version'], check=True)"
 
 # Persistent data lives on the /app/data volume. Config paths are relative
 # (data/drawing_agent.db, data/agent_workspace/users) and resolve from this
@@ -47,9 +54,7 @@ RUN .venv/bin/python -c "import os, subprocess; from pathlib import Path; import
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # Remove the unused system package installer, then create the non-root runtime user.
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
-    && rm -rf /var/lib/apt/lists/* \
+RUN apk upgrade --no-cache \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
@@ -57,7 +62,7 @@ RUN apt-get update \
     && test ! -e /usr/local/bin/uv \
     && ! command -v pip \
     && ! command -v wheel \
-    && useradd --create-home --uid 1000 appuser \
+    && /bin/busybox adduser -D -u 1000 appuser \
     && chown -R appuser:appuser /app
 USER appuser
 
