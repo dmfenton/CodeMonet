@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Persist every rendered painting version and the user's prompt per piece: the WebSocket `init` carries the current piece's versions, title, and prompt, `painting_version` carries `ops`, and gallery pieces record `prompt` and `versions`; a raster piece's `stroke_count` is its final version's mark count.
+- Owner and public piece detail endpoints return `title`, `prompt`, `stroke_count`, `drawing_style`, and per-version asset references, and version assets include the painting program (`painting.py`, served as `nosniff` plain text).
+- Include `drawing_style` in the public gallery listing.
+
 ### Changed
 
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
@@ -21,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make server unit tests hermetic: they no longer read the repo `.env` or dev SSM parameters, matching CI.
 - Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
+- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, refuse a symlinked painting program, publish the program bytes read before the run (not the executed copy), and refuse symlinked painting assets.
+- Dev server hot-reloads on source changes only, so a paint run writing its program under the data directory no longer restarts it mid-run.
 
 ## [1.39.3] - 2026-08-23
 

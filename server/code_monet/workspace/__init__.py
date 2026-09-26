@@ -13,7 +13,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path as FilePath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import aiofiles
 import aiofiles.os
@@ -30,6 +30,7 @@ from code_monet.types import (
     SavedCanvas,
 )
 from code_monet.workspace.gallery import (
+    gallery_version_record,
     load_gallery_piece,
     parse_drawing_style,
     read_gallery_piece_json,
@@ -82,8 +83,11 @@ class WorkspaceState:
         self._notes: str = ""
         self._monologue: str = ""
         self._current_piece_title: str | None = None  # Title for current piece
-        # Latest rendered version of the current program painting (paint mode)
-        self._painting: PaintingVersion | None = None
+        self._current_piece_prompt: str | None = None  # User's direction for current piece
+        # Every rendered version of the current program painting, oldest first (paint mode)
+        self._painting_versions: list[PaintingVersion] = []
+        # Bumped whenever the painting resets, so stale paint runs can be discarded
+        self._painting_generation: int = 0
         self._loaded = False
 
         # Pending strokes for client-side rendering
@@ -150,8 +154,8 @@ class WorkspaceState:
             self._current_piece_title = data.get("current_piece_title")
             self._pending_strokes = data.get("pending_strokes", [])
             self._stroke_batch_id = data.get("stroke_batch_id", 0)
-            painting = data.get("painting")
-            self._painting = PaintingVersion.model_validate(painting) if painting else None
+            self._current_piece_prompt = data.get("current_piece_prompt")
+            self._painting_versions = _load_painting_versions(data, self.user_id)
 
             logger.info(
                 f"Workspace loaded for user {self.user_id}: "
@@ -202,9 +206,12 @@ class WorkspaceState:
                 "notes": self._notes,
                 "monologue": self._monologue,
                 "current_piece_title": self._current_piece_title,
+                "current_piece_prompt": self._current_piece_prompt,
                 "pending_strokes": self._pending_strokes,
                 "stroke_batch_id": self._stroke_batch_id,
-                "painting": self._painting.model_dump() if self._painting else None,
+                "painting_versions": [v.model_dump() for v in self._painting_versions],
+                # Latest version under the legacy key, so an older server can still load it
+                "painting": self.painting.model_dump() if self.painting else None,
                 "updated_at": datetime.now(UTC).isoformat(),
             }
 
@@ -274,9 +281,24 @@ class WorkspaceState:
         self._current_piece_title = value
 
     @property
+    def current_piece_prompt(self) -> str | None:
+        """The user's direction for the current piece (from new_canvas), if any."""
+        return self._current_piece_prompt
+
+    @property
     def painting(self) -> PaintingVersion | None:
         """Latest rendered version of the current program painting."""
-        return self._painting
+        return self._painting_versions[-1] if self._painting_versions else None
+
+    @property
+    def painting_versions(self) -> list[PaintingVersion]:
+        """Every rendered version of the current program painting, oldest first."""
+        return list(self._painting_versions)
+
+    @property
+    def painting_generation(self) -> int:
+        """Changes whenever the painting resets (new canvas, clear)."""
+        return self._painting_generation
 
     @property
     def paintings_dir(self) -> FilePath:
@@ -289,25 +311,42 @@ class WorkspaceState:
         return self._user_dir / "studio" / "painting.py"
 
     async def record_painting_version(
-        self, token: str, image_width: int, image_height: int, stages: list[str]
-    ) -> PaintingVersion:
-        """Make a rendered version the current picture of this piece."""
+        self,
+        token: str,
+        image_width: int,
+        image_height: int,
+        stages: list[str],
+        *,
+        ops: int,
+        generation: int,
+    ) -> PaintingVersion | None:
+        """Make a rendered version the current picture of this piece.
+
+        `generation` is `painting_generation` captured when the run started;
+        if the painting was reset since, the result belongs to no piece and
+        nothing is recorded (returns None).
+        """
+        if generation != self._painting_generation:
+            return None
+        latest = self.painting
         version = PaintingVersion(
             piece_number=self._piece_number,
-            version=(self._painting.version + 1) if self._painting else 1,
+            version=(latest.version + 1) if latest else 1,
             token=token,
             image_width=image_width,
             image_height=image_height,
             stages=stages,
+            ops=ops,
             created_at=datetime.now(UTC).isoformat(),
         )
-        self._painting = version
+        self._painting_versions.append(version)
         await self.save()
         return version
 
     def _reset_painting(self) -> None:
         """Forget the current painting; the next program starts from scratch."""
-        self._painting = None
+        self._painting_versions = []
+        self._painting_generation += 1
         self.studio_program.unlink(missing_ok=True)
 
     @property
@@ -387,15 +426,18 @@ class WorkspaceState:
 
         Thread-safe: uses stroke lock to prevent race conditions.
         """
+        self._painting_generation += 1  # before any await; see new_canvas
         async with self._stroke_lock:
             self._canvas.strokes = []
             self._reset_painting()
+            self._current_piece_prompt = None
         await self.save()
 
     async def save_to_gallery(self) -> str | None:
         """Save current canvas to gallery without clearing. Returns saved ID."""
         async with self._write_lock:
-            if not self._canvas.strokes and self._painting is None:
+            painting = self.painting
+            if not self._canvas.strokes and painting is None:
                 return None
 
             # Save to gallery as JSON file (use 6 digits for scalability)
@@ -409,12 +451,16 @@ class WorkspaceState:
                 "created_at": created_at,
                 "drawing_style": self._canvas.drawing_style.value,
                 "title": self._current_piece_title,
+                "prompt": self._current_piece_prompt,
             }
-            if self._painting is not None:
+            if painting is not None:
                 piece_data["format"] = "raster"
-                piece_data["image_token"] = self._painting.token
-                piece_data["image_width"] = self._painting.image_width
-                piece_data["image_height"] = self._painting.image_height
+                piece_data["image_token"] = painting.token
+                piece_data["image_width"] = painting.image_width
+                piece_data["image_height"] = painting.image_height
+                piece_data["versions"] = [
+                    gallery_version_record(v) for v in self._painting_versions
+                ]
 
             await atomic_write(piece_file, json.dumps(piece_data, indent=2))
 
@@ -427,8 +473,17 @@ class WorkspaceState:
         await self.save()
         return saved_id
 
-    async def new_canvas(self, *, width: int = 800, height: int = 600) -> str | None:
-        """Save current canvas to gallery and start fresh. Returns saved ID."""
+    async def new_canvas(
+        self, *, width: int = 800, height: int = 600, prompt: str | None = None
+    ) -> str | None:
+        """Save current canvas to gallery and start fresh. Returns saved ID.
+
+        `prompt` is the user's direction for the new piece; it is recorded after
+        the previous piece is saved so it never lands on that piece.
+        """
+        # Invalidate in-flight paint runs before the first await: a run that
+        # finishes during the gallery save must not join a piece being retired.
+        self._painting_generation += 1
         # First save to gallery
         saved_id = await self.save_to_gallery()
 
@@ -441,6 +496,7 @@ class WorkspaceState:
             self._monologue = ""  # Clear thinking for new piece
             self._notes = ""  # Clear notes for new piece
             self._current_piece_title = None  # Clear title for new piece
+            self._current_piece_prompt = prompt
             self._reset_painting()
 
         # Clear pending strokes from previous canvas to prevent them
@@ -453,10 +509,18 @@ class WorkspaceState:
 
     # --- Gallery Operations ---
 
+    async def gallery_piece_data(self, piece_number: int) -> dict[str, Any] | None:
+        """Raw gallery piece JSON, or None if missing/corrupt."""
+        return await read_gallery_piece_json(self._gallery_dir, piece_number)
+
     async def gallery_raster(self, piece_number: int) -> tuple[str, str] | None:
         """(image_token, final image path) for a raster gallery piece, else None."""
-        data = await read_gallery_piece_json(self._gallery_dir, piece_number)
-        token = data.get("image_token") if data else None
+        data = await self.gallery_piece_data(piece_number)
+        return self.raster_final(data) if data else None
+
+    def raster_final(self, data: dict[str, Any]) -> tuple[str, str] | None:
+        """(image_token, final image path) for gallery piece JSON, if its image exists."""
+        token = data.get("image_token")
         if not isinstance(token, str):
             return None
         path = self.paintings_dir / token / "final.png"
@@ -482,3 +546,24 @@ class WorkspaceState:
         Returns (strokes, drawing_style, width, height) tuple or None if not found.
         """
         return await load_gallery_piece(self._gallery_dir, piece_number)
+
+
+def _load_painting_versions(data: dict[str, Any], user_id: str) -> list[PaintingVersion]:
+    """Painting versions from workspace.json; older files stored only the latest.
+
+    Malformed entries are skipped so one bad record cannot block loading.
+    """
+    versions = data.get("painting_versions")
+    if versions is None:
+        painting = data.get("painting")
+        versions = [painting] if painting else []
+    if not isinstance(versions, list):
+        logger.warning(f"User {user_id}: ignoring malformed painting_versions in workspace.json")
+        return []
+    loaded: list[PaintingVersion] = []
+    for entry in versions:
+        try:
+            loaded.append(PaintingVersion.model_validate(entry))
+        except ValueError as e:
+            logger.warning(f"User {user_id}: skipping malformed painting version: {e}")
+    return loaded

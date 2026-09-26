@@ -5,6 +5,7 @@ import json
 import logging
 import traceback
 from contextlib import asynccontextmanager
+from pathlib import Path as FilePath
 from typing import Any
 
 import uvicorn
@@ -22,7 +23,7 @@ from code_monet.routes import create_api_router
 from code_monet.share import share_router
 from code_monet.shutdown import shutdown_manager
 from code_monet.tracing import get_current_trace_id, setup_tracing
-from code_monet.types import AgentStatus, PausedMessage, PauseReason
+from code_monet.types import AgentStatus, PausedMessage, PauseReason, get_style_config
 from code_monet.user_handlers import handle_user_message
 from code_monet.workspace import WorkspaceState
 
@@ -142,7 +143,11 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
-    """Current painting version for the init message (clients show its final image)."""
+    """Current painting for the init message.
+
+    Top-level fields describe the latest version (clients show its final image);
+    `versions` lists every version of the current piece, oldest first.
+    """
     painting = state.painting
     if painting is None:
         return None
@@ -152,6 +157,29 @@ def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
         "asset_base": painting.asset_base(state.user_id),
         "image_width": painting.image_width,
         "image_height": painting.image_height,
+        "versions": [v.ref(state.user_id).model_dump() for v in state.painting_versions],
+    }
+
+
+async def _init_message(state: WorkspaceState, *, paused: bool) -> dict[str, Any]:
+    """Full current state for a newly connected client."""
+    gallery_entries = await state.list_gallery()
+    drawing_style = state.canvas.drawing_style
+    return {
+        "type": "init",
+        "strokes": [s.model_dump() for s in state.canvas.strokes],
+        "gallery": [entry.model_dump() for entry in gallery_entries],
+        "status": state.status.value,
+        "paused": paused,
+        "piece_number": state.piece_number,
+        "canvas_width": state.canvas.width,
+        "canvas_height": state.canvas.height,
+        "monologue": state.monologue or "",
+        "drawing_style": drawing_style.value,
+        "style_config": get_style_config(drawing_style).model_dump(),
+        "painting": _painting_ref(state),
+        "title": state.current_piece_title,
+        "prompt": state.current_piece_prompt,
     }
 
 
@@ -226,35 +254,11 @@ async def websocket_endpoint(
 
     try:
         # Send current state to new client
-        gallery_entries = await workspace.state.list_gallery()
-        gallery_data = [entry.model_dump() for entry in gallery_entries]
-
-        # Get the current drawing style config
-        from code_monet.types import get_style_config
-
-        drawing_style = workspace.state.canvas.drawing_style
-        style_config = get_style_config(drawing_style)
-
-        await workspace.connections.send_to(
-            websocket,
-            {
-                "type": "init",
-                "strokes": [s.model_dump() for s in workspace.state.canvas.strokes],
-                "gallery": gallery_data,
-                "status": workspace.state.status.value,
-                "paused": workspace.agent.paused,
-                "piece_number": workspace.state.piece_number,
-                "canvas_width": workspace.state.canvas.width,
-                "canvas_height": workspace.state.canvas.height,
-                "monologue": workspace.state.monologue or "",
-                "drawing_style": drawing_style.value,
-                "style_config": style_config.model_dump(),
-                "painting": _painting_ref(workspace.state),
-            },
-        )
+        init = await _init_message(workspace.state, paused=workspace.agent.paused)
+        await workspace.connections.send_to(websocket, init)
         logger.info(
             f"User {user_id}: sent init with {len(workspace.state.canvas.strokes)} strokes, "
-            f"{len(gallery_data)} gallery, piece #{workspace.state.piece_number}"
+            f"{len(init['gallery'])} gallery, piece #{workspace.state.piece_number}"
         )
 
         # Auto-resume if agent was paused due to disconnect (not user action)
@@ -326,5 +330,7 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=True,
-        reload_excludes=["logs/*"],
+        # Watch source only: agent workspaces under data/ hold *.py painting
+        # programs, and writing one must not restart the server mid-run.
+        reload_dirs=[str(FilePath(__file__).parent)],
     )

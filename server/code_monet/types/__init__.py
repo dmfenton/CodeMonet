@@ -56,6 +56,7 @@ from code_monet.types.state import (
     GalleryEntry,
     GalleryState,
     PaintingVersion,
+    PaintingVersionRef,
     PauseReason,
     SavedCanvas,
 )
@@ -99,6 +100,7 @@ __all__ = [
     "GalleryEntry",
     "GalleryState",
     "PaintingVersion",
+    "PaintingVersionRef",
     "PauseReason",
     "SavedCanvas",
     # Messages

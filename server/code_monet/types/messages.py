@@ -124,6 +124,7 @@ class PaintingVersionMessage(BaseModel):
     image_width: int
     image_height: int
     stages: list[str]
+    ops: int  # Reveal ops in this version (the finished picture's mark count)
 
 
 # Client -> Server messages
