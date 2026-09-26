@@ -18,3 +18,11 @@ def test_testflight_delegates_signing_to_platform_action() -> None:
     assert 'ENV.fetch("FENTON_IOS_SIGNER_PATH")' in fastfile
     assert "skip_codesigning: true" in fastfile
     assert "skip_package_ipa: true" in fastfile
+
+
+def test_testflight_signing_names_the_dedicated_ci_account() -> None:
+    """The action refuses self-hosted signing unless told the account it runs as."""
+    workflow = (ROOT / ".github/workflows/testflight.yml").read_text()
+
+    assert "runs-on: [self-hosted, codemonet-ios, laptop, dedicated-signing]" in workflow
+    assert workflow.count("expected-user: fenton-ci") == 1

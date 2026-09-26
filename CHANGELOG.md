@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
+
 ### Security
 
 - Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paintlib.runner` so the program's process never imports server config or loads SSM secrets.
