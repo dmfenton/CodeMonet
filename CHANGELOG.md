@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - The status pill no longer reads idle while the painter works between tool calls or after a mid-turn reconnect: the server broadcasts `turn_state` around each agent turn and reports `turn_active` in `init`. The piece title now updates live from a server `piece_title` message instead of clients parsing the `name_piece` tool call.
+- Pin the Codex review gate to `codex-review-gate@aeb8ac3`: the base branch advancing after a PR's final review, and review rounds beyond the budget, are now warnings instead of blocks, so merging one companion PR no longer deadlocks the other; only P0/P1 findings block.
 - Authenticate the WebSocket handshake with the same platform-token authority as the REST API; production WebSocket connections previously rejected Fenton Identity tokens.
 - Treat an unavailable identity service as no verdict (WebSocket close 1011, REST 503) instead of an invalid token, scoped to tokens whose signing key could not be fetched, so clients retry rather than sign out.
 - Web client keeps the stored session and retries with backoff when the server cannot give an auth verdict, persists rotated refresh tokens before the user lookup, and refreshes the session when the WebSocket rejects its token.
