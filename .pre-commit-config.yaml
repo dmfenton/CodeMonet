@@ -15,3 +15,9 @@ repos:
         files: ^server/
         types: [python]
         pass_filenames: false
+      - id: npm-lockfile-sync
+        name: npm lockfile in sync (npm ci)
+        entry: npm ci --dry-run --ignore-scripts --no-audit --no-fund
+        language: system
+        files: (^|/)package(-lock)?\.json$
+        pass_filenames: false
