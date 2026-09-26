@@ -222,7 +222,10 @@ jobs:
           mkdir -p .trivy-cache
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
-            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            --user "$(id -u):$(id -g)" \
+            --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+            --env TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            --volume "$PWD/.trivy-cache:/tmp/trivy-cache" \
             "$TRIVY_IMAGE" image \
             --exit-code 1 \
             --no-progress \
