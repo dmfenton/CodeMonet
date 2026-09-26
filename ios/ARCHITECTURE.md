@@ -116,7 +116,7 @@ incorrectly sign out an otherwise-healthy session.
 | `ios/MonetKit/Sources/MonetProtocol`, `ios/MonetKit/Tests/MonetProtocolTests`, `ios/MonetKit/Sources/MonetStudio`, `ios/MonetKit/Tests/MonetStudioTests` | 1. protocol+studio |
 | `ios/MonetKit/Sources/MonetPerformer`, `ios/MonetKit/Tests/MonetPerformerTests` | 2. performer |
 | `ios/MonetKit/Sources/MonetRender`, `ios/MonetKit/Sources/monet-render`, `ios/MonetKit/Tests/MonetRenderTests`, `scripts/render-study.py` | 3. renderer |
-| `ios/MonetKit/Sources/MonetNetworking`, `ios/MonetKit/Tests/MonetNetworkingTests`, `ios/CodeMonet/Services/AuthService.swift`, `ios/CodeMonet/Services/CodeMonetIdentityClient.swift`, `ios/CodeMonet/Services/StudioStore.swift`, `ios/CodeMonet/App/AppConfig.swift` | 4. networking+auth |
+| `ios/MonetKit/Sources/MonetNetworking`, `ios/MonetKit/Tests/MonetNetworkingTests`, `ios/CodeMonet/Services/AuthService.swift`, `ios/CodeMonet/Services/StudioStore.swift`, `ios/CodeMonet/App/AppConfig.swift` | 4. networking+auth |
 | `ios/CodeMonet/Features/Studio/` | 5. studio UI |
 | `ios/CodeMonet/Features/Home/`, `ios/CodeMonet/Features/Gallery/`, `ios/CodeMonet/Features/NewCanvas/` | 6. home+gallery+new-canvas UI |
 | `ios/CodeMonet/App/CodeMonetApp.swift`, `AppDelegate.swift`, `RootView.swift`, `AppEnvironment.swift`, `Navigation.swift`, `SplashView.swift`, `ios/CodeMonet/Features/Auth/`, `ios/CodeMonet/DesignSystem/`, `ios/CodeMonetTests/`, `ios/CodeMonetUITests/`, `ios/project.yml`, `ios/.swiftlint.yml`, `ios/Config/`, `ios/CodeMonet/Resources/` | 7. app shell |
@@ -198,7 +198,7 @@ code — they contain exact constants/formulas this document doesn't repeat.
   - `uv run python scripts/render-study.py ../studies/<any>.py --compare --swift` (new flag) runs and prints a client/server/swift 3-way mean-diff.
 
 ### 4. Networking + auth (MonetNetworking + Services/AuthService + deep links + dev-token + trace sink)
-- **ownedPaths**: `ios/MonetKit/Sources/MonetNetworking/`, `ios/MonetKit/Tests/MonetNetworkingTests/`, `ios/CodeMonet/Services/AuthService.swift`, `ios/CodeMonet/Services/CodeMonetIdentityClient.swift`, `ios/CodeMonet/Services/StudioStore.swift`, `ios/CodeMonet/App/AppConfig.swift`
+- **ownedPaths**: `ios/MonetKit/Sources/MonetNetworking/`, `ios/MonetKit/Tests/MonetNetworkingTests/`, `ios/CodeMonet/Services/AuthService.swift`, `ios/CodeMonet/Services/StudioStore.swift`, `ios/CodeMonet/App/AppConfig.swift`
 - **specFiles**: `scratchpad/specs/net-auth.md` (all of it), `scratchpad/specs/protocol-state.md` §1, §3, §6-7 (connection lifecycle, client messages, quirks)
 - **instructions**: The skeleton wires the full PKCE flow, `KeychainAuthenticationStores`, the identity-mapping check (§0.2), and a DEBUG dev-token bootstrap (§4), but the `TokenBox`/two-phase-init wiring in `AuthService.init` is a known-awkward seam — clean it up if you find a better pattern (it's your file). `StudioWebSocketClient`'s reconnect policy needs the foreground-triggered `restoreSession()` hook (§9.2) wired from `RootView`/`AppEnvironment` (coordinate with package 7 on the `scenePhase` observer — that belongs in App shell, but it needs to *call* something you provide). Implement the trace-span flush timer (§8.1: auto-flush every 10s, flush on background) — the skeleton only provides `TraceSpanBuffer.flush()`, not the timer driving it.
 - **acceptance**:

@@ -75,13 +75,21 @@ public final class AuthService {
         self.environment = environment
         let identityAPI = MobileAPIClient(baseURL: CodeMonetEnvironment.identityBaseURL)
         let codeMonetAPI = MobileAPIClient(baseURL: environment.apiBaseURL)
-        let client = CodeMonetIdentityClient(identityAPI: identityAPI, codeMonetAPI: codeMonetAPI)
+        let client = FentonIdentityClient(
+            identityAPI: identityAPI,
+            clientID: "net.dmfenton.codemonet",
+            redirectURI: "https://monet.dmfenton.net/auth/callback",
+            fetchIdentity: { bearerToken in
+                let data = try await codeMonetAPI.data(path: "/auth/me", bearerToken: bearerToken)
+                let user = try codeMonetAPI.decode(data, as: IdentityUserResponse.self)
+                return HouseholdIdentity(actorID: user.id, email: user.email, householdID: nil, householdName: nil)
+            }
+        )
         let stores = KeychainAuthenticationStores(service: "net.dmfenton.sketchpad")
         controller = AuthenticationController(
             client: client,
             sessionStore: stores.session,
-            pendingAuthorizationStore: stores.pendingAuthorization,
-            refreshRotationStore: stores.refreshRotation
+            pendingAuthorizationStore: stores.pendingAuthorization
         )
     }
 
@@ -236,5 +244,18 @@ private struct WeakTokenProvider: TokenProviding, @unchecked Sendable {
     weak var auth: AuthService?
     func currentToken() async -> String? {
         await auth?.bearerToken
+    }
+}
+
+/// CodeMonet's `GET /auth/me` response shape — app-specific, so it stays
+/// here rather than in the shared `FentonIdentityClient` (net-auth spec
+/// §0.2, §3.1).
+private struct IdentityUserResponse: Decodable {
+    let id: String
+    let email: String
+    let isActive: Bool
+    enum CodingKeys: String, CodingKey {
+        case id, email
+        case isActive = "is_active"
     }
 }

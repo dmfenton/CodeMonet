@@ -48,7 +48,6 @@
 		B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54494DA646E353267BCAFDC /* StudioUITests.swift */; };
 		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 025FFC0A720D0DFF2D799F0D /* GalleryPieceDetailView.swift */; };
-		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
 		C520059C42E5757249C12957 /* StudioStore+Pieces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */; };
 		D475CD72024DE203E494C3D7 /* NotebookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA72C40B3080CB217A5D7F5 /* NotebookView.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
@@ -109,7 +108,6 @@
 		95E266E95B648C934E866D73 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetIdentityClient.swift; sourceTree = "<group>"; };
 		A91BFA2237576839904E7414 /* HomeComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeComposer.swift; sourceTree = "<group>"; };
 		AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		AD7274A1AD8E579A12BC8C60 /* CanvasSizeProfileTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSizeProfileTests.swift; sourceTree = "<group>"; };
@@ -154,7 +152,6 @@
 			isa = PBXGroup;
 			children = (
 				E22EBD765435D2E439AA9DE0 /* AuthService.swift */,
-				A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */,
 				CF72546FBFC9133172136F1B /* StudioStore.swift */,
 				186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */,
 			);
@@ -562,7 +559,6 @@
 				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
 				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
-				BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */,
 				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
 				B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */,
 				FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */,
