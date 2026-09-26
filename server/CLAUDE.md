@@ -298,15 +298,18 @@ async for event in agent.run_turn(callbacks):
 - `__init__.py` - DrawingAgent class, public API
 - `prompts.py` - System prompt and style-specific instructions
 - `processor.py` - Message stream processing
-- `callbacks.py` - Tool callback setup
 - `renderer.py` - Canvas image helpers
 
 ### tools/ - MCP Drawing Tools
 
-All agent tools as an MCP server:
+All agent tools as an MCP server, one per agent. Each tool handler takes the calling
+agent's `ToolContext`; there is no module-level tool state, because one process runs
+many users' agents concurrently.
 
 ```python
-from code_monet.tools import create_drawing_server
+from code_monet.tools import ToolContext, create_drawing_server
+
+server = create_drawing_server(agent.tool_context)  # tools act only on this agent
 
 # Tools available to agent:
 # - draw_paths: Draw paths on canvas
@@ -316,17 +319,22 @@ from code_monet.tools import create_drawing_server
 # - imagine: Generate AI reference image (Gemini)
 # - sign_canvas: Add artist signature
 # - name_piece: Title the artwork
+# - critique_canvas: Visual finish gate
+# - paint: Run the painting program (paint mode)
 ```
 
 **Key files:**
-- `__init__.py` - Server factory, exports
+- `__init__.py` - Server factory (`create_drawing_server(ctx)`), `DRAWING_TOOLS`, exports
+- `context.py` - `ToolContext` (per-agent turn bindings + piece state) and `ToolSpec`
+- `quality_gate.py` - `QualityGateState`, the per-agent critique finish gate
 - `drawing.py` - draw_paths, mark_piece_done, view_canvas
 - `svg_generation.py` - generate_svg tool handler
 - `python_sandbox.py` - Python subprocess execution for generate_svg
 - `image_generation.py` - imagine (Gemini integration)
 - `signature.py` - sign_canvas
 - `naming.py` - name_piece
-- `callbacks.py` - Callback injection for tool handlers
+- `critique.py` - critique_canvas
+- `paint.py` - paint
 - `path_parsing.py` - Parse path data from various formats
 
 ### workspace/ - Per-User State Management

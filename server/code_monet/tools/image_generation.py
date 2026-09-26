@@ -9,9 +9,7 @@ from io import BytesIO
 from pathlib import Path as FilePath
 from typing import Any
 
-from claude_agent_sdk import tool
-
-from .callbacks import get_workspace_dir_callback, image_content_from_png, set_active_reference
+from .context import ToolContext, ToolSpec, image_content_from_png
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +18,7 @@ IMAGE_GEN_TIMEOUT = 60
 REFERENCE_PREVIEW_MAX_SIZE = 512
 
 
-async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
+async def handle_imagine(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Handle imagine tool call.
 
     Generates an image using Google's Nano Banana (Gemini image generation),
@@ -54,8 +52,8 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    _get_workspace_dir_callback = get_workspace_dir_callback()
-    if _get_workspace_dir_callback is None:
+    workspace_dir = ctx.workspace_dir
+    if workspace_dir is None:
         return {
             "content": [{"type": "text", "text": "Error: Workspace not available"}],
             "is_error": True,
@@ -128,7 +126,6 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
 
         # Load image and save to workspace
         image = Image.open(BytesIO(image_data))
-        workspace_dir = _get_workspace_dir_callback()
         references_dir = FilePath(workspace_dir) / "references"
         references_dir.mkdir(parents=True, exist_ok=True)
 
@@ -143,7 +140,7 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
 
         filepath = references_dir / filename
         image.save(filepath, "PNG")
-        set_active_reference(str(filepath))
+        ctx.reference_path = str(filepath)
 
         logger.info(f"Saved generated image to {filepath}")
 
@@ -182,7 +179,7 @@ async def handle_imagine(args: dict[str, Any]) -> dict[str, Any]:
         }
 
 
-@tool(
+imagine = ToolSpec(
     "imagine",
     """Generate a reference image using AI (Nano Banana / Google Gemini).
 
@@ -216,7 +213,5 @@ Example prompts:
         },
         "required": ["prompt"],
     },
+    handle_imagine,
 )
-async def imagine(args: dict[str, Any]) -> dict[str, Any]:
-    """Generate a reference image using AI."""
-    return await handle_imagine(args)

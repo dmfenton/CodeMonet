@@ -5,9 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from claude_agent_sdk import tool
-
-from .quality_gate import finish_block_message
+from .context import ToolContext, ToolSpec
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +20,7 @@ def normalize_title(raw: object) -> str | None:
     return title or None
 
 
-async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
+async def handle_name_piece(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Handle name_piece tool call.
 
     Generates a poetic title for the completed piece based on the canvas content.
@@ -40,7 +38,7 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    block_message = finish_block_message()
+    block_message = ctx.gate.finish_block_message()
     if block_message is not None:
         return {
             "content": [{"type": "text", "text": block_message}],
@@ -48,7 +46,7 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
         }
 
     # The calling agent's orchestrator stores and broadcasts the title from its
-    # own tool-completion hook (per workspace; tool callbacks are process-global).
+    # own tool-completion hook.
 
     # Build response
     content: list[dict[str, Any]] = [
@@ -63,7 +61,7 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
     return {"content": content}
 
 
-@tool(
+name_piece = ToolSpec(
     "name_piece",
     """Give your completed piece a title.
 
@@ -90,7 +88,5 @@ The title should feel inevitable—like it was always the name of this piece."""
         },
         "required": ["title"],
     },
+    handle_name_piece,
 )
-async def name_piece(args: dict[str, Any]) -> dict[str, Any]:
-    """Give the piece a title."""
-    return await handle_name_piece(args)

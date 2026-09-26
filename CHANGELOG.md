@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Concurrent users' agents no longer act on each other's pieces. Drawing tools read process-global callbacks that every turn overwrote, so with two users painting at once one user's `paint`, `draw_paths`, `view_canvas`, `critique_canvas`, `sign_canvas`, or `imagine` could run against the other user's workspace, and one user's critique verdict could block or open the other's finish gate. Each agent now owns its tool context (turn bindings, finish gate, reference image) and its tools are bound to it, on both the Claude and OpenAI backends; `/debug/agent` reports the user's own finish gate.
 - The status pill no longer reads idle while the painter works between tool calls or after a mid-turn reconnect: the server broadcasts `turn_state` around each agent turn and reports `turn_active` in `init`. The piece title now updates live from a server `piece_title` message instead of clients parsing the `name_piece` tool call.
 - Pin the Codex review gate to `codex-review-gate@aeb8ac3`: the base branch advancing after a PR's final review, and review rounds beyond the budget, are now warnings instead of blocks, so merging one companion PR no longer deadlocks the other; only P0/P1 findings block.
 - Authenticate the WebSocket handshake with the same platform-token authority as the REST API; production WebSocket connections previously rejected Fenton Identity tokens.

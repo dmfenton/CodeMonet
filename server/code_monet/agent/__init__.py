@@ -18,7 +18,6 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import SyncHookJSONOutput
 
-from code_monet.agent.callbacks import setup_tool_callbacks
 from code_monet.agent.processor import (
     HookInput,
     HookInputOrDict,
@@ -44,14 +43,7 @@ from code_monet.rendering import (
     painting_image_path,
     render_strokes,
 )
-from code_monet.tools import create_drawing_server
-from code_monet.tools.callbacks import get_active_reference_png, set_active_reference
-from code_monet.tools.quality_gate import (
-    consume_mark_piece_done_accepted,
-    note_drawing,
-    quality_gate_prompt_context,
-    reset_quality_gate,
-)
+from code_monet.tools import ToolContext, create_drawing_server
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -189,7 +181,9 @@ class DrawingAgent:
         self._pause_lock = asyncio.Lock()
         self._abort = False  # Signal to abort current turn
         self._client: ClaudeSDKClient | None = None
-        self._drawing_server = create_drawing_server()
+        # This agent's tools act only on this context (never on another user's agent)
+        self.tool_context = ToolContext()
+        self._drawing_server = create_drawing_server(self.tool_context)
 
         # Drawing hook support - orchestrator sets this callback
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
@@ -319,7 +313,7 @@ class DrawingAgent:
 
         # After mark_piece_done, flag completion
         elif tool_name == "mcp__drawing__mark_piece_done":
-            self._piece_done = consume_mark_piece_done_accepted()
+            self._piece_done = self.tool_context.gate.consume_mark_piece_done_accepted()
 
         # Signal tool completion for all drawing tools (broadcasts "completed" message)
         # This unblocks client-side stroke rendering that waits for in-progress events to clear
@@ -387,8 +381,7 @@ class DrawingAgent:
     def reset_container(self) -> None:
         """Reset the session for a new piece."""
         self._abort = True  # Abort any running turn
-        reset_quality_gate()
-        set_active_reference(None)
+        self.tool_context.reset_piece()
         # Disconnect client to start fresh
         if self._client:
             client = self._client
@@ -464,7 +457,7 @@ class DrawingAgent:
         if notes:
             parts.append(f"Your notes:\n{notes}")
 
-        gate_context = quality_gate_prompt_context()
+        gate_context = self.tool_context.gate.prompt_context()
         if gate_context:
             parts.append(gate_context)
 
@@ -526,7 +519,7 @@ class DrawingAgent:
 
         # Keep the active reference visible every turn so the agent can
         # compare the canvas against it instead of recalling it from memory.
-        reference_png = await asyncio.to_thread(get_active_reference_png)
+        reference_png = await asyncio.to_thread(self.tool_context.active_reference_png)
         if reference_png is not None:
             content.append(
                 {
@@ -599,19 +592,19 @@ class DrawingAgent:
         async def run_paint() -> PaintResult:
             result = await run_painting_program(state)
             if isinstance(result, PaintSuccess):
-                note_drawing(result.version.ops)
+                self.tool_context.gate.note_drawing(result.version.ops)
                 if self._on_painting_version:
                     await self._on_painting_version(result.version)
             return result
 
-        # Set up callbacks
-        setup_tool_callbacks(
-            state=state,
-            get_canvas_png=get_canvas_png,
+        self.tool_context.bind_turn(
+            workspace_dir=state.workspace_dir,
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
-            on_paths_collected=on_draw,
-            run_paint=run_paint,
+            get_canvas=get_canvas_png,
+            add_strokes=state.add_strokes,
+            draw=on_draw,
+            paint=run_paint,
         )
 
         try:

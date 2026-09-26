@@ -16,22 +16,11 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
-from code_monet.agent.callbacks import setup_tool_callbacks
 from code_monet.agent.prompts import build_system_prompt
 from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
 from code_monet.rendering import options_for_agent_view, render_strokes
-from code_monet.tools import (
-    handle_critique_canvas,
-    handle_draw_paths,
-    handle_generate_svg,
-    handle_imagine,
-    handle_mark_piece_done,
-    handle_name_piece,
-    handle_sign_canvas,
-    handle_view_canvas,
-)
-from code_monet.tools.quality_gate import quality_gate_prompt_context, reset_quality_gate
+from code_monet.tools import DRAWING_TOOLS, ToolContext, ToolHandler
 from code_monet.types import (
     AgentEvent,
     AgentStatus,
@@ -193,6 +182,13 @@ OPENAI_DRAWING_TOOLS: list[dict[str, Any]] = [
 for _tool in OPENAI_DRAWING_TOOLS:
     _tool["strict"] = False
 
+# The OpenAI backend draws vector paths only: it exposes the plotter tools, not `paint`.
+_OPENAI_TOOL_HANDLERS: dict[str, ToolHandler] = {
+    spec.name: spec.handler
+    for spec in DRAWING_TOOLS
+    if spec.name in {t["name"] for t in OPENAI_DRAWING_TOOLS}
+}
+
 
 class OpenAIDrawingAgent:
     """Drawing agent powered by the OpenAI Responses API."""
@@ -207,6 +203,8 @@ class OpenAIDrawingAgent:
         self._current_iteration = 1
         self._collected_paths: list[Path] = []
         self._client: AsyncOpenAI | None = None
+        # This agent's tools act only on this context (never on another user's agent)
+        self.tool_context = ToolContext()
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
         self._on_tool_complete: (
             Callable[
@@ -265,7 +263,7 @@ class OpenAIDrawingAgent:
 
     def reset_container(self) -> None:
         self._abort = True
-        reset_quality_gate()
+        self.tool_context.reset_piece()
 
     async def _save_state(self) -> None:
         state = self.get_state()
@@ -286,7 +284,7 @@ class OpenAIDrawingAgent:
         ]
         if state.notes:
             parts.append(f"Your notes:\n{state.notes}")
-        gate_context = quality_gate_prompt_context()
+        gate_context = self.tool_context.gate.prompt_context()
         if gate_context:
             parts.append(gate_context)
         if self.pending_nudges:
@@ -357,24 +355,14 @@ class OpenAIDrawingAgent:
                 ToolCallInfo(name=name, input=args, iteration=self._current_iteration)
             )
 
-        handlers = {
-            "draw_paths": handle_draw_paths,
-            "generate_svg": handle_generate_svg,
-            "view_canvas": lambda _args: handle_view_canvas(),
-            "critique_canvas": handle_critique_canvas,
-            "sign_canvas": handle_sign_canvas,
-            "name_piece": handle_name_piece,
-            "mark_piece_done": lambda _args: handle_mark_piece_done(),
-            "imagine": handle_imagine,
-        }
-        handler = handlers.get(name)
+        handler = _OPENAI_TOOL_HANDLERS.get(name)
         if handler is None:
             result = {
                 "content": [{"type": "text", "text": f"Error: unknown tool {name}"}],
                 "is_error": True,
             }
         else:
-            result = await handler(args)
+            result = await handler(self.tool_context, args)
 
         await self._flush_collected_paths()
         if not result.get("is_error") and (
@@ -437,12 +425,13 @@ class OpenAIDrawingAgent:
             img.save(buffer, format="PNG")
             return buffer.getvalue()
 
-        setup_tool_callbacks(
-            state=state,
-            get_canvas_png=get_canvas_png,
+        self.tool_context.bind_turn(
+            workspace_dir=state.workspace_dir,
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
-            on_paths_collected=on_draw,
+            get_canvas=get_canvas_png,
+            add_strokes=state.add_strokes,
+            draw=on_draw,
         )
 
         thinking_text = ""
