@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from pathlib import Path as FilePath
 from typing import Any, TypedDict
 
@@ -124,7 +125,21 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
             continue
 
         piece_file = gallery_dir / entry
+        metadata_file = piece_file.with_suffix(".meta")
         try:
+            if await aiofiles.os.path.exists(metadata_file):
+                piece_stat = await aiofiles.os.stat(piece_file)
+                metadata_stat = await aiofiles.os.stat(metadata_file)
+                if metadata_stat.st_mtime_ns >= piece_stat.st_mtime_ns:
+                    async with aiofiles.open(metadata_file) as f:
+                        try:
+                            result.append(GalleryEntry.model_validate_json(await f.read()))
+                            continue
+                        except ValueError:
+                            logger.warning(
+                                "Rebuilding malformed gallery metadata %s", metadata_file
+                            )
+
             async with aiofiles.open(piece_file) as f:
                 data = json.loads(await f.read())
 
@@ -133,20 +148,27 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
                 continue
 
             piece_id = f"piece_{piece_number:06d}"
-            result.append(
-                GalleryEntry(
-                    id=piece_id,
-                    created_at=data.get("created_at", ""),
-                    piece_number=piece_number,
-                    stroke_count=piece_stroke_count(data),
-                    width=data.get("width", 800),
-                    height=data.get("height", 600),
-                    drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),
-                    title=data.get("title"),
-                    thumbnail_token=piece_id,
-                    format=data.get("format", "strokes"),
-                )
+            gallery_entry = GalleryEntry(
+                id=piece_id,
+                created_at=data.get("created_at", ""),
+                piece_number=piece_number,
+                stroke_count=piece_stroke_count(data),
+                width=data.get("width", 800),
+                height=data.get("height", 600),
+                drawing_style=parse_drawing_style(data.get("drawing_style", "plotter")),
+                title=data.get("title"),
+                thumbnail_token=piece_id,
+                format=data.get("format", "strokes"),
             )
+            result.append(gallery_entry)
+            temporary_file = metadata_file.with_name(f"{metadata_file.name}.{uuid.uuid4().hex}.tmp")
+            try:
+                async with aiofiles.open(temporary_file, "w") as f:
+                    await f.write(gallery_entry.model_dump_json())
+                await aiofiles.os.replace(temporary_file, metadata_file)
+            finally:
+                if await aiofiles.os.path.exists(temporary_file):
+                    await aiofiles.os.remove(temporary_file)
         except (OSError, *_MALFORMED) as e:
             logger.warning(f"Skipping unreadable gallery file {entry}: {e}")
             continue
