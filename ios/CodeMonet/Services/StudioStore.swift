@@ -120,7 +120,15 @@ public final class StudioStore {
         }
     }
 
+    /// Seeds the reducer-owned gallery from a REST fetch; later `gallery_update`
+    /// pushes keep replacing it, so views always read live state.
+    public func applyFetchedGallery(_ gallery: [GalleryEntry]) {
+        apply(.setGallery(gallery))
+    }
+
     public func disconnect() {
+        strokesFetchTask?.cancel()
+        strokesFetchTask = nil
         socketTask?.cancel()
         socketTask = nil
         Task { await socket.disconnect() }
@@ -283,6 +291,7 @@ public final class StudioStore {
             switch reason {
             case .authenticationFailed:
                 recordSpan(name: "ws.auth_error")
+                strokesFetchTask?.cancel()  // don't keep polling against a dead session
                 if let token = currentToken {
                     await onAuthenticationFailure?(token)
                 }

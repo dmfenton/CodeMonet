@@ -37,7 +37,8 @@ public final class AppEnvironment {
         // `ifBearerTokenMatches` guards against a delayed 4001 from a
         // socket already superseded by a reconnect with a valid, rotated
         // token (see `AuthService.signOut(ifBearerTokenMatches:)`).
-        studio.onAuthenticationFailure = { [weak auth] token in
+        studio.onAuthenticationFailure = { [weak auth, weak studio] token in
+            await studio?.disconnect()
             await auth?.signOut(ifBearerTokenMatches: token)
         }
     }

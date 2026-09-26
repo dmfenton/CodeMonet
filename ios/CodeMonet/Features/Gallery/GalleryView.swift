@@ -19,11 +19,10 @@ struct GalleryView: View {
     /// already pushes `gallery_update` proactively, so this is a
     /// user-triggered "catch me up now" rather than the sole source of
     /// truth.
-    @State private var refreshedGallery: [GalleryEntry]?
     @State private var refreshError: String?
 
     private var entries: [GalleryEntry] {
-        (refreshedGallery ?? environment.studio.state.gallery).reversed()
+        environment.studio.state.gallery.reversed()
     }
 
     /// 2 fixed columns on phone (ux spec §8's `NUM_COLUMNS = 2`); adaptive
@@ -158,7 +157,7 @@ struct GalleryView: View {
 
     private func refresh() async {
         do {
-            refreshedGallery = try await environment.restClient.gallery()
+            environment.studio.applyFetchedGallery(try await environment.restClient.gallery())
             refreshError = nil
         } catch {
             // Keep whatever we already had; only show the error state when
