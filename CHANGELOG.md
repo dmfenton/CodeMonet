@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New lily pad mark (`brand/mark.svg`) with `scripts/build-brand.py` generating the light and dark iOS app icons, launch mark, web favicon, touch icon, and social preview image.
+- Studio stage bar showing the painter's passes filling in, version chips to view earlier versions, and a notebook of the agent's thoughts, tool calls, critiques, and your nudges, on iOS and web.
+- Gallery piece pages with version-by-version replay and a program viewer, on iOS and web (shown when the server provides version history).
+- Web dark mode.
+
 ### Changed
+
+- Redesign the iOS and web apps on the Fenton paper, ink, and forest palette. Home is a single composer (prompt, Paint or Plotter, canvas size, surprise me) replacing the New Canvas sheet; the web landing page is rebuilt around a real painting program and the stage it produced.
+- Web dev proxy and dev WebSocket follow `API_URL`, so a worktree can run its backend on a non-default port.
 
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
 - Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
