@@ -742,11 +742,12 @@ class _FakeProc:
     def __init__(self, during: object, args: tuple[str, ...]) -> None:
         self._during = during
         self._out_dir = FilePath(args[args.index("--out") + 1])
+        self._size = (int(args[args.index("--width") + 1]), int(args[args.index("--height") + 1]))
 
     async def communicate(self) -> tuple[bytes, bytes]:
         await self._during()  # type: ignore[operator]
         keyframes = [{"label": "ground", "image": "kf_00.jpg", "ops": [["a", 0, 0, 1, 1]] * 3}]
-        reveal = {"width": 320, "height": 240, "keyframes": keyframes}
+        reveal = {"width": self._size[0], "height": self._size[1], "keyframes": keyframes}
         (self._out_dir / "reveal.json").write_text(json.dumps(reveal))
         return b"", b""
 

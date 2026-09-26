@@ -4,8 +4,9 @@
 
 The program runs with a ready `cv` (paintlib.Canvas) and common modules in
 scope. On success the version is in DIR (reveal.json is its record, which the
-server reads) and a JSON summary with timings is printed for people running
-this by hand; on failure the traceback goes to stderr and the exit code is 1.
+server reads) and a JSON summary with timings goes to stderr for people running
+this by hand; stdout is the program's alone. On failure the traceback goes to
+stderr and the exit code is 1.
 """
 
 from __future__ import annotations
@@ -68,7 +69,7 @@ def main() -> int:
         "paint_seconds": round(t1 - t0, 1),
         "export_seconds": round(time.monotonic() - t1, 1),
     }
-    print(json.dumps({**summary, **timings}))
+    print(json.dumps({**summary, **timings}), file=sys.stderr)
     return 0
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from pathlib import Path as FilePath
@@ -138,6 +139,8 @@ class TestRunnerOutput:
             "[]",
             '{"width": "320", "height": 240, "keyframes": []}',
             '{"width": 320, "height": 240, "keyframes": [{"label": "sky"}]}',
+            '{"width": 1000000, "height": 240, "keyframes": []}',
+            "[" * 100_000,
         ],
     )
     @pytest.mark.asyncio
@@ -155,6 +158,42 @@ class TestRunnerOutput:
         assert "reveal.json is malformed" in result.error
         assert [p.name for p in workspace.paintings_dir.iterdir()] == [first.version.token]
         assert workspace.painting == first.version
+
+    @pytest.mark.parametrize(
+        "replace", ["os.mkfifo(p)", "os.mkdir(p)", "os.symlink('/etc/hosts', p)"]
+    )
+    @pytest.mark.asyncio
+    async def test_reveal_that_is_not_a_regular_file_fails(
+        self, workspace: WorkspaceState, replace: str
+    ) -> None:
+        swap = f"""
+import atexit, os, sys
+p = os.path.join({_OUT_DIR}, "reveal.json")
+atexit.register(lambda: (os.unlink(p), {replace}))
+"""
+        _write_program(workspace, swap + PROGRAM)
+
+        result = await asyncio.wait_for(run_painting_program(workspace), timeout=60)
+
+        assert isinstance(result, PaintFailure), result
+        assert "Could not read the painting's reveal.json" in result.error
+        assert list(workspace.paintings_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_tampered_human_input_fails_and_cleans_up(
+        self, workspace: WorkspaceState
+    ) -> None:
+        swap = """
+import atexit, os, sys
+p = sys.argv[sys.argv.index('--human') + 1]
+atexit.register(lambda: (os.unlink(p), os.mkdir(p)))
+"""
+        _write_program(workspace, swap + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert list(workspace.paintings_dir.iterdir()) == []
 
 
 class TestRasterGallery:

@@ -8,11 +8,13 @@ image, reveal log) under `paintings/{token}/`. See docs/program-painting.md.
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import os
 import secrets
 import shutil
+import stat
 import sys
 import tempfile
 import time
@@ -157,13 +159,13 @@ async def _run_and_record(
 
     # The published reveal.json, not stdout (which the program shares), is the
     # record of what was painted.
-    summary = _read_reveal_summary(out_dir)
+    summary = await asyncio.to_thread(_read_reveal_summary, out_dir, width, height)
     if isinstance(summary, str):
         shutil.rmtree(out_dir, ignore_errors=True)
         out = stdout.decode(errors="replace")[-500:]
         return PaintFailure(summary + (f"\nstdout:\n{out}" if out.strip() else ""), seconds)
-    human_file.unlink(missing_ok=True)
     try:
+        human_file.unlink(missing_ok=True)
         _publish_program(out_dir, source)
     except OSError as e:
         shutil.rmtree(out_dir, ignore_errors=True)
@@ -193,8 +195,14 @@ async def _run_and_record(
     )
 
 
-def _read_reveal_summary(out_dir: FilePath) -> RevealSummary | str:
-    """Version metadata from the run's reveal.json, or an error for the agent."""
+def _read_reveal_summary(out_dir: FilePath, width: int, height: int) -> RevealSummary | str:
+    """Version metadata from the run's reveal.json, or an error for the agent.
+
+    The server chose the image size, so a manifest of any other size is malformed.
+    """
+    malformed = (
+        "The painting's reveal.json is malformed ({}). Do not write into the output directory."
+    )
     try:
         raw = json.loads(_read_no_follow(out_dir / "reveal.json"))
         manifest = _RevealManifest.model_validate(raw)
@@ -205,18 +213,24 @@ def _read_reveal_summary(out_dir: FilePath) -> RevealSummary | str:
         )
     except OSError as e:
         return f"Could not read the painting's reveal.json: {e.strerror or e}"
-    except ValueError as e:  # bad JSON or a failed validation
-        return (
-            f"The painting's reveal.json is malformed ({str(e)[:300]}). "
-            "Do not write into the output directory."
+    except (ValueError, RecursionError) as e:  # bad or too deeply nested JSON, bad shape
+        return malformed.format(str(e)[:300])
+    if (manifest.width, manifest.height) != (width, height):
+        return malformed.format(
+            f"size {manifest.width}x{manifest.height}, expected {width}x{height}"
         )
-    return reveal_summary(manifest.model_dump())
+    return reveal_summary(raw)
 
 
 def _read_no_follow(path: FilePath) -> bytes:
-    """Read a file without following a symlink at its final component."""
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    """Read a regular file without following a symlink at its final component.
+
+    Non-blocking open so a FIFO left at the path cannot stall the read.
+    """
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            raise OSError(errno.EINVAL, "not a regular file")
         return f.read()
 
 
