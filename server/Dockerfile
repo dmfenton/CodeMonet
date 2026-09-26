@@ -45,9 +45,10 @@ COPY --from=build /app/server/.venv ./.venv
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # Remove the unused system package installer, then create the non-root runtime user.
-# The musl Claude CLI needs the C++ runtime and a system ripgrep (Grep/Glob).
+# The musl Claude CLI needs the C++ runtime, a system ripgrep (Grep/Glob), and
+# bash (its Bash tool refuses to run without bash or zsh).
 RUN apk upgrade --no-cache \
-    && apk add --no-cache libgcc libstdc++ ripgrep \
+    && apk add --no-cache bash libgcc libstdc++ ripgrep \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
@@ -68,7 +69,8 @@ ENV USE_BUILTIN_RIPGREP=0
 ENV APP_VERSION=${APP_VERSION}
 ENV APP_COMMIT=${APP_COMMIT}
 ENV APP_BUILD_TIME=${APP_BUILD_TIME}
-ENV PATH="/app/.venv/bin:${PATH}"
+# The agent's shell (and anything else) gets the venv's python, with PIL etc.
+ENV PATH="/app/server/.venv/bin:${PATH}"
 
 # Keep the image independently health-aware when it runs outside Compose.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
