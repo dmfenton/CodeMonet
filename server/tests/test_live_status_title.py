@@ -131,3 +131,75 @@ async def test_init_reports_turn_active(tmp_path: Path) -> None:
     assert (await _init_message(workspace, paused=False))["turn_active"] is False
     init = await _init_message(workspace, paused=False, turn_active=True)
     assert init["turn_active"] is True
+
+
+class _StopTurn(Exception):
+    pass
+
+
+@pytest.mark.asyncio
+async def test_openai_agent_wires_the_title_callback() -> None:
+    from code_monet.agent import AgentCallbacks
+    from code_monet.agent.openai_agent import OpenAIDrawingAgent
+
+    state = MagicMock()
+    state.save = AsyncMock()
+    agent = OpenAIDrawingAgent(state=state)
+    agent._paused = False
+    on_piece_titled = AsyncMock()
+    captured: dict[str, Any] = {}
+
+    def capture(**kwargs: Any) -> None:
+        captured.update(kwargs)
+        raise _StopTurn
+
+    with (
+        patch("code_monet.agent.openai_agent.settings") as settings,
+        patch("code_monet.agent.openai_agent.AsyncOpenAI"),
+        patch("code_monet.agent.openai_agent.setup_tool_callbacks", side_effect=capture),
+        pytest.raises(_StopTurn),
+    ):
+        settings.openai_api_key = "test"
+        async for _ in agent.run_turn(AgentCallbacks(on_piece_titled=on_piece_titled)):
+            pass
+
+    assert captured["on_piece_titled"] is on_piece_titled
+
+
+class TestConnectInit:
+    @pytest.mark.asyncio
+    async def test_turn_state_is_sampled_after_building_init(self, tmp_path: Path) -> None:
+        """A turn ending while init is built must not leave a stale turn_active."""
+        from code_monet.main import _connect_init
+
+        user_dir = tmp_path / "user"
+        (user_dir / "gallery").mkdir(parents=True)
+        state = WorkspaceState(user_id="user", user_dir=user_dir)
+        state._loaded = True
+        orchestrator = MagicMock()
+        orchestrator.turn_active = True
+        list_gallery = state.list_gallery
+
+        async def gallery_while_turn_ends() -> Any:
+            orchestrator.turn_active = False  # turn_state false broadcast happens here
+            return await list_gallery()
+
+        workspace = MagicMock()
+        workspace.state = state
+        workspace.agent.paused = False
+        workspace.orchestrator = orchestrator
+
+        with patch.object(state, "list_gallery", gallery_while_turn_ends):
+            init = await _connect_init(workspace)
+
+        assert init["turn_active"] is False
+
+
+def test_server_data_symlink_is_ignored() -> None:
+    import subprocess
+
+    repo = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        ["git", "check-ignore", "--no-index", "-q", "server/data"], cwd=repo, check=False
+    )
+    assert result.returncode == 0

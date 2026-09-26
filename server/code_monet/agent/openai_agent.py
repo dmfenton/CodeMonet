@@ -443,6 +443,7 @@ class OpenAIDrawingAgent:
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
             on_paths_collected=on_draw,
+            on_piece_titled=cb.on_piece_titled,
         )
 
         thinking_text = ""

@@ -18,7 +18,7 @@ from code_monet.auth import auth_router, dependencies
 from code_monet.auth.platform import IdentityUnavailableError
 from code_monet.config import settings
 from code_monet.logging_config import setup_dev_logging, setup_production_logging
-from code_monet.registry import workspace_registry
+from code_monet.registry import ActiveWorkspace, workspace_registry
 from code_monet.routes import create_api_router
 from code_monet.share import share_router
 from code_monet.shutdown import shutdown_manager
@@ -186,6 +186,18 @@ async def _init_message(
     }
 
 
+async def _connect_init(workspace: ActiveWorkspace) -> dict[str, Any]:
+    """The init message for a connecting client, ready to send as-is.
+
+    Turn state is sampled after every await in building init, so the caller
+    sends it with no await in between: the socket already receives turn_state
+    broadcasts, and a change after the sample then arrives after init.
+    """
+    init = await _init_message(workspace.state, paused=workspace.agent.paused)
+    init["turn_active"] = bool(workspace.orchestrator and workspace.orchestrator.turn_active)
+    return init
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(
     websocket: WebSocket,
@@ -257,11 +269,7 @@ async def websocket_endpoint(
 
     try:
         # Send current state to new client
-        init = await _init_message(
-            workspace.state,
-            paused=workspace.agent.paused,
-            turn_active=bool(workspace.orchestrator and workspace.orchestrator.turn_active),
-        )
+        init = await _connect_init(workspace)
         await workspace.connections.send_to(websocket, init)
         logger.info(
             f"User {user_id}: sent init with {len(workspace.state.canvas.strokes)} strokes, "
