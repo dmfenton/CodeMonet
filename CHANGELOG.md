@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paintlib.runner` so the program's process never imports server config or loads SSM secrets.
+- Run plotter-mode `generate_svg` code the same way: `python -I` from a throwaway directory with the paint run's minimal environment, instead of inheriting the server's environment.
 - Read painting version files (asset route, gallery raster, public thumbnails, workspace render) only when they are single-link regular files whose real path stays inside `paintings/{token}/`.
 - Document the program-painting threat model and the isolation that remains missing (docs/program-painting.md).
 
