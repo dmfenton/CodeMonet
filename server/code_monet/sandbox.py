@@ -197,7 +197,7 @@ _ARCHES = {
     "x86_64": _Arch(
         0xC000003E,
         {
-            "chmod": 90, "fchmodat": 268, "fchmodat2": 452, "chown": 92, "lchown": 94,
+            "chmod": 90, "fchmod": 91, "fchmodat": 268, "fchmodat2": 452, "chown": 92, "fchown": 93, "lchown": 94,
             "fchownat": 260, "truncate": 76, "io_uring_setup": 425, "kill": 62,
             "tkill": 200, "tgkill": 234, "rt_sigqueueinfo": 129, "rt_tgsigqueueinfo": 297,
             "pidfd_open": 434, "pidfd_send_signal": 424, "socket": 41, "fork": 57, "vfork": 58, "clone": 56,
@@ -207,7 +207,7 @@ _ARCHES = {
     "aarch64": _Arch(
         0xC00000B7,
         {
-            "fchmodat": 53, "fchmodat2": 452, "fchownat": 54, "truncate": 45,
+            "fchmod": 52, "fchmodat": 53, "fchmodat2": 452, "fchown": 55, "fchownat": 54, "truncate": 45,
             "io_uring_setup": 425, "kill": 129, "tkill": 130, "tgkill": 131,
             "rt_sigqueueinfo": 138, "rt_tgsigqueueinfo": 240, "pidfd_open": 434,
             "pidfd_send_signal": 424,
@@ -216,13 +216,15 @@ _ARCHES = {
     ),
 }  # fmt: skip
 
-# Path-based mutations Landlock ABI 2 does not govern. The fd-based ones
-# (fchmod, ftruncate, fsetxattr, futimens) need a writable or owned fd, which
-# Landlock (opens) and file ownership already limit to the sandbox's own files.
+# Mode/owner changes Landlock ABI 2 does not govern, by path or by fd: the image
+# owns its runtime (venv, code) as the server user, so a read-only fd would be
+# enough to chmod it. ftruncate/fsetxattr/futimens need a writable fd, which
+# Landlock limits to the sandbox's own files.
 # pidfd_send_signal: pidfds of protected processes are also unobtainable
 # (pidfd_open is pid-checked below), but deny it outright.
 _ALWAYS_DENIED = (
-    "chmod", "fchmodat", "fchmodat2", "chown", "lchown", "fchownat", "truncate",
+    "chmod", "fchmod", "fchmodat", "fchmodat2", "chown", "fchown", "lchown", "fchownat",
+    "truncate",
     "io_uring_setup", "tkill", "pidfd_send_signal",
 )  # fmt: skip
 _TARGETS_PID = ("kill", "tgkill", "rt_sigqueueinfo", "rt_tgsigqueueinfo", "pidfd_open")

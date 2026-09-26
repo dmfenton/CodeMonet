@@ -151,7 +151,7 @@ PROBE = textwrap.dedent(
     parent = os.getppid()
     if confine:
         sandbox.confine(sandbox.Policy(
-            read=(sys.prefix, sys.base_prefix, "/usr", "/lib", "/proc"),
+            read=(sys.prefix, sys.base_prefix, "/usr", "/lib", "/proc", f"{root}/ro"),
             write=(f"{root}/own",),
             network=False, subprocesses=False, protected_pids=(parent,),
         ), max_abi=max_abi or None)
@@ -173,6 +173,7 @@ PROBE = textwrap.dedent(
         "parent_environ": attempt(lambda: open(f"/proc/{parent}/environ").read()),
         "truncate_other": attempt(lambda: os.truncate(f"{root}/other/secret", 0)),
         "chmod_other": attempt(lambda: os.chmod(f"{root}/other/secret", 0o600)),
+        "fchmod_readable": attempt(lambda: os.fchmod(os.open(f"{root}/ro/file", os.O_RDONLY), 0o600)),
         "rename_out": attempt(lambda: os.rename(f"{root}/own/x", f"{root}/x")),
         "signal_parent": attempt(lambda: os.kill(parent, 0)),
         "broadcast_signal": attempt(lambda: os.kill(-1, 0)),
@@ -188,6 +189,8 @@ def _probe(root: Path, max_abi: int, mode: str) -> dict[str, str]:
     (root / "own").mkdir()
     (root / "other").mkdir()
     (root / "other" / "secret").write_text("secret")
+    (root / "ro").mkdir()
+    (root / "ro" / "file").write_text("runtime file the sandbox may read")
     out = subprocess.run(
         [sys.executable, "-c", PROBE, str(root), str(max_abi), mode],
         capture_output=True,

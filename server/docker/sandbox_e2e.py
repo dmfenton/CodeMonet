@@ -32,6 +32,7 @@ ls /data/users/u2 >/dev/null 2>&1 && echo LEAK:other-user || echo ok:other-user
 cat /data/code_monet.db >/dev/null 2>&1 && echo LEAK:db || echo ok:db
 kill -0 1 2>/dev/null && echo LEAK:signal-server || echo ok:signal-server
 chmod 000 /data/code_monet.db 2>/dev/null && echo LEAK:chmod || echo ok:chmod
+python3 -c "import os, claude_agent_sdk as m; os.fchmod(os.open(m.__file__, os.O_RDONLY), 0o600)" 2>/dev/null && echo LEAK:fchmod-runtime || echo ok:fchmod-runtime
 ls /tmp >/dev/null 2>&1 && echo LEAK:shared-tmp || echo ok:shared-tmp
 echo hi > own.txt && echo ok:own-write
 python3 -c "import PIL; print('ok:python')"
@@ -216,6 +217,7 @@ def main() -> int:
         "ok:db",
         "ok:signal-server",
         "ok:chmod",
+        "ok:fchmod-runtime",
         "ok:shared-tmp",
         "ok:own-write",
         "ok:python",
