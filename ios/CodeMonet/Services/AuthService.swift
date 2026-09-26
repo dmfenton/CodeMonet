@@ -14,6 +14,11 @@ public enum AppAuthState: Equatable, Sendable {
     case exchangingCode
     case signedIn(UserResponse)
     case error(String)
+
+    public var isSignedIn: Bool {
+        if case .signedIn = self { return true }
+        return false
+    }
 }
 
 /// Wraps `FentonMobileCore.AuthenticationController` with the two required
@@ -27,7 +32,17 @@ public enum AppAuthState: Equatable, Sendable {
 @MainActor
 @Observable
 public final class AuthService {
-    public private(set) var state: AppAuthState = .restoring
+    public private(set) var state: AppAuthState = .restoring {
+        didSet {
+            // Any exit from a signed-in session (sign-out, REST 401, WS 4001,
+            // failed restore) tears down that session's per-user state.
+            if case .signedIn = oldValue, !state.isSignedIn { onSessionEnded?() }
+        }
+    }
+
+    /// Set by `AppEnvironment`: disconnects the studio and drops user-scoped caches.
+    @ObservationIgnored
+    public var onSessionEnded: (@MainActor () -> Void)?
 
     private let environment: CodeMonetEnvironment
     private let controller: AuthenticationController
@@ -117,10 +132,11 @@ public final class AuthService {
         await syncStateFromController()
     }
 
+    /// Progress and the "check your email" confirmation stay local to
+    /// `AuthView`; the global state remains `.signedOut` so the form is not
+    /// replaced (and its confirmation lost) while the request is in flight.
     public func requestMagicLink(email: String) async throws {
-        state = .signingIn
         _ = try await controller.requestMagicLink(email: email)
-        state = .signedOut // caller shows the "check your email" success box; not yet authenticated.
     }
 
     /// Consumes a deep-linked authorization code (net-auth spec §5.1),
@@ -185,7 +201,8 @@ public final class AuthService {
                 state = .error("Identity could not be mapped to a CodeMonet user")
                 return
             } catch {
-                state = .restoring
+                // No verdict: keep an existing signed-in session as is.
+                if !state.isSignedIn { state = .restoring }
                 try? await Task.sleep(for: delay)
                 delay = min(delay * 2, .seconds(30))
             }

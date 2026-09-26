@@ -49,6 +49,12 @@ final class ThumbnailCache {
 
     private init() {}
 
+    /// Thumbnail tokens (`piece_000001`) repeat across users; called when a session ends.
+    func clear() {
+        images.removeAll()
+        failed.removeAll()
+    }
+
     func image(for token: String) -> UIImage? {
         images[token]
     }

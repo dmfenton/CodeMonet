@@ -56,11 +56,19 @@ struct CanvasView: View {
                         urlString: PaintingAssetURL.apiAssetUrl(environment.config.apiBaseURL.absoluteString, imagePath)
                     )
                     .frame(width: containerSize.width, height: containerSize.height)
+                    humanStrokeOverlay(state: state, canvasSize: canvasSize)
+                        .frame(width: containerSize.width, height: containerSize.height)
                 } else {
                     TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isAnimating(state))) { timeline in
                         frame(state: state, canvasSize: canvasSize, now: timeline.date)
                     }
                     .frame(width: containerSize.width, height: containerSize.height)
+                    if MonetStudio.hasPainting(state.painting) {
+                        // The raster is the base; human marks stay vector on top
+                        // (the web client filters out only agent strokes).
+                        humanStrokeOverlay(state: state, canvasSize: canvasSize)
+                            .frame(width: containerSize.width, height: containerSize.height)
+                    }
                 }
 
                 if !viewOnly, StudioSelectors.shouldShowIdleAnimation(state) {
@@ -114,6 +122,23 @@ struct CanvasView: View {
         } else {
             Color.white
         }
+    }
+
+    /// Human strokes (saved and in-progress) drawn over a raster painting.
+    private func humanStrokeOverlay(state: StudioState, canvasSize: CGSize) -> some View {
+        let lines = state.strokes.filter { $0.author == .human }.map(\.points)
+            + (state.currentStroke.count >= 2 ? [state.currentStroke] : [])
+        return Canvas { context, size in
+            let scale = size.width / max(canvasSize.width, 1)
+            for points in lines where points.count >= 2 {
+                var path = SwiftUI.Path()
+                path.addLines(points.map { CGPoint(x: $0.x * scale, y: $0.y * scale) })
+                context.stroke(path, with: .color(CodeMonetDesignSystem.Extra.humanStroke),
+                               style: StrokeStyle(lineWidth: max(2, 3 * scale), lineCap: .round, lineJoin: .round))
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private func isAnimating(_ state: StudioState) -> Bool {

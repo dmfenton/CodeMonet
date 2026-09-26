@@ -37,9 +37,15 @@ public final class AppEnvironment {
         // `ifBearerTokenMatches` guards against a delayed 4001 from a
         // socket already superseded by a reconnect with a valid, rotated
         // token (see `AuthService.signOut(ifBearerTokenMatches:)`).
-        studio.onAuthenticationFailure = { [weak auth, weak studio] token in
-            await studio?.disconnect()
+        studio.onAuthenticationFailure = { [weak auth] token in
             await auth?.signOut(ifBearerTokenMatches: token)
+        }
+        // Single teardown for every way a session ends (including feature
+        // REST 401s): drop the old socket so the next sign-in can connect,
+        // and forget the previous user's thumbnails.
+        auth.onSessionEnded = { [weak studio] in
+            studio?.disconnect()
+            ThumbnailCache.shared.clear()
         }
     }
 }
