@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The production image ships the Claude Code CLI again: the Agent SDK only bundles a glibc CLI, which the Alpine image could not use, so agent turns could not start. The image build installs the musl build of the SDK's pinned CLI version (checksum-verified against Anthropic's release manifest) with its runtime dependencies, and CI/release run a smoke check that the SDK finds and runs it.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
 ## [1.41.0] - 2026-09-26

@@ -180,7 +180,7 @@ jobs:
     # runtime-image scan pattern: docker-daemon jobs run on trusted main code
     # only; PR validation stays inside the unprivileged container).
     runs-on: [self-hosted, codemonet-docker, lilserver]
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [changes, server]
     if: needs.changes.outputs.server == 'true' && github.event_name != 'pull_request'
 
@@ -215,6 +215,11 @@ jobs:
           assert all(r.startswith('/app/data/') for r in resolved), resolved
           "
 
+      - name: Verify the Agent SDK can start its CLI
+        run: |
+          docker run --rm -i --entrypoint /app/server/.venv/bin/python \
+            code-monet-server:ci - < server/docker/smoke_cli.py
+
       - name: Scan Docker image
         env:
           TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
@@ -229,6 +234,7 @@ jobs:
             "$TRIVY_IMAGE" image \
             --exit-code 1 \
             --no-progress \
+            --timeout 15m \
             --scanners vuln,secret \
             --severity HIGH,CRITICAL \
             code-monet-server:ci

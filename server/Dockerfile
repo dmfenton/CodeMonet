@@ -13,6 +13,10 @@ COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/pytho
 
 RUN uv sync --frozen --no-dev --no-cache
 
+# The SDK's wheels bundle a glibc CLI only; install its pinned musl build.
+COPY server/docker/install_claude_cli.py /tmp/install_claude_cli.py
+RUN .venv/bin/python /tmp/install_claude_cli.py
+
 FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
 
 # Build args for version info
@@ -41,7 +45,9 @@ COPY --from=build /app/server/.venv ./.venv
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # Remove the unused system package installer, then create the non-root runtime user.
+# The musl Claude CLI needs the C++ runtime and a system ripgrep (Grep/Glob).
 RUN apk upgrade --no-cache \
+    && apk add --no-cache libgcc libstdc++ ripgrep \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
@@ -58,6 +64,7 @@ EXPOSE 8000
 
 # Set production mode and version info as env vars
 ENV DEV_MODE=false
+ENV USE_BUILTIN_RIPGREP=0
 ENV APP_VERSION=${APP_VERSION}
 ENV APP_COMMIT=${APP_COMMIT}
 ENV APP_BUILD_TIME=${APP_BUILD_TIME}

@@ -140,10 +140,13 @@ jobs:
             .
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
+          docker run --rm -i --entrypoint /app/server/.venv/bin/python \
+            $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION - < server/docker/smoke_cli.py
+
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
-            --exit-code 1 --no-progress --scanners vuln,secret --severity HIGH,CRITICAL \
+            --exit-code 1 --no-progress --timeout 15m --scanners vuln,secret --severity HIGH,CRITICAL \
             $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
 
           # Push both tags
@@ -172,7 +175,7 @@ jobs:
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
             aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
-            --exit-code 1 --no-progress --scanners vuln,secret --severity HIGH,CRITICAL \
+            --exit-code 1 --no-progress --timeout 15m --scanners vuln,secret --severity HIGH,CRITICAL \
             $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
 
           # Push both tags
