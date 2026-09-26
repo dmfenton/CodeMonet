@@ -263,6 +263,7 @@ class OpenAIDrawingAgent:
 
     def reset_container(self) -> None:
         self._abort = True
+        self.pending_nudges.clear()
         self.tool_context.reset_piece()
 
     async def _save_state(self) -> None:

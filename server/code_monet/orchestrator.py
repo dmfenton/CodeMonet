@@ -466,8 +466,17 @@ class AgentOrchestrator:
                     continue
 
                 if self._piece_completed:
-                    logger.debug("[ORCH] skip: piece completed, waiting for user action")
-                    continue
+                    if not self.agent.pending_nudges:
+                        logger.debug("[ORCH] skip: piece completed, waiting for user action")
+                        continue
+                    # A nudge may arrive while the prior turn is finishing. That
+                    # turn can set _piece_completed after handle_nudge cleared it.
+                    self._piece_completed = False
+                    await self.broadcaster.broadcast(
+                        PieceStateMessage(
+                            number=self.agent.get_state().piece_number, completed=False
+                        )
+                    )
 
                 logger.info("[ORCH] running turn...")
                 await self.run_turn()

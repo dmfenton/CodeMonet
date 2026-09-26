@@ -46,8 +46,10 @@ class TestDrawingAgentPauseResume:
     def test_reset_container_sets_abort(self) -> None:
         """reset_container sets abort flag (SDK manages actual session)."""
         agent = DrawingAgent()
+        agent.add_nudge("change the old canvas")
         agent.reset_container()
         assert agent._abort is True
+        assert agent.pending_nudges == []
 
 
 class TestDrawingAgentImageConversion:

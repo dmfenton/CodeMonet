@@ -381,6 +381,7 @@ class DrawingAgent:
     def reset_container(self) -> None:
         """Reset the session for a new piece."""
         self._abort = True  # Abort any running turn
+        self.pending_nudges.clear()
         self.tool_context.reset_piece()
         # Disconnect client to start fresh
         if self._client:

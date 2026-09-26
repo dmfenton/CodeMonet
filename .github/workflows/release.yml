@@ -114,6 +114,12 @@ jobs:
           role-to-assume: arn:aws:iam::573988763875:role/github-actions-codemonet-release
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Prepare isolated Docker credentials
+        run: |
+          docker_config="$RUNNER_TEMP/codemonet-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 0700 "$docker_config"
+          printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
