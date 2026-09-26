@@ -1,3 +1,11 @@
+FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS claude-cli
+
+WORKDIR /opt/claude
+COPY server/claude-cli/package*.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+    && cp node_modules/@anthropic-ai/claude-code-linux-*-musl/claude ./claude \
+    && ./claude --version
+
 FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df AS build
 
 WORKDIR /app/server
@@ -34,6 +42,11 @@ COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
 COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
+COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude
+
+# Alpine installs the SDK source distribution, which has no bundled CLI.
+# Verify the SDK resolves the separately locked musl executable.
+RUN .venv/bin/python -c "import subprocess; from claude_agent_sdk import ClaudeAgentOptions; from claude_agent_sdk._internal.transport.subprocess_cli import SubprocessCLITransport; cli = SubprocessCLITransport('', ClaudeAgentOptions())._find_cli(); assert cli == '/usr/local/bin/claude', cli; subprocess.run([cli, '--version'], check=True)"
 
 # Persistent data lives on the /app/data volume. Config paths are relative
 # (data/drawing_agent.db, data/agent_workspace/users) and resolve from this
@@ -61,7 +74,7 @@ ENV DEV_MODE=false
 ENV APP_VERSION=${APP_VERSION}
 ENV APP_COMMIT=${APP_COMMIT}
 ENV APP_BUILD_TIME=${APP_BUILD_TIME}
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/server/.venv/bin:${PATH}"
 
 # Keep the image independently health-aware when it runs outside Compose.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \

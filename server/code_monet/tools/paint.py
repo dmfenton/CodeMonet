@@ -24,7 +24,7 @@ async def handle_paint(ctx: ToolContext, _args: dict[str, Any]) -> dict[str, Any
                 "content": [{"type": "text", "text": f"{error}\n(ran {seconds:.1f}s)"}],
                 "is_error": True,
             }
-        case PaintSuccess(version=v, preview=preview, seconds=seconds):
+        case PaintSuccess(version=v, preview_jpeg=preview_jpeg, seconds=seconds):
             text = (
                 f"Version {v.version} rendered in {seconds:.1f}s — {v.ops} recorded marks, "
                 f"stages: {', '.join(v.stages) or '(none)'}. Viewers are watching it paint in now.\n"
@@ -35,7 +35,7 @@ async def handle_paint(ctx: ToolContext, _args: dict[str, Any]) -> dict[str, Any
             return {
                 "content": [
                     {"type": "text", "text": text},
-                    image_content_from_png(preview.read_bytes()),
+                    image_content_from_png(preview_jpeg),
                 ]
             }
 

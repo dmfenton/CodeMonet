@@ -157,7 +157,7 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -1593,7 +1593,7 @@ class Canvas:
         out = self.rgb * shade[..., None] * self.varnish
         return np.clip(out, 0, 1)
 
-    def export(self, out_dir: str | Path, preview_width: int = 1200) -> dict[str, Any]:
+    def export(self, out_dir: str | Path, preview_width: int = 1200) -> RevealSummary:
         """Close the last stage and write keyframes, final image, and reveal log."""
         self._close_stage()
         out = Path(out_dir)
@@ -1616,16 +1616,25 @@ class Canvas:
         prev.save(out / "preview.jpg", quality=90)
         reveal = {"width": self.W, "height": self.H, "keyframes": manifest}
         (out / "reveal.json").write_text(json.dumps(reveal, separators=(",", ":")))
-        return {
-            "width": self.W,
-            "height": self.H,
-            "stages": [
-                lab
-                for i, lab in enumerate(m["label"] for m in manifest)
-                if i == 0 or manifest[i - 1]["label"] != lab
-            ],
-            "ops": sum(len(m["ops"]) for m in manifest),
-        }
+        return reveal_summary(reveal)
+
+
+class RevealSummary(TypedDict):
+    width: int
+    height: int
+    stages: list[str]
+    ops: int
+
+
+def reveal_summary(reveal: dict[str, Any]) -> RevealSummary:
+    """Version metadata of a reveal manifest: size, distinct stages in order, op count."""
+    labels = [kf["label"] for kf in reveal["keyframes"]]
+    return {
+        "width": reveal["width"],
+        "height": reveal["height"],
+        "stages": [lab for i, lab in enumerate(labels) if i == 0 or labels[i - 1] != lab],
+        "ops": sum(len(kf["ops"]) for kf in reveal["keyframes"]),
+    }
 
 
 # ---------------------------------------------------------------------- helpers

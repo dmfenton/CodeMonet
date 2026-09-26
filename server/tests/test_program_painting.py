@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from pathlib import Path as FilePath
@@ -71,6 +72,7 @@ class TestRunPaintingProgram:
         ops = reveal["keyframes"][1]["ops"]
         assert ops[0][0] == "a" and ops[1][0] == "s"
         assert v.ops == sum(len(kf["ops"]) for kf in reveal["keyframes"]) > 0
+        assert result.preview_jpeg == (out / "preview.jpg").read_bytes()
         assert workspace.painting == v
 
     @pytest.mark.asyncio
@@ -91,6 +93,151 @@ class TestRunPaintingProgram:
         second = await run_painting_program(workspace)
         assert isinstance(second, PaintSuccess)
         assert second.version.version == 2
+
+
+# The program shares the runner's process: it can print after the runner, end
+# the process early, or rewrite the exported files on the way out.
+_OUT_DIR = "sys.argv[sys.argv.index('--out') + 1]"
+_REWRITE_REVEAL = f"""
+import atexit, os, sys
+out = {_OUT_DIR}
+atexit.register(lambda: open(os.path.join(out, "reveal.json"), "w").write(%r))
+"""
+
+
+class TestRunnerOutput:
+    @pytest.mark.asyncio
+    async def test_output_after_the_runner_does_not_matter(self, workspace: WorkspaceState) -> None:
+        _write_program(
+            workspace,
+            "import atexit\nprint('{not json')\natexit.register(print, 'late')\n" + PROGRAM,
+        )
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintSuccess), result
+        assert result.version.stages == ["ground", "sky"]
+
+    @pytest.mark.parametrize("exit_call", ["import sys; sys.exit(0)", "import os; os._exit(0)"])
+    @pytest.mark.asyncio
+    async def test_exit_before_export_fails_and_cleans_up(
+        self, workspace: WorkspaceState, exit_call: str
+    ) -> None:
+        _write_program(workspace, "print('partial', flush=True)\n" + exit_call + "\n" + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert "without exporting" in result.error
+        assert "partial" in result.error
+        assert list(workspace.paintings_dir.iterdir()) == []
+        assert workspace.painting is None
+
+    @pytest.mark.parametrize(
+        "reveal",
+        [
+            "not json",
+            "[]",
+            '{"width": "320", "height": 240, "keyframes": []}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "sky"}]}',
+            '{"width": 1000000, "height": 240, "keyframes": []}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "../x.jpg", "ops": []}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "sky", "ops": []}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [["s", 0, 1, 1]]}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [["a", 0, 0, 1]]}]}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "a", "image": "kf_00.jpg", '
+            '"ops": [{"x": 1}]}]}',
+            "[" * 100_000,
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_malformed_reveal_fails_and_cleans_up(
+        self, workspace: WorkspaceState, reveal: str
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        first = await run_painting_program(workspace)
+        assert isinstance(first, PaintSuccess)
+        _write_program(workspace, _REWRITE_REVEAL % reveal + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert "reveal.json is malformed" in result.error
+        assert [p.name for p in workspace.paintings_dir.iterdir()] == [first.version.token]
+        assert workspace.painting == first.version
+
+    @pytest.mark.parametrize(
+        "replace", ["os.mkfifo(p)", "os.mkdir(p)", "os.symlink('/etc/hosts', p)"]
+    )
+    @pytest.mark.asyncio
+    async def test_reveal_that_is_not_a_regular_file_fails(
+        self, workspace: WorkspaceState, replace: str
+    ) -> None:
+        swap = f"""
+import atexit, os, sys
+p = os.path.join({_OUT_DIR}, "reveal.json")
+atexit.register(lambda: (os.unlink(p), {replace}))
+"""
+        _write_program(workspace, swap + PROGRAM)
+
+        result = await asyncio.wait_for(run_painting_program(workspace), timeout=60)
+
+        assert isinstance(result, PaintFailure), result
+        assert "Could not read the painting's reveal.json" in result.error
+        assert list(workspace.paintings_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_tampered_human_input_fails_and_cleans_up(
+        self, workspace: WorkspaceState
+    ) -> None:
+        swap = """
+import atexit, os, sys
+p = sys.argv[sys.argv.index('--human') + 1]
+atexit.register(lambda: (os.unlink(p), os.mkdir(p)))
+"""
+        _write_program(workspace, swap + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert list(workspace.paintings_dir.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        ("tamper", "message"),
+        [
+            ("os.unlink(j(out, 'preview.jpg'))", "preview.jpg"),
+            (
+                "(os.unlink(j(out, 'final.png')), os.symlink('/etc/hosts', j(out, 'final.png')))",
+                "final.png is missing or not a regular file",
+            ),
+            ("os.unlink(j(out, 'kf_00.jpg'))", "kf_00.jpg is missing or not a regular file"),
+            (
+                "(os.rename(out, out + '.moved'), os.symlink(out + '.moved', out))",
+                "output directory was moved or replaced",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_tampered_assets_fail_and_leave_no_version(
+        self, workspace: WorkspaceState, tamper: str, message: str
+    ) -> None:
+        program = f"""
+import atexit, os, sys
+j = os.path.join
+out = {_OUT_DIR}
+atexit.register(lambda: {tamper})
+"""
+        _write_program(workspace, program + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert message in result.error
+        left = list(workspace.paintings_dir.iterdir())
+        assert all(p.name.endswith(".moved") for p in left)  # only what the program moved
+        assert workspace.painting is None
 
 
 class TestRasterGallery:

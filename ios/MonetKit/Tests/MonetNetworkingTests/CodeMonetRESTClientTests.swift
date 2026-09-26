@@ -54,8 +54,156 @@ private actor MutableTokenBox: TokenProviding {
     func setToken(_ newValue: String?) { token = newValue }
 }
 
+private actor RecoveringTransport: HTTPTransport {
+    private(set) var headers: [String?] = []
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        let header = request.value(forHTTPHeaderField: "Authorization")
+        headers.append(header)
+        let status = header == "Bearer renewed" ? 200 : 401
+        let body = #"{"id":"u1","email":"a@example.com","is_active":true}"#.data(using: .utf8)!
+        let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+        return (body, response)
+    }
+}
+
+private actor AlwaysUnauthorizedTransport: HTTPTransport {
+    private(set) var headers: [String?] = []
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        headers.append(request.value(forHTTPHeaderField: "Authorization"))
+        let response = HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!
+        return (Data(), response)
+    }
+}
+
+private actor SessionStore: AuthSessionStore {
+    private var session: AuthSession?
+    init(_ session: AuthSession) { self.session = session }
+    func load() -> AuthSession? { session }
+    func save(_ session: AuthSession) { self.session = session }
+    func clear() { session = nil }
+}
+
+private actor PendingStore: PendingAuthorizationStore {
+    func load() -> PendingAuthorization? { nil }
+    func save(_ authorization: PendingAuthorization) {}
+    func clear() {}
+}
+
+private struct RotatingIdentityClient: MagicLinkAuthenticationClient {
+    func requestMagicLink(email: String, codeChallenge: String) async throws -> MagicLinkRequestResult {
+        MagicLinkRequestResult(accepted: true)
+    }
+    func exchangeAuthorizationCode(code: String, codeVerifier: String) async throws -> AuthSession {
+        AuthSession(bearerToken: "renewed", refreshToken: "refresh-2")
+    }
+    func refreshSession(refreshToken: String) async throws -> AuthSession {
+        AuthSession(bearerToken: "renewed", refreshToken: "refresh-2")
+    }
+    func fetchIdentity(bearerToken: String) async throws -> HouseholdIdentity {
+        HouseholdIdentity(email: "a@example.com")
+    }
+}
+
 @Suite("CodeMonetRESTClient")
 struct CodeMonetRESTClientTests {
+    @Test("a real Platform controller rotates and persists the token used by the replay")
+    @MainActor
+    func platformRecoveryComposesWithRESTClient() async throws {
+        let cached = AuthSession(
+            bearerToken: "expired",
+            refreshToken: "refresh-1",
+            expiresAt: Date().addingTimeInterval(600)
+        )
+        let store = SessionStore(cached)
+        let controller = AuthenticationController(
+            client: RotatingIdentityClient(),
+            sessionStore: store,
+            pendingAuthorizationStore: PendingStore()
+        )
+        await controller.restoreSession()
+        let transport = RecoveringTransport()
+        let tokenBox = MutableTokenBox()
+        await tokenBox.setToken("expired")
+        let client = CodeMonetRESTClient(
+            baseURL: URL(string: "http://localhost:8000")!,
+            tokenProvider: tokenBox,
+            transport: transport,
+            onUnauthorized: { rejected in
+                await controller.handleUnauthorizedRequest(bearerToken: rejected)
+                return await controller.session?.bearerToken
+            }
+        )
+
+        let user = try await client.currentUser()
+
+        #expect(user.id == "u1")
+        #expect(await store.load()?.refreshToken == "refresh-2")
+        #expect(await transport.headers == ["Bearer expired", "Bearer renewed"])
+    }
+
+    @Test("a rejected read refreshes through Platform and replays once with the replacement")
+    func rejectedReadUsesReplacementToken() async throws {
+        let transport = RecoveringTransport()
+        let client = CodeMonetRESTClient(
+            baseURL: URL(string: "http://localhost:8000")!,
+            tokenProvider: StubTokenProvider(token: "expired"),
+            transport: transport,
+            onUnauthorized: { rejected in
+                #expect(rejected == "expired")
+                return "renewed"
+            }
+        )
+
+        let user = try await client.currentUser()
+
+        #expect(user.id == "u1")
+        #expect(await transport.headers == ["Bearer expired", "Bearer renewed"])
+    }
+
+    @Test("without a replacement, a rejected read keeps its original failure")
+    func rejectedReadWithoutReplacementDoesNotReplay() async {
+        let transport = RecoveringTransport()
+        let client = CodeMonetRESTClient(
+            baseURL: URL(string: "http://localhost:8000")!,
+            tokenProvider: StubTokenProvider(token: "expired"),
+            transport: transport,
+            onUnauthorized: { _ in "expired" }
+        )
+
+        do {
+            _ = try await client.currentUser()
+            Issue.record("expected unauthorized response")
+        } catch MobileAPIError.unauthorized {
+            #expect(await transport.headers == ["Bearer expired"])
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
+    @Test("a second rejection reports the refreshed bearer and stops after one replay")
+    func rejectedReplacementEndsRecovery() async {
+        let transport = AlwaysUnauthorizedTransport()
+        let rejected = MutableTokenBox()
+        let client = CodeMonetRESTClient(
+            baseURL: URL(string: "http://localhost:8000")!,
+            tokenProvider: StubTokenProvider(token: "expired"),
+            transport: transport,
+            onUnauthorized: { _ in "renewed" },
+            onRecoveredTokenRejected: { token in await rejected.setToken(token) }
+        )
+
+        do {
+            _ = try await client.currentUser()
+            Issue.record("expected unauthorized response")
+        } catch MobileAPIError.unauthorized {
+            #expect(await rejected.currentToken() == "renewed")
+            #expect(await transport.headers == ["Bearer expired", "Bearer renewed"])
+        } catch {
+            Issue.record("unexpected error: \(error)")
+        }
+    }
+
     @Test("decodes /auth/me")
     func decodesCurrentUser() async throws {
         let json = #"{"id":"u1","email":"a@example.com","is_active":true}"#.data(using: .utf8)!

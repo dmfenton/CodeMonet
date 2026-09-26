@@ -104,9 +104,11 @@ public actor TraceSpanBuffer {
         }
     }
 
-    public func stopAutoFlush() {
-        autoFlushTask?.cancel()
+    public func stopAutoFlush() async {
+        let task = autoFlushTask
+        task?.cancel()
         autoFlushTask = nil
+        await task?.value
     }
 
     @discardableResult

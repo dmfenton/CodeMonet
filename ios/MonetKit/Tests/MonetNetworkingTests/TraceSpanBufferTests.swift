@@ -116,10 +116,10 @@ struct TraceSpanBufferTests {
         let buffer = TraceSpanBuffer(baseURL: URL(string: "http://localhost:8000")!, transport: transport, sleeper: sleeper)
         await buffer.record(makeSpan())
         await buffer.startAutoFlush(interval: 10)
-        // The sleeper never actually waits, so the loop free-runs; give the
-        // scheduler a few turns to let at least one tick land.
-        for _ in 0 ..< 50 where await transport.requestCount == 0 {
-            await Task.yield()
+        // Wait for the observable flush rather than assuming a fixed number
+        // of scheduler turns is enough under a busy test runner.
+        for _ in 0 ..< 100 where await transport.requestCount == 0 {
+            try? await Task.sleep(for: .milliseconds(1))
         }
         await buffer.stopAutoFlush()
         #expect(await transport.requestCount >= 1)
