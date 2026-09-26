@@ -91,7 +91,11 @@ jobs:
     # Dedicated signing account on the laptop pool: never shared with fork PR
     # code (this workflow only ever runs from tags / workflow_dispatch).
     runs-on: [self-hosted, codemonet-ios, laptop, dedicated-signing]
-    timeout-minutes: 120
+    # Lock-wait budget (60m) + build/upload headroom (90m): must exceed the
+    # wait budget below, since a concurrent ci.yml iOS run can legitimately
+    # hold the lock for most of its own wait window before this job's build
+    # and TestFlight upload ever start.
+    timeout-minutes: 150
 
     steps:
       - name: Checkout code
@@ -100,21 +104,11 @@ jobs:
       - name: Acquire shared macOS CI lock
         env:
           LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        run: |
-          set -euo pipefail
-          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
-          for attempt in $(seq 1 360); do
-            if mkdir "$LOCK_DIR" 2>/dev/null; then
-              printf '%s\n' "$LOCK_OWNER" > "$LOCK_DIR/owner"
-              exit 0
-            fi
-            if (( attempt % 6 == 1 )); then
-              echo "Waiting for shared macOS CI lock held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
-            fi
-            sleep 10
-          done
-          echo "::error::Timed out waiting for shared macOS CI lock"
-          exit 1
+        # wait_seconds=3600 (60m, leaves >=90m of the 150m job timeout for
+        # the actual build+upload). stale_seconds=9000 (150m): longer than
+        # any job that can hold this lock, so a live job's lock is never
+        # mistaken for one abandoned by a dead runner.
+        run: .github/scripts/macos-ci-lock.sh acquire "$LOCK_OWNER" 3600 9000
 
       - name: Resolve platform pin
         id: platform
@@ -226,13 +220,7 @@ jobs:
         if: always()
         env:
           LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        run: |
-          set -euo pipefail
-          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
-          if [[ "$(cat "$LOCK_DIR/owner" 2>/dev/null || true)" == "$LOCK_OWNER" ]]; then
-            rm -f "$LOCK_DIR/owner"
-            rmdir "$LOCK_DIR"
-          fi
+        run: .github/scripts/macos-ci-lock.sh release "$LOCK_OWNER"
 
   skip-report:
     name: Report Skipped Build

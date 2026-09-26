@@ -235,7 +235,11 @@ jobs:
     # Physical laptop runner, not isolable like the Linux PR pool: fork PRs
     # must never run here. Same-repo PRs and pushes are trusted.
     runs-on: [self-hosted, codemonet-ios, laptop]
-    timeout-minutes: 30
+    # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
+    # budget below, since a legitimately-held lock (e.g. a concurrent
+    # testflight.yml build-ios run) can make this job wait most of that
+    # budget before swift test / xcodebuild ever start.
+    timeout-minutes: 90
     needs: changes
     if: >-
       needs.changes.outputs.ios == 'true' &&
@@ -248,21 +252,11 @@ jobs:
       - name: Acquire shared macOS CI lock
         env:
           LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        run: |
-          set -euo pipefail
-          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
-          for attempt in $(seq 1 360); do
-            if mkdir "$LOCK_DIR" 2>/dev/null; then
-              printf '%s\n' "$LOCK_OWNER" > "$LOCK_DIR/owner"
-              exit 0
-            fi
-            if (( attempt % 6 == 1 )); then
-              echo "Waiting for shared macOS CI lock held by $(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
-            fi
-            sleep 10
-          done
-          echo "::error::Timed out waiting for shared macOS CI lock"
-          exit 1
+        # wait_seconds=2700 (45m, leaves >=45m of the 90m job timeout for
+        # the actual build). stale_seconds=9000 (150m): longer than any
+        # job that can hold this lock (build-ios's own 150m timeout), so a
+        # live job's lock is never mistaken for an abandoned one.
+        run: .github/scripts/macos-ci-lock.sh acquire "$LOCK_OWNER" 2700 9000
 
       - name: Resolve platform pin
         id: platform
@@ -295,13 +289,7 @@ jobs:
         if: always()
         env:
           LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        run: |
-          set -euo pipefail
-          LOCK_DIR="$HOME/.fenton-ci-macos.lock"
-          if [[ "$(cat "$LOCK_DIR/owner" 2>/dev/null || true)" == "$LOCK_OWNER" ]]; then
-            rm -f "$LOCK_DIR/owner"
-            rmdir "$LOCK_DIR"
-          fi
+        run: .github/scripts/macos-ci-lock.sh release "$LOCK_OWNER"
 
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
