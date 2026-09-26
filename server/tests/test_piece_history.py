@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import Iterator
@@ -16,6 +17,7 @@ from code_monet.auth.dependencies import get_current_user
 from code_monet.db import User
 from code_monet.main import _init_message, _painting_ref
 from code_monet.orchestrator import AgentOrchestrator
+from code_monet.program_painting import PaintFailure, PaintSuccess, run_painting_program
 from code_monet.routes import gallery as gallery_routes
 from code_monet.routes import paintings as paintings_routes
 from code_monet.types import DrawingStyleType, PaintingVersion, Path, PathType, Point
@@ -56,9 +58,16 @@ async def _record(
     vdir = state.paintings_dir / token
     vdir.mkdir(parents=True)
     (vdir / "final.png").write_bytes(b"png")
-    return await state.record_painting_version(
-        token, 320, 240, stages if stages is not None else ["ground"], ops=ops
+    version = await state.record_painting_version(
+        token,
+        320,
+        240,
+        stages if stages is not None else ["ground"],
+        ops=ops,
+        generation=state.painting_generation,
     )
+    assert version is not None
+    return version
 
 
 def _gallery_json(state: WorkspaceState, piece_number: int) -> dict:
@@ -143,6 +152,65 @@ class TestWorkspaceVersionHistory:
 
         restarted = await _record(workspace, ops=5)
         assert restarted.version == 1
+
+    @pytest.mark.asyncio
+    async def test_save_dual_writes_legacy_painting_key(self, workspace: WorkspaceState) -> None:
+        await workspace.save()
+        data = json.loads((workspace._user_dir / "workspace.json").read_text())
+        assert data["painting"] is None and data["painting_versions"] == []
+
+        await _record(workspace, ops=10)
+        v2 = await _record(workspace, ops=25)
+
+        data = json.loads((workspace._user_dir / "workspace.json").read_text())
+        assert [v["version"] for v in data["painting_versions"]] == [1, 2]
+        assert data["painting"] == v2.model_dump()
+
+    @pytest.mark.asyncio
+    async def test_malformed_persisted_versions_are_skipped(self, tmp_path: FilePath) -> None:
+        user_dir = tmp_path / str(uuid.uuid4())
+        user_dir.mkdir()
+        good = {
+            "piece_number": 3,
+            "version": 2,
+            "token": "a" * 32,
+            "image_width": 320,
+            "image_height": 240,
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+        versions = [{"version": "x"}, "junk", None, good]
+        (user_dir / "workspace.json").write_text(
+            json.dumps({"piece_number": 3, "painting_versions": versions})
+        )
+
+        state = WorkspaceState(user_dir.name, user_dir)
+        await state._load_from_file()
+
+        assert [v.version for v in state.painting_versions] == [2]
+        assert state.piece_number == 3
+
+    @pytest.mark.asyncio
+    async def test_non_list_persisted_versions_load_empty(self, tmp_path: FilePath) -> None:
+        user_dir = tmp_path / str(uuid.uuid4())
+        user_dir.mkdir()
+        (user_dir / "workspace.json").write_text(json.dumps({"painting_versions": {"a": 1}}))
+
+        state = WorkspaceState(user_dir.name, user_dir)
+        await state._load_from_file()
+
+        assert state.painting_versions == []
+
+    @pytest.mark.asyncio
+    async def test_stale_generation_is_not_recorded(self, workspace: WorkspaceState) -> None:
+        generation = workspace.painting_generation
+        await workspace.clear_canvas()
+
+        stale = await workspace.record_painting_version(
+            "c" * 32, 320, 240, [], ops=1, generation=generation
+        )
+
+        assert stale is None
+        assert workspace.painting_versions == []
 
 
 def _handler_workspace(state: WorkspaceState) -> MagicMock:
@@ -330,6 +398,30 @@ class TestOwnerPieceEndpoint:
         assert data["versions"][1]["ops"] == 25
 
     @pytest.mark.asyncio
+    async def test_malformed_versions_fall_back_to_final_image(
+        self, workspace: WorkspaceState, client: TestClient
+    ) -> None:
+        v = await _record(workspace, ops=10)
+        await workspace.save_to_gallery()
+        path = workspace._user_dir / "gallery" / "piece_000000.json"
+        piece = json.loads(path.read_text())
+        piece["versions"] = [{"version": "not-a-number"}, "junk"]
+        path.write_text(json.dumps(piece))
+
+        response = client.get("/gallery/0/strokes")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [(x["version"], x["asset_base"]) for x in data["versions"]] == [
+            (1, v.asset_base(workspace.user_id))
+        ]
+        assert data["stroke_count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_missing_piece_is_404(self, client: TestClient) -> None:
+        assert client.get("/gallery/7/strokes").status_code == 404
+
+    @pytest.mark.asyncio
     async def test_legacy_raster_piece_synthesizes_version(
         self, workspace: WorkspaceState, client: TestClient
     ) -> None:
@@ -426,6 +518,21 @@ class TestPublicPieceEndpoint:
         assert entry["stroke_count"] == 10
 
     @pytest.mark.asyncio
+    async def test_listing_skips_unreadable_piece(
+        self, public_workspace: tuple[WorkspaceState, TestClient]
+    ) -> None:
+        state, client = public_workspace
+        await _record(state, ops=10)
+        await state.save_to_gallery()
+        bad = {"piece_number": "abc", "versions": ["junk"], "strokes": 5}
+        (state._user_dir / "gallery" / "piece_000009.json").write_text(json.dumps(bad))
+
+        response = client.get("/public/gallery")
+
+        assert response.status_code == 200
+        assert [e["piece_number"] for e in response.json()] == [0]
+
+    @pytest.mark.asyncio
     async def test_legacy_raster_piece_synthesizes_version(
         self, public_workspace: tuple[WorkspaceState, TestClient]
     ) -> None:
@@ -474,7 +581,7 @@ class TestInitPayload:
 
         assert ref is not None
         assert ref["version"] == 2 and ref["asset_base"] == v2.asset_base(workspace.user_id)
-        assert ref["prompt"] == "a stormy sea"
+        assert "prompt" not in ref  # Clients read the top-level init.prompt
         assert [v["version"] for v in ref["versions"]] == [1, 2]
         assert all(set(v) == VERSION_REF_KEYS for v in ref["versions"])
 
@@ -530,8 +637,139 @@ class TestProgramAsset:
         assert ok.text == "cv.ground('#fff')\n"
         assert ok.headers["content-type"] == "text/plain; charset=utf-8"
         assert ok.headers["cache-control"] == "public, max-age=31536000, immutable"
+        assert ok.headers["x-content-type-options"] == "nosniff"
         base = f"/painting-assets/{user_id}"
         assert client.get(f"{base}/{token}/human.json").status_code == 404
         assert client.get(f"{base}/{token}/other.py").status_code == 404
         assert client.get(f"{base}/{'b' * 32}/painting.py").status_code == 404
         assert client.get(f"{base}/not-a-token/painting.py").status_code == 404
+
+
+class TestGalleryRobustness:
+    def test_malformed_versions_read_as_final_image(self) -> None:
+        data = {
+            "piece_number": 2,
+            "strokes": [{}],
+            "image_token": "d" * 32,
+            "image_width": 1600,
+            "image_height": 1200,
+            "versions": [{"version": 1, "token": 5}, None],
+        }
+
+        fields = piece_detail_fields(data, "user-1", raster=True)
+
+        assert [v["asset_base"] for v in fields["versions"]] == [
+            f"/painting-assets/user-1/{'d' * 32}/"
+        ]
+        assert fields["stroke_count"] == 1
+
+    def test_unusable_final_image_yields_no_versions(self) -> None:
+        data = {"image_token": "d" * 32, "image_width": "wide", "versions": "junk"}
+
+        assert piece_detail_fields(data, "user-1", raster=True)["versions"] == []
+        assert piece_stroke_count({"versions": ["junk"], "strokes": "junk"}) == 0
+
+    @pytest.mark.asyncio
+    async def test_scan_skips_bad_piece(self, workspace: WorkspaceState) -> None:
+        await workspace.add_strokes([_human_stroke()])
+        await workspace.save_to_gallery()
+        gallery = workspace._user_dir / "gallery"
+        (gallery / "piece_000008.json").write_text(json.dumps({"piece_number": "abc"}))
+        (gallery / "piece_000009.json").write_text(
+            json.dumps({"piece_number": 9, "versions": ["junk"], "width": "wide"})
+        )
+
+        entries = await workspace.list_gallery()
+
+        assert [e.piece_number for e in entries] == [0]
+
+
+class _FakeProc:
+    """Paint-runner stand-in: runs `during` while "painting", then reports success."""
+
+    returncode = 0
+
+    def __init__(self, during: object) -> None:
+        self._during = during
+
+    async def communicate(self) -> tuple[bytes, bytes]:
+        await self._during()  # type: ignore[operator]
+        summary = {"width": 320, "height": 240, "stages": ["ground"], "ops": 3}
+        return json.dumps(summary).encode(), b""
+
+
+class TestPaintRunGuards:
+    def _program(self, state: WorkspaceState, source: str = "cv.ground('#fff')\n") -> None:
+        state.studio_program.parent.mkdir(parents=True, exist_ok=True)
+        state.studio_program.write_text(source)
+
+    def _fake_runner(self, monkeypatch: pytest.MonkeyPatch, during: object) -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        async def create_subprocess_exec(*args: str, **_: object) -> _FakeProc:
+            calls.append(list(args))
+            return _FakeProc(during)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_uninterrupted_run_records_published_program(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._program(workspace, "cv.ground('#abc')\n")
+
+        async def nothing() -> None:
+            return None
+
+        calls = self._fake_runner(monkeypatch, nothing)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintSuccess), result
+        published = workspace.paintings_dir / result.version.token / "painting.py"
+        assert published.read_text() == "cv.ground('#abc')\n"
+        [args] = calls
+        assert args[args.index("--program") + 1] == str(published)
+        assert workspace.painting_versions == [result.version]
+
+    @pytest.mark.parametrize("reset", ["clear", "new_canvas"])
+    @pytest.mark.asyncio
+    async def test_run_finishing_after_reset_is_discarded(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch, reset: str
+    ) -> None:
+        self._program(workspace)
+
+        async def reset_canvas() -> None:
+            if reset == "clear":
+                await workspace.clear_canvas()
+            else:
+                await workspace.new_canvas(prompt="next piece")
+
+        self._fake_runner(monkeypatch, reset_canvas)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure)
+        assert result.error == (
+            "The canvas was reset while this program ran; its result was discarded."
+        )
+        assert workspace.painting_versions == []
+        assert list(workspace.paintings_dir.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_symlinked_program_is_refused(
+        self, workspace: WorkspaceState, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        secret = tmp_path / "secret.py"
+        secret.write_text("SECRET = 1\n")
+        workspace.studio_program.parent.mkdir(parents=True, exist_ok=True)
+        workspace.studio_program.symlink_to(secret)
+        calls = self._fake_runner(monkeypatch, AsyncMock())
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure)
+        assert "symlink" in result.error
+        assert calls == []
+        assert not workspace.paintings_dir.exists() or not any(workspace.paintings_dir.iterdir())

@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import secrets
 import shutil
 import sys
@@ -48,15 +49,28 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
     """Execute studio/painting.py in a subprocess; on success record a new version."""
     started = time.monotonic()
     program = state.studio_program
+    program_name = program.relative_to(state.workspace_dir)
+    if program.is_symlink():
+        return PaintFailure(
+            f"{program_name} is a symlink. Write your painting program as a regular file.", 0.0
+        )
     if not program.exists():
         return PaintFailure(
-            f"No program yet. Write your painting program to {program.relative_to(state.workspace_dir)} first.",
-            0.0,
+            f"No program yet. Write your painting program to {program_name} first.", 0.0
         )
+    try:
+        source = _read_no_follow(program)
+    except OSError as e:
+        return PaintFailure(f"Could not read {program_name}: {e.strerror or e}", 0.0)
 
+    # A run that finishes after new_canvas/clear belongs to no current piece.
+    generation = state.painting_generation
     token = secrets.token_hex(16)
     out_dir = state.paintings_dir / token
     out_dir.mkdir(parents=True)
+    # Run the published copy, so the served program is exactly what rendered.
+    published_program = out_dir / "painting.py"
+    published_program.write_bytes(source)
     width = state.canvas.width * RENDER_SCALE
     height = state.canvas.height * RENDER_SCALE
     human_file = out_dir / "human.json"
@@ -67,7 +81,7 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
         "-m",
         "code_monet.tools.paint_runner",
         "--program",
-        str(program),
+        str(published_program),
         "--out",
         str(out_dir),
         "--width",
@@ -106,14 +120,19 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
     lines = stdout.decode(errors="replace").strip().splitlines()
     summary = json.loads(lines[-1])
     human_file.unlink(missing_ok=True)
-    shutil.copyfile(program, out_dir / "painting.py")
     version = await state.record_painting_version(
         token,
         int(summary["width"]),
         int(summary["height"]),
         list(summary["stages"]),
         ops=int(summary["ops"]),
+        generation=generation,
     )
+    if version is None:
+        shutil.rmtree(out_dir, ignore_errors=True)
+        return PaintFailure(
+            "The canvas was reset while this program ran; its result was discarded.", seconds
+        )
     logger.info(
         f"User {state.user_id}: painting v{version.version} rendered in {seconds:.1f}s "
         f"({version.ops} ops, {len(version.stages)} stages)"
@@ -124,6 +143,13 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
         final=out_dir / "final.png",
         seconds=seconds,
     )
+
+
+def _read_no_follow(path: FilePath) -> bytes:
+    """Read a file without following a symlink at its final component."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    with os.fdopen(fd, "rb") as f:
+        return f.read()
 
 
 def _human_strokes(state: WorkspaceState) -> list[list[list[float]]]:

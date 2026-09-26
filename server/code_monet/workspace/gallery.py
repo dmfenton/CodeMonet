@@ -14,6 +14,10 @@ from code_monet.types import DrawingStyleType, GalleryEntry, PaintingVersion, Pa
 
 logger = logging.getLogger(__name__)
 
+# What a malformed gallery record raises when read (pydantic's ValidationError
+# and json.JSONDecodeError are ValueErrors).
+_MALFORMED = (ValueError, TypeError, AttributeError)
+
 
 class PieceDetailFields(TypedDict):
     """Piece metadata shared by the owner and public piece detail payloads."""
@@ -35,23 +39,37 @@ def piece_versions(data: dict[str, Any]) -> list[PaintingVersion]:
     Pieces saved before version history was recorded carry only the final
     `image_token`; they read as a single version with unknown stages and ops.
     """
-    piece_number = int(data.get("piece_number", 0))
+    piece_number = data.get("piece_number", 0)
     stored = data.get("versions")
     if isinstance(stored, list) and stored:
-        return [PaintingVersion.model_validate({**v, "piece_number": piece_number}) for v in stored]
+        try:
+            return [
+                PaintingVersion.model_validate({**v, "piece_number": piece_number}) for v in stored
+            ]
+        except _MALFORMED as e:
+            logger.warning(f"Piece {piece_number}: malformed versions, using final image: {e}")
+    return _final_image_version(data, piece_number)
+
+
+def _final_image_version(data: dict[str, Any], piece_number: Any) -> list[PaintingVersion]:
+    """The piece's final image as its only version (unknown stages and ops)."""
     token = data.get("image_token")
     if not isinstance(token, str):
         return []
-    return [
-        PaintingVersion(
-            piece_number=piece_number,
-            version=1,
-            token=token,
-            image_width=int(data.get("image_width", 0)),
-            image_height=int(data.get("image_height", 0)),
-            created_at=data.get("created_at", ""),
-        )
-    ]
+    try:
+        return [
+            PaintingVersion(
+                piece_number=piece_number,
+                version=1,
+                token=token,
+                image_width=data.get("image_width", 0),
+                image_height=data.get("image_height", 0),
+                created_at=data.get("created_at", ""),
+            )
+        ]
+    except _MALFORMED as e:
+        logger.warning(f"Piece {piece_number}: malformed final image record: {e}")
+        return []
 
 
 def piece_stroke_count(data: dict[str, Any]) -> int:
@@ -61,11 +79,12 @@ def piece_stroke_count(data: dict[str, Any]) -> int:
     count is its final version's ops; vector pieces count their strokes.
     """
     versions = data.get("versions")
-    if isinstance(versions, list) and versions:
+    if isinstance(versions, list) and versions and isinstance(versions[-1], dict):
         ops = versions[-1].get("ops")
         if isinstance(ops, int):
             return ops
-    return len(data.get("strokes", []))
+    strokes = data.get("strokes")
+    return len(strokes) if isinstance(strokes, list) else 0
 
 
 def piece_detail_fields(data: dict[str, Any], user_id: str, *, raster: bool) -> PieceDetailFields:
@@ -128,7 +147,8 @@ async def scan_gallery_entries(gallery_dir: FilePath) -> list[GalleryEntry]:
                     format=data.get("format", "strokes"),
                 )
             )
-        except (json.JSONDecodeError, OSError):
+        except (OSError, *_MALFORMED) as e:
+            logger.warning(f"Skipping unreadable gallery file {entry}: {e}")
             continue
 
     result.sort(key=lambda p: p.piece_number)
@@ -177,7 +197,7 @@ async def scan_gallery_with_strokes(gallery_dir: FilePath) -> list[SavedCanvas]:
                     title=data.get("title"),
                 )
             )
-        except (json.JSONDecodeError, KeyError) as e:
+        except (KeyError, *_MALFORMED) as e:
             logger.warning(f"Skipping corrupted gallery file {entry}: {e}")
             continue
 
@@ -205,19 +225,24 @@ async def load_gallery_piece(
                 async with aiofiles.open(piece_file) as f:
                     data = json.loads(await f.read())
 
-                strokes = [Path.model_validate(s) for s in data.get("strokes", [])]
-                drawing_style = parse_drawing_style(data.get("drawing_style", "plotter"))
-                return (
-                    strokes,
-                    drawing_style,
-                    data.get("width", 800),
-                    data.get("height", 600),
-                )
+                return parse_gallery_piece(data)
             except (json.JSONDecodeError, KeyError) as e:
                 logger.warning(f"Failed to load gallery piece {piece_number}: {e}")
                 return None
 
     return None
+
+
+def parse_gallery_piece(
+    data: dict[str, Any],
+) -> tuple[list[Path], DrawingStyleType, int, int]:
+    """(strokes, drawing_style, width, height) from gallery piece JSON."""
+    return (
+        [Path.model_validate(s) for s in data.get("strokes", [])],
+        parse_drawing_style(data.get("drawing_style", "plotter")),
+        data.get("width", 800),
+        data.get("height", 600),
+    )
 
 
 async def read_gallery_piece_json(

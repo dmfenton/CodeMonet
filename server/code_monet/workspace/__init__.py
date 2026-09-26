@@ -86,6 +86,8 @@ class WorkspaceState:
         self._current_piece_prompt: str | None = None  # User's direction for current piece
         # Every rendered version of the current program painting, oldest first (paint mode)
         self._painting_versions: list[PaintingVersion] = []
+        # Bumped whenever the painting resets, so stale paint runs can be discarded
+        self._painting_generation: int = 0
         self._loaded = False
 
         # Pending strokes for client-side rendering
@@ -153,7 +155,7 @@ class WorkspaceState:
             self._pending_strokes = data.get("pending_strokes", [])
             self._stroke_batch_id = data.get("stroke_batch_id", 0)
             self._current_piece_prompt = data.get("current_piece_prompt")
-            self._painting_versions = _load_painting_versions(data)
+            self._painting_versions = _load_painting_versions(data, self.user_id)
 
             logger.info(
                 f"Workspace loaded for user {self.user_id}: "
@@ -208,6 +210,8 @@ class WorkspaceState:
                 "pending_strokes": self._pending_strokes,
                 "stroke_batch_id": self._stroke_batch_id,
                 "painting_versions": [v.model_dump() for v in self._painting_versions],
+                # Latest version under the legacy key, so an older server can still load it
+                "painting": self.painting.model_dump() if self.painting else None,
                 "updated_at": datetime.now(UTC).isoformat(),
             }
 
@@ -292,6 +296,11 @@ class WorkspaceState:
         return list(self._painting_versions)
 
     @property
+    def painting_generation(self) -> int:
+        """Changes whenever the painting resets (new canvas, clear)."""
+        return self._painting_generation
+
+    @property
     def paintings_dir(self) -> FilePath:
         """Directory holding rendered painting versions, one subdirectory per token."""
         return self._user_dir / "paintings"
@@ -309,8 +318,16 @@ class WorkspaceState:
         stages: list[str],
         *,
         ops: int,
-    ) -> PaintingVersion:
-        """Make a rendered version the current picture of this piece."""
+        generation: int,
+    ) -> PaintingVersion | None:
+        """Make a rendered version the current picture of this piece.
+
+        `generation` is `painting_generation` captured when the run started;
+        if the painting was reset since, the result belongs to no piece and
+        nothing is recorded (returns None).
+        """
+        if generation != self._painting_generation:
+            return None
         latest = self.painting
         version = PaintingVersion(
             piece_number=self._piece_number,
@@ -329,6 +346,7 @@ class WorkspaceState:
     def _reset_painting(self) -> None:
         """Forget the current painting; the next program starts from scratch."""
         self._painting_versions = []
+        self._painting_generation += 1
         self.studio_program.unlink(missing_ok=True)
 
     @property
@@ -494,7 +512,11 @@ class WorkspaceState:
     async def gallery_raster(self, piece_number: int) -> tuple[str, str] | None:
         """(image_token, final image path) for a raster gallery piece, else None."""
         data = await self.gallery_piece_data(piece_number)
-        token = data.get("image_token") if data else None
+        return self.raster_final(data) if data else None
+
+    def raster_final(self, data: dict[str, Any]) -> tuple[str, str] | None:
+        """(image_token, final image path) for gallery piece JSON, if its image exists."""
+        token = data.get("image_token")
         if not isinstance(token, str):
             return None
         path = self.paintings_dir / token / "final.png"
@@ -522,10 +544,22 @@ class WorkspaceState:
         return await load_gallery_piece(self._gallery_dir, piece_number)
 
 
-def _load_painting_versions(data: dict[str, Any]) -> list[PaintingVersion]:
-    """Painting versions from workspace.json; older files stored only the latest."""
+def _load_painting_versions(data: dict[str, Any], user_id: str) -> list[PaintingVersion]:
+    """Painting versions from workspace.json; older files stored only the latest.
+
+    Malformed entries are skipped so one bad record cannot block loading.
+    """
     versions = data.get("painting_versions")
     if versions is None:
         painting = data.get("painting")
         versions = [painting] if painting else []
-    return [PaintingVersion.model_validate(v) for v in versions]
+    if not isinstance(versions, list):
+        logger.warning(f"User {user_id}: ignoring malformed painting_versions in workspace.json")
+        return []
+    loaded: list[PaintingVersion] = []
+    for entry in versions:
+        try:
+            loaded.append(PaintingVersion.model_validate(entry))
+        except ValueError as e:
+            logger.warning(f"User {user_id}: skipping malformed painting version: {e}")
+    return loaded

@@ -5,6 +5,7 @@ import json
 import logging
 import traceback
 from contextlib import asynccontextmanager
+from pathlib import Path as FilePath
 from typing import Any
 
 import uvicorn
@@ -157,7 +158,6 @@ def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
         "image_width": painting.image_width,
         "image_height": painting.image_height,
         "versions": [v.ref(state.user_id).model_dump() for v in state.painting_versions],
-        "prompt": state.current_piece_prompt,
     }
 
 
@@ -332,5 +332,5 @@ if __name__ == "__main__":
         reload=True,
         # Watch source only: agent workspaces under data/ hold *.py painting
         # programs, and writing one must not restart the server mid-run.
-        reload_dirs=["code_monet"],
+        reload_dirs=[str(FilePath(__file__).parent)],
     )

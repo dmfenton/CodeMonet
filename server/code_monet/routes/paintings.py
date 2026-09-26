@@ -39,5 +39,8 @@ async def get_painting_asset(user_id: str, token: str, file: str) -> FileRespons
     return FileResponse(
         path,
         media_type=_MEDIA[path.suffix],
-        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

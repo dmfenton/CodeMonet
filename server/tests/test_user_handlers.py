@@ -113,6 +113,16 @@ class TestHandleNewCanvas:
         mock_workspace.state.new_canvas.assert_awaited_once_with(
             width=800, height=600, prompt="a stormy sea"
         )
+        mock_workspace.agent.add_nudge.assert_called_once_with("a stormy sea")
+
+    @pytest.mark.asyncio
+    async def test_blank_direction_is_neither_prompt_nor_nudge(
+        self, mock_workspace: MagicMock
+    ) -> None:
+        await handle_new_canvas(mock_workspace, {"direction": "   "})
+
+        mock_workspace.state.new_canvas.assert_awaited_once_with(width=800, height=600, prompt=None)
+        mock_workspace.agent.add_nudge.assert_not_called()
 
 
 class TestHandleResume:

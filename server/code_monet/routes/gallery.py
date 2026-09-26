@@ -10,7 +10,7 @@ from code_monet.auth.dependencies import CurrentUser
 from code_monet.db import get_session, repository
 from code_monet.routes.canvas import get_user_state, render_strokes_to_png
 from code_monet.types import get_style_config
-from code_monet.workspace.gallery import piece_detail_fields
+from code_monet.workspace.gallery import parse_gallery_piece, piece_detail_fields
 
 router = APIRouter()
 
@@ -27,13 +27,15 @@ async def get_gallery_list(user: CurrentUser) -> list[dict[str, Any]]:
 async def get_gallery_piece_strokes(piece_number: int, user: CurrentUser) -> dict[str, Any]:
     """Get strokes for a gallery piece (read-only, no workspace mutation)."""
     state = await get_user_state(user)
-    result = await state.load_from_gallery(piece_number)
-    if not result:
+    data = await state.gallery_piece_data(piece_number)
+    if data is None:
         raise HTTPException(status_code=404, detail="Piece not found")
-    strokes, drawing_style, width, height = result
+    try:
+        strokes, drawing_style, width, height = parse_gallery_piece(data)
+    except (KeyError, ValueError) as e:
+        raise HTTPException(status_code=404, detail="Piece not found") from e
     style_config = get_style_config(drawing_style)
-    raster = await state.gallery_raster(piece_number)
-    data = await state.gallery_piece_data(piece_number) or {}
+    raster = state.raster_final(data)
     return {
         **piece_detail_fields(data, user.id, raster=raster is not None),
         "strokes": [s.model_dump() for s in strokes],

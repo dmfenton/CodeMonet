@@ -110,10 +110,10 @@ async def handle_new_canvas(
     )
     workspace.agent.reset_container()
 
-    # If direction provided, add it as an initial nudge for the new piece
-    if direction:
-        workspace.agent.add_nudge(direction)
-        logger.info(f"User {workspace.user_id}: new canvas with direction: {direction}")
+    # The prompt is also the new piece's first nudge
+    if prompt:
+        workspace.agent.add_nudge(prompt)
+        logger.info(f"User {workspace.user_id}: new canvas with direction: {prompt}")
 
     # If drawing_style provided, persist it so the agent gets the right prompt
     style_str = message.get("drawing_style") if message else None

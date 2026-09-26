@@ -20,7 +20,7 @@ random 32-char hex capability id. Files:
 | `final.png` | Final image (identical content to the last keyframe) |
 | `preview.jpg` | Final image downscaled to ≤1200px wide |
 | `reveal.json` | Stage labels and brush footprints (below) |
-| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`) |
+| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`). The run executes this published copy, and a symlinked `studio/painting.py` is refused. |
 
 Served without auth (capability URL, like share tokens):
 
@@ -29,7 +29,9 @@ GET /painting-assets/{user_id}/{token}/{file}
 ```
 
 `file` must match `kf_\d{2}\.jpg|final\.png|preview\.jpg|reveal\.json|painting\.py`.
-Responses are immutable (`Cache-Control: public, max-age=31536000, immutable`).
+Responses are immutable (`Cache-Control: public, max-age=31536000, immutable`)
+and carry `X-Content-Type-Options: nosniff`. Programs are public for pieces
+in public galleries, like their images.
 
 ### reveal.json
 
@@ -101,8 +103,7 @@ animation; clients never send `animation_done` for versions.
       "ops": 2100,
       "created_at": "2026-09-26T12:00:00+00:00"
     }
-  ],
-  "prompt": "a stormy sea"
+  ]
 }
 ```
 
@@ -117,7 +118,13 @@ the agent names the piece; clients see it on the next `init` or in the gallery.
 `new_canvas` and `clear` reset the painting to none (blank canvas) and its
 version list to empty. `new_canvas` with a `direction` records it as the new
 piece's prompt (after saving the previous piece); `new_canvas` without one and
-`clear` reset the prompt to `null`.
+`clear` reset the prompt to `null`. A paint run that finishes after the
+painting was reset is discarded rather than recorded into the new piece.
+
+`workspace.json` stores the list as `painting_versions` and also writes the
+latest version under the legacy `painting` key so an older server can load it.
+Pieces in progress when version history shipped have only their latest version
+in history.
 
 ## Client playback
 
@@ -164,6 +171,8 @@ treat them as a single version built from `image_token` (stages `[]`, ops `0`).
 
 The gallery listing's `stroke_count` is the final version's `ops` for raster
 pieces (vector stroke count otherwise, including legacy raster pieces).
+A malformed `versions` list reads as the legacy single version, and an
+unreadable piece is skipped in listings rather than failing them.
 
 Thumbnail/OG/share endpoints serve the stored final image. Clients showing a
 raster gallery piece load `/painting-assets/{user_id}/{token}/final.png`.

@@ -140,8 +140,8 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
                 if data.get("title"):
                     piece_entry["title"] = data["title"]
                 pieces.append(piece_entry)
-            except (json.JSONDecodeError, OSError):
-                pass
+            except (OSError, ValueError, TypeError, AttributeError):
+                continue  # One unreadable piece must not break the listing
 
     # Sort by created_at descending (most recent first across all users)
     pieces.sort(key=lambda p: p.get("created_at", ""), reverse=True)
