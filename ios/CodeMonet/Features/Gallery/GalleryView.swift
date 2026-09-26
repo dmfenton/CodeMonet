@@ -65,7 +65,9 @@ struct GalleryView: View {
                 environment.navigation.galleryFocusPiece = nil
                 path = [focus]
             }
-            await refresh()
+            // The socket init already carries the gallery. Fetch only when
+            // it has not arrived yet; pull to refresh remains explicit.
+            if allEntries.isEmpty { await refresh() }
         }
     }
 

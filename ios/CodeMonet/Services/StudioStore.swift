@@ -24,15 +24,15 @@ public final class StudioStore {
     /// `.disconnected` directly.
     public private(set) var connected = false
 
-    /// Fires on a live `4001`/auth-failure close, or a REST 401/403
-    /// (protocol-state spec §1.2, net-auth spec §9.2 point 2, §6) — the app
-    /// shell wires this to `AuthService.signOut(ifBearerTokenMatches:)`.
+    /// Fires on a live `4001`/auth-failure close, or a REST 401/403.
+    /// The app shell asks Platform to recover the rejected bearer.
     /// Not wired here: `StudioStore` only knows `TokenProviding`, never the
     /// concrete `AuthService`. Carries the bearer token the failing
     /// call/socket actually used, so a stale event from a connection already
     /// superseded by a reconnect holding a freshly rotated token can't
     /// incorrectly sign out a session that's actually fine.
     public var onAuthenticationFailure: (@Sendable (String) async -> Void)?
+    public var onRecoveredTokenRejected: (@Sendable (String) async -> Void)?
 
     let socket: StudioWebSocketClient
     private var rest: CodeMonetRESTClient
@@ -80,7 +80,13 @@ public final class StudioStore {
         rest = CodeMonetRESTClient(
             baseURL: environment.apiBaseURL,
             tokenProvider: tokenProvider,
-            onUnauthorized: { [weak self] token in await self?.onAuthenticationFailure?(token) }
+            onUnauthorized: { [weak self] token in
+                await self?.onAuthenticationFailure?(token)
+                return await self?.tokenProvider.currentToken()
+            },
+            onRecoveredTokenRejected: { [weak self] token in
+                await self?.onRecoveredTokenRejected?(token)
+            }
         )
     }
 
