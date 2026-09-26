@@ -11,7 +11,6 @@ from code_monet.tools import (
     set_draw_callback,
     set_get_canvas_callback,
     set_paint_callback,
-    set_piece_title_callback,
     set_workspace_dir_callback,
 )
 
@@ -28,7 +27,6 @@ def setup_tool_callbacks(
     canvas_height: int,
     on_paths_collected: Callable[[list[Path], bool], Coroutine[Any, Any, None]],
     run_paint: Callable[[], Coroutine[Any, Any, PaintResult]] | None = None,
-    on_piece_titled: Callable[[str], Coroutine[Any, Any, None]] | None = None,
 ) -> None:
     """Set up all tool callbacks for an agent turn.
 
@@ -39,7 +37,6 @@ def setup_tool_callbacks(
         canvas_height: Canvas height in pixels
         on_paths_collected: Callback when paths are drawn (paths, done_flag)
         run_paint: Runs the painting program and publishes the version (paint mode)
-        on_piece_titled: Called after name_piece stores the piece's title
     """
     set_paint_callback(run_paint)
 
@@ -58,15 +55,6 @@ def setup_tool_callbacks(
         return state.workspace_dir
 
     set_workspace_dir_callback(get_workspace_dir)
-
-    # Set up piece title callback for name_piece tool
-    async def set_piece_title(title: str) -> None:
-        state.current_piece_title = title
-        await state.save()
-        if on_piece_titled:
-            await on_piece_titled(title)
-
-    set_piece_title_callback(set_piece_title)
 
     # Set canvas dimensions
     set_canvas_dimensions(canvas_width, canvas_height)

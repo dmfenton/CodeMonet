@@ -7,10 +7,19 @@ from typing import Any
 
 from claude_agent_sdk import tool
 
-from .callbacks import get_piece_title_callback
 from .quality_gate import finish_block_message
 
 logger = logging.getLogger(__name__)
+
+MAX_TITLE_LENGTH = 100
+
+
+def normalize_title(raw: object) -> str | None:
+    """The stored form of a name_piece title, or None if there is no usable title."""
+    if not isinstance(raw, str):
+        return None
+    title = raw.strip()[:MAX_TITLE_LENGTH]
+    return title or None
 
 
 async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
@@ -24,9 +33,8 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Tool result confirming the title
     """
-    title = args.get("title", "")
-
-    if not title or not isinstance(title, str):
+    title = normalize_title(args.get("title"))
+    if title is None:
         return {
             "content": [{"type": "text", "text": "Error: Please provide a title for the piece"}],
             "is_error": True,
@@ -39,19 +47,8 @@ async def handle_name_piece(args: dict[str, Any]) -> dict[str, Any]:
             "is_error": True,
         }
 
-    # Clean up the title
-    title = title.strip()
-    if len(title) > 100:
-        title = title[:100]
-
-    # Store the title via callback if available
-    _set_piece_title_callback = get_piece_title_callback()
-    if _set_piece_title_callback is not None:
-        try:
-            await _set_piece_title_callback(title)
-            logger.info(f"Piece titled: {title}")
-        except Exception as e:
-            logger.warning(f"Failed to save piece title: {e}")
+    # The calling agent's orchestrator stores and broadcasts the title from its
+    # own tool-completion hook (per workspace; tool callbacks are process-global).
 
     # Build response
     content: list[dict[str, Any]] = [

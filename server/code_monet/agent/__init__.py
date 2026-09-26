@@ -112,7 +112,6 @@ class AgentCallbacks:
     on_code_start: Callable[[ToolCallInfo], Coroutine[Any, Any, None]] | None = None
     on_code_result: Callable[[CodeExecutionResult], Coroutine[Any, Any, None]] | None = None
     on_error: Callable[[str, str | None], Coroutine[Any, Any, None]] | None = None
-    on_piece_titled: Callable[[str], Coroutine[Any, Any, None]] | None = None
 
 
 logger = logging.getLogger(__name__)
@@ -613,7 +612,6 @@ class DrawingAgent:
             canvas_height=state.canvas.height,
             on_paths_collected=on_draw,
             run_paint=run_paint,
-            on_piece_titled=cb.on_piece_titled,
         )
 
         try:

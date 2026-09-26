@@ -20,7 +20,6 @@ from .callbacks import (
     set_draw_callback,
     set_get_canvas_callback,
     set_paint_callback,
-    set_piece_title_callback,
     set_workspace_dir_callback,
 )
 from .critique import critique_canvas, handle_critique_canvas
@@ -80,7 +79,6 @@ __all__ = [
     "set_get_canvas_callback",
     "set_add_strokes_callback",
     "set_workspace_dir_callback",
-    "set_piece_title_callback",
     "set_paint_callback",
     "handle_paint",
     "set_canvas_dimensions",

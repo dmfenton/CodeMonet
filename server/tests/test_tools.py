@@ -24,8 +24,8 @@ from code_monet.tools import (
     set_canvas_dimensions,
     set_draw_callback,
     set_get_canvas_callback,
-    set_piece_title_callback,
 )
+from code_monet.tools.naming import normalize_title
 from code_monet.tools.quality_gate import critique_gate_message
 from code_monet.types import Path, PathType
 
@@ -328,7 +328,6 @@ class TestHandleCritiqueCanvas:
     @pytest.mark.asyncio
     async def test_failed_critique_blocks_finish_tools_until_pass(self) -> None:
         collected_strokes: list[Path] = []
-        saved_title: str | None = None
         done_flag = False
 
         async def add_strokes(paths: list[Path]) -> None:
@@ -338,13 +337,8 @@ class TestHandleCritiqueCanvas:
             nonlocal done_flag
             done_flag = done
 
-        async def save_title(title: str) -> None:
-            nonlocal saved_title
-            saved_title = title
-
         set_add_strokes_callback(add_strokes)
         set_draw_callback(draw_callback)
-        set_piece_title_callback(save_title)
         set_get_canvas_callback(None)
         set_canvas_dimensions(800, 600)
 
@@ -356,7 +350,6 @@ class TestHandleCritiqueCanvas:
 
         name_result = await handle_name_piece({"title": "Premature Title"})
         assert name_result["is_error"] is True
-        assert saved_title is None
 
         draw_result = await handle_draw_paths(
             {
@@ -814,76 +807,33 @@ class TestHandleSignCanvas:
 
 
 class TestHandleNamePiece:
-    """Tests for handle_name_piece function."""
+    """name_piece validates and confirms; the orchestrator stores the title."""
 
     @pytest.mark.asyncio
     async def test_name_piece_success(self) -> None:
-        """Test successful naming."""
-        saved_title: str | None = None
         record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
-
-        async def save_title(title: str) -> None:
-            nonlocal saved_title
-            saved_title = title
-
-        set_piece_title_callback(save_title)
 
         result = await handle_name_piece({"title": "Whispers at Dusk"})
 
         assert "is_error" not in result or result["is_error"] is False
-        assert saved_title == "Whispers at Dusk"
         assert "Whispers at Dusk" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
     async def test_name_piece_empty_title(self) -> None:
-        """Test error when title is empty."""
-        set_piece_title_callback(None)
-
-        result = await handle_name_piece({"title": ""})
+        result = await handle_name_piece({"title": "   "})
 
         assert result.get("is_error") is True
         assert "provide a title" in result["content"][0]["text"]
 
     @pytest.mark.asyncio
     async def test_name_piece_missing_title(self) -> None:
-        """Test error when title is missing."""
-        set_piece_title_callback(None)
-
         result = await handle_name_piece({})
 
         assert result.get("is_error") is True
 
-    @pytest.mark.asyncio
-    async def test_name_piece_long_title_truncation(self) -> None:
-        """Test that very long titles are truncated."""
-        saved_title: str | None = None
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
-
-        async def save_title(title: str) -> None:
-            nonlocal saved_title
-            saved_title = title
-
-        set_piece_title_callback(save_title)
-
-        long_title = "A" * 150
-        result = await handle_name_piece({"title": long_title})
-
-        assert "is_error" not in result or result["is_error"] is False
-        assert saved_title is not None
-        assert len(saved_title) == 100
-
-    @pytest.mark.asyncio
-    async def test_name_piece_whitespace_stripped(self) -> None:
-        """Test that whitespace is stripped from title."""
-        saved_title: str | None = None
-        record_critique_result("VERDICT: PASS\nFINDINGS:\n- ready")
-
-        async def save_title(title: str) -> None:
-            nonlocal saved_title
-            saved_title = title
-
-        set_piece_title_callback(save_title)
-
-        await handle_name_piece({"title": "  Sunset Reverie  "})
-
-        assert saved_title == "Sunset Reverie"
+    def test_normalize_title(self) -> None:
+        assert normalize_title("  Sunset Reverie  ") == "Sunset Reverie"
+        assert normalize_title("A" * 150) == "A" * 100
+        assert normalize_title("   ") is None
+        assert normalize_title(None) is None
+        assert normalize_title(42) is None

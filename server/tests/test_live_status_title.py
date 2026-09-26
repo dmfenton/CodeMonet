@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from code_monet.agent.callbacks import setup_tool_callbacks
 from code_monet.main import _init_message
 from code_monet.orchestrator import AgentOrchestrator
 from code_monet.types import AgentTurnComplete, PieceTitleMessage, TurnStateMessage
@@ -71,54 +70,54 @@ class TestTurnState:
 
 
 class TestPieceTitle:
-    @pytest.mark.asyncio
-    async def test_naming_the_piece_broadcasts_its_title(self) -> None:
-        orchestrator, broadcast = _orchestrator(_agent(MagicMock()))
-
-        callback = orchestrator.create_callbacks().on_piece_titled
-        assert callback is not None
-        await callback("Harbor Fog")
-
-        [message] = _broadcast_types(broadcast)
-        assert message == PieceTitleMessage(piece_number=7, title="Harbor Fog")
+    """The title is stored and announced by the naming agent's own orchestrator."""
 
     @pytest.mark.asyncio
-    async def test_title_tool_callback_saves_then_notifies(self) -> None:
-        state = MagicMock()
+    async def test_successful_name_piece_stores_and_broadcasts_title(self) -> None:
+        agent = _agent(MagicMock())
+        state = agent.get_state.return_value
         state.save = AsyncMock()
-        notified: list[str] = []
+        orchestrator, broadcast = _orchestrator(agent)
 
-        async def on_piece_titled(title: str) -> None:
-            assert state.current_piece_title == title
-            state.save.assert_awaited()
-            notified.append(title)
+        await orchestrator._handle_tool_complete("name_piece", {"title": "  Harbor Fog "}, 1, "", 0)
 
-        # Patch every global registration so this test leaks no tool callbacks.
-        with (
-            patch.multiple(
-                "code_monet.agent.callbacks",
-                set_paint_callback=MagicMock(),
-                set_draw_callback=MagicMock(),
-                set_get_canvas_callback=MagicMock(),
-                set_add_strokes_callback=MagicMock(),
-                set_workspace_dir_callback=MagicMock(),
-                set_canvas_dimensions=MagicMock(),
-            ),
-            patch("code_monet.agent.callbacks.set_piece_title_callback") as register,
-        ):
-            setup_tool_callbacks(
-                state=state,
-                get_canvas_png=lambda: b"",
-                canvas_width=800,
-                canvas_height=600,
-                on_paths_collected=AsyncMock(),
-                on_piece_titled=on_piece_titled,
-            )
-            [set_title] = register.call_args.args
+        assert state.current_piece_title == "Harbor Fog"
+        state.save.assert_awaited()
+        titles = [m for m in _broadcast_types(broadcast) if isinstance(m, PieceTitleMessage)]
+        assert titles == [PieceTitleMessage(piece_number=7, title="Harbor Fog")]
 
-        await set_title("Storm")
+    @pytest.mark.asyncio
+    async def test_failed_or_empty_name_piece_changes_nothing(self) -> None:
+        agent = _agent(MagicMock())
+        state = agent.get_state.return_value
+        state.current_piece_title = None
+        state.save = AsyncMock()
+        orchestrator, broadcast = _orchestrator(agent)
 
-        assert notified == ["Storm"]
+        await orchestrator._handle_tool_complete("name_piece", {"title": "Blocked"}, 1, "", 1)
+        await orchestrator._handle_tool_complete("name_piece", {"title": "   "}, 1, "", 0)
+
+        assert state.current_piece_title is None
+        assert not [m for m in _broadcast_types(broadcast) if isinstance(m, PieceTitleMessage)]
+
+    @pytest.mark.asyncio
+    async def test_each_workspace_records_only_its_own_title(self) -> None:
+        """Concurrent users: one agent's name_piece never reaches another workspace."""
+        agent_a, agent_b = _agent(MagicMock()), _agent(MagicMock())
+        for agent in (agent_a, agent_b):
+            agent.get_state.return_value.save = AsyncMock()
+            agent.get_state.return_value.current_piece_title = None
+        orchestrator_a, broadcast_a = _orchestrator(agent_a)
+        orchestrator_b, broadcast_b = _orchestrator(agent_b)
+
+        await orchestrator_a._handle_tool_complete("name_piece", {"title": "A's piece"}, 1, "", 0)
+
+        assert agent_a.get_state.return_value.current_piece_title == "A's piece"
+        assert agent_b.get_state.return_value.current_piece_title is None
+        assert not [m for m in _broadcast_types(broadcast_b) if isinstance(m, PieceTitleMessage)]
+        assert [
+            m.title for m in _broadcast_types(broadcast_a) if isinstance(m, PieceTitleMessage)
+        ] == ["A's piece"]
 
 
 @pytest.mark.asyncio
@@ -131,39 +130,6 @@ async def test_init_reports_turn_active(tmp_path: Path) -> None:
     assert (await _init_message(workspace, paused=False))["turn_active"] is False
     init = await _init_message(workspace, paused=False, turn_active=True)
     assert init["turn_active"] is True
-
-
-class _StopTurn(Exception):
-    pass
-
-
-@pytest.mark.asyncio
-async def test_openai_agent_wires_the_title_callback() -> None:
-    from code_monet.agent import AgentCallbacks
-    from code_monet.agent.openai_agent import OpenAIDrawingAgent
-
-    state = MagicMock()
-    state.save = AsyncMock()
-    agent = OpenAIDrawingAgent(state=state)
-    agent._paused = False
-    on_piece_titled = AsyncMock()
-    captured: dict[str, Any] = {}
-
-    def capture(**kwargs: Any) -> None:
-        captured.update(kwargs)
-        raise _StopTurn
-
-    with (
-        patch("code_monet.agent.openai_agent.settings") as settings,
-        patch("code_monet.agent.openai_agent.AsyncOpenAI"),
-        patch("code_monet.agent.openai_agent.setup_tool_callbacks", side_effect=capture),
-        pytest.raises(_StopTurn),
-    ):
-        settings.openai_api_key = "test"
-        async for _ in agent.run_turn(AgentCallbacks(on_piece_titled=on_piece_titled)):
-            pass
-
-    assert captured["on_piece_titled"] is on_piece_titled
 
 
 class TestConnectInit:

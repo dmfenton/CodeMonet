@@ -24,12 +24,10 @@ class TestSetupToolCallbacks:
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")
     @patch("code_monet.agent.callbacks.set_add_strokes_callback")
     @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
     @patch("code_monet.agent.callbacks.set_canvas_dimensions")
     def test_sets_canvas_dimensions(
         self,
         mock_set_dimensions: MagicMock,
-        _mock_set_title: MagicMock,
         _mock_set_workspace: MagicMock,
         _mock_set_add_strokes: MagicMock,
         _mock_set_canvas: MagicMock,
@@ -54,12 +52,10 @@ class TestSetupToolCallbacks:
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")
     @patch("code_monet.agent.callbacks.set_add_strokes_callback")
     @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
     @patch("code_monet.agent.callbacks.set_canvas_dimensions")
     def test_registers_all_callbacks(
         self,
         _mock_set_dimensions: MagicMock,
-        mock_set_title: MagicMock,
         mock_set_workspace: MagicMock,
         mock_set_add_strokes: MagicMock,
         mock_set_canvas: MagicMock,
@@ -83,18 +79,15 @@ class TestSetupToolCallbacks:
         mock_set_canvas.assert_called_once_with(get_canvas_png)
         mock_set_add_strokes.assert_called_once()
         mock_set_workspace.assert_called_once()
-        mock_set_title.assert_called_once()
 
     @patch("code_monet.agent.callbacks.set_draw_callback")
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")
     @patch("code_monet.agent.callbacks.set_add_strokes_callback")
     @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
     @patch("code_monet.agent.callbacks.set_canvas_dimensions")
     def test_draw_callback_receives_on_paths_collected(
         self,
         _mock_set_dimensions: MagicMock,
-        _mock_set_title: MagicMock,
         _mock_set_workspace: MagicMock,
         _mock_set_add_strokes: MagicMock,
         _mock_set_canvas: MagicMock,
@@ -120,13 +113,11 @@ class TestSetupToolCallbacks:
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")
     @patch("code_monet.agent.callbacks.set_add_strokes_callback")
     @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
     @patch("code_monet.agent.callbacks.set_canvas_dimensions")
     @pytest.mark.asyncio
     async def test_workspace_dir_callback_returns_correct_path(
         self,
         _mock_set_dimensions: MagicMock,
-        _mock_set_title: MagicMock,
         mock_set_workspace: MagicMock,
         _mock_set_add_strokes: MagicMock,
         _mock_set_canvas: MagicMock,
@@ -154,13 +145,11 @@ class TestSetupToolCallbacks:
     @patch("code_monet.agent.callbacks.set_get_canvas_callback")
     @patch("code_monet.agent.callbacks.set_add_strokes_callback")
     @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
     @patch("code_monet.agent.callbacks.set_canvas_dimensions")
     @pytest.mark.asyncio
     async def test_add_strokes_callback_adds_to_state(
         self,
         _mock_set_dimensions: MagicMock,
-        _mock_set_title: MagicMock,
         _mock_set_workspace: MagicMock,
         mock_set_add_strokes: MagicMock,
         _mock_set_canvas: MagicMock,
@@ -192,42 +181,3 @@ class TestSetupToolCallbacks:
         await registered_callback(paths)
 
         state.add_strokes.assert_awaited_once_with(paths)
-
-    @patch("code_monet.agent.callbacks.set_draw_callback")
-    @patch("code_monet.agent.callbacks.set_get_canvas_callback")
-    @patch("code_monet.agent.callbacks.set_add_strokes_callback")
-    @patch("code_monet.agent.callbacks.set_workspace_dir_callback")
-    @patch("code_monet.agent.callbacks.set_piece_title_callback")
-    @patch("code_monet.agent.callbacks.set_canvas_dimensions")
-    @pytest.mark.asyncio
-    async def test_piece_title_callback_sets_title_and_saves(
-        self,
-        _mock_set_dimensions: MagicMock,
-        mock_set_title: MagicMock,
-        _mock_set_workspace: MagicMock,
-        _mock_set_add_strokes: MagicMock,
-        _mock_set_canvas: MagicMock,
-        _mock_set_draw: MagicMock,
-    ) -> None:
-        """Piece title callback sets title and saves state."""
-        state = self._create_mock_state()
-        get_canvas_png = MagicMock(return_value=b"png data")
-        on_paths_collected = AsyncMock()
-
-        setup_tool_callbacks(
-            state=state,
-            get_canvas_png=get_canvas_png,
-            canvas_width=800,
-            canvas_height=600,
-            on_paths_collected=on_paths_collected,
-        )
-
-        # Get the registered callback
-        registered_callback = mock_set_title.call_args[0][0]
-
-        # Call the callback
-        await registered_callback("Sunset Dreams")
-
-        # Verify title was set and state was saved
-        assert state.current_piece_title == "Sunset Dreams"
-        state.save.assert_called_once()

@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
+from code_monet.tools.naming import normalize_title
 from code_monet.tools.quality_gate import (
     get_quality_gate_snapshot,
     is_finish_gate_blocked,
@@ -230,7 +231,6 @@ class AgentOrchestrator:
             on_code_start=self._handle_code_start,
             on_code_result=self._handle_code_result,
             on_error=self._handle_error,
-            on_piece_titled=self._handle_piece_titled,
         )
 
     @property
@@ -241,13 +241,6 @@ class AgentOrchestrator:
     async def _set_turn_active(self, active: bool) -> None:
         self._turn_active = active
         await self.broadcaster.broadcast(TurnStateMessage(active=active))
-
-    async def _handle_piece_titled(self, title: str) -> None:
-        """Tell clients the piece's name as soon as the agent picks it."""
-        state = self.agent.get_state()
-        await self.broadcaster.broadcast(
-            PieceTitleMessage(piece_number=state.piece_number, title=title)
-        )
 
     async def _handle_thinking(self, text: str, iteration: int) -> None:
         """Handle streaming thinking updates (delta only)."""
@@ -308,6 +301,18 @@ class AgentOrchestrator:
             )
         )
 
+    async def _record_piece_title(self, tool_input: dict[str, Any] | None) -> None:
+        """Store and announce a successful name_piece title for this workspace."""
+        title = normalize_title((tool_input or {}).get("title"))
+        if title is None:
+            return
+        state = self.agent.get_state()
+        state.current_piece_title = title
+        await state.save()
+        await self.broadcaster.broadcast(
+            PieceTitleMessage(piece_number=state.piece_number, title=title)
+        )
+
     async def _handle_tool_complete(
         self,
         tool_name: str,
@@ -322,6 +327,8 @@ class AgentOrchestrator:
         client-side stroke rendering (hasInProgressEvents checks for return_code).
         """
         logger.info(f"Tool completed via PostToolUse hook: {tool_name} (iteration {iteration})")
+        if tool_name == "name_piece" and return_code == 0:
+            await self._record_piece_title(tool_input)
         await self.broadcaster.broadcast(
             CodeExecutionMessage(
                 status="completed",
