@@ -1,6 +1,6 @@
 """Subprocess entry point: execute a painting program and export the version.
 
-    python -m code_monet.tools.paint_runner --program P --out DIR --width W --height H --seed S
+    python -m code_monet.paintlib.runner --program P --out DIR --width W --height H --seed S
 
 The program runs with a ready `cv` (paintlib.Canvas) and common modules in
 scope. On success the version is in DIR (reveal.json is its record, which the

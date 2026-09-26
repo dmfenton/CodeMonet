@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A paint run whose program prints after it finishes, exits before exporting, or tampers with its output (removed or linked images, a replaced output directory) now returns a clear error to the agent instead of crashing the paint tool or recording a broken version; version metadata comes from the published `reveal.json`, not the program's stdout.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
+### Security
+
+- Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paintlib.runner` so the program's process never imports server config or loads SSM secrets.
+- Read painting version files (asset route, gallery raster, public thumbnails, workspace render) only when they are single-link regular files whose real path stays inside `paintings/{token}/`.
+- Document the program-painting threat model and the isolation that remains missing (docs/program-painting.md).
+
 ## [1.41.0] - 2026-09-26
 
 ### Added

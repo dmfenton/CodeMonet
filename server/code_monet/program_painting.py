@@ -128,12 +128,27 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
 
     # The program runs from a throwaway copy it may freely rewrite; what gets
     # published is `source`, the bytes read before the run.
-    with tempfile.TemporaryDirectory(prefix="paint-run-") as run_dir:
+    with tempfile.TemporaryDirectory(prefix="paint-run-", ignore_cleanup_errors=True) as run_dir:
         run_program = FilePath(run_dir) / "painting.py"
         run_program.write_bytes(source)
         return await _run_and_record(
             state, source, run_program, out_dir, token, generation, width, height, started
         )
+
+
+def paint_env(run_dir: FilePath) -> dict[str, str]:
+    """The whole environment of a paint run: nothing inherited from the server.
+
+    The program is agent-written and may be prompt-injected, and whatever it can
+    read may end up in public assets, so it gets no credentials or server config.
+    The runner starts isolated (`-I`), so Python path variables are not needed.
+    """
+    return {
+        "PATH": os.defpath,
+        "HOME": str(run_dir),
+        "TMPDIR": str(run_dir),
+        "LANG": "C.UTF-8",
+    }
 
 
 async def _run_and_record(
@@ -148,10 +163,12 @@ async def _run_and_record(
     started: float,
 ) -> PaintResult:
     human_file = out_dir / "human.json"
+    run_dir = run_program.parent
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
+        "-I",
         "-m",
-        "code_monet.tools.paint_runner",
+        "code_monet.paintlib.runner",
         "--program",
         str(run_program),
         "--out",
@@ -166,7 +183,8 @@ async def _run_and_record(
         str(human_file),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=state.workspace_dir,
+        cwd=run_dir,
+        env=paint_env(run_dir),
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=PAINT_TIMEOUT_S)
