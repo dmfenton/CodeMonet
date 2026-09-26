@@ -91,7 +91,9 @@ jobs:
           mkdir -p .trivy-cache
           docker run --rm \
             --volume "$PWD:/workspace:ro" \
-            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            --user "$(id -u):$(id -g)" \
+            --env TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            --volume "$PWD/.trivy-cache:/tmp/trivy-cache" \
             "$TRIVY_IMAGE" fs \
             --exit-code 1 \
             --no-progress \
