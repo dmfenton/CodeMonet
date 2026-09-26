@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Expo app screenshot tool using Playwright.
+"""Web app screenshot tool using Playwright.
 
-Captures screenshots of the Expo mobile app running in web mode for debugging.
+Captures screenshots of the Vite web app for debugging. (The mobile
+experience is now the native SwiftUI app in ios/ — see /screenshot for
+iOS Simulator captures instead.)
 
 Usage:
     uv run python scripts/app-screenshot.py [options]
@@ -20,13 +22,13 @@ Options:
     --selector S        Wait for CSS selector before capture
     --path P            URL path (default: /, or /studio for 5173 with --auth)
     --viewport WxH      Custom viewport (default: 390x844 iPhone 14 Pro)
-    --expo-port PORT    App port (8081 Expo mobile, 5173 Vite web; default: 8081)
+    --expo-port PORT    Vite dev server port (default: 5173)
     --backend-port PORT Backend server port for auth (default: 8000)
     --canvas-only       Capture only the canvas element (the painting itself)
     --out FILE          Output file path (default: screenshots/app-{timestamp}.png)
 
 Prerequisites:
-    - Expo web server running: cd app && npx expo start --web
+    - Vite web server running: cd web && npm run dev
     - Backend server running (if using --auth): make server
     - Playwright installed: uv run playwright install chromium
 """
@@ -40,7 +42,7 @@ from datetime import datetime
 from pathlib import Path
 
 # Constants
-DEFAULT_EXPO_PORT = 8081
+DEFAULT_EXPO_PORT = 5173
 DEFAULT_BACKEND_PORT = 8000
 DEFAULT_VIEWPORT = (390, 844)  # iPhone 14 Pro
 SCREENSHOT_DIR = Path("screenshots")
@@ -136,7 +138,7 @@ def screenshot_app(
     canvas_only: bool = False,
     out: str | None = None,
 ) -> str | None:
-    """Take a screenshot of the Expo web app.
+    """Take a screenshot of the Vite web app.
 
     Args:
         path: URL path to navigate to
@@ -144,7 +146,7 @@ def screenshot_app(
         wait: Seconds to wait before screenshot
         selector: CSS selector to wait for before capture
         viewport: (width, height) tuple for viewport size
-        expo_port: Expo web server port
+        expo_port: Vite web server port
         backend_port: Backend server port (for auth token)
         start_prompt: If provided, enter this prompt in HomePanel and submit to enter studio
 
@@ -213,7 +215,7 @@ def screenshot_app(
         except Exception as e:
             print_error(
                 f"Failed to load {url}: {e}\n"
-                f"Is Expo web server running? (cd app && npx expo start --web)"
+                f"Is the Vite web server running? (cd web && npm run dev)"
             )
             browser.close()
             return None
@@ -284,7 +286,7 @@ def screenshot_app(
 def main() -> None:
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="Capture screenshots of Expo mobile app in web mode.",
+        description="Capture screenshots of the Vite web app.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -293,7 +295,7 @@ Examples:
   uv run python scripts/app-screenshot.py --path /gallery --auth
 
 Prerequisites:
-  - Expo web server: cd app && npx expo start --web
+  - Vite web server: cd web && npm run dev
   - Backend server (for --auth): make server
   - Playwright: uv run playwright install chromium
         """,
@@ -329,7 +331,7 @@ Prerequisites:
         "--expo-port",
         type=int,
         default=DEFAULT_EXPO_PORT,
-        help=f"Expo web server port (default: {DEFAULT_EXPO_PORT})",
+        help=f"Vite web server port (default: {DEFAULT_EXPO_PORT})",
     )
     parser.add_argument(
         "--backend-port",

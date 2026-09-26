@@ -1,13 +1,9 @@
-.PHONY: install dev dev-web dev-stop server server-bg server-logs server-stop server-restart app web test test-e2e test-e2e-sdk test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared e2e e2e-install
+.PHONY: install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
 
 # Install all dependencies
 install:
 	cd server && uv sync
 	npm install --legacy-peer-deps
-
-# Run server + Expo app (foreground, Ctrl+C to stop)
-dev:
-	@./scripts/dev.sh
 
 # Run server only (foreground)
 server:
@@ -60,10 +56,6 @@ cli-turn:
 cli-status:
 	cd server && uv run python -m code_monet.cli status
 
-# Run app only
-app:
-	cd app && npm start
-
 # Run web dev server only
 web:
 	cd web && npm run dev
@@ -76,14 +68,29 @@ dev-web:
 dev-stop:
 	@./scripts/kill-dev.sh
 
-# Run all tests
-test: test-server test-app
+# Run all tests: server + web + native MonetKit
+test: test-server test-web test-ios-kit
 
 test-server:
 	cd server && uv run pytest
 
-test-app:
-	cd app && npm run test
+test-web:
+	npm run test -w web
+
+# Native SwiftUI app: XcodeGen project + MonetKit Swift package
+ios-generate:
+	cd ios && $(MAKE) generate
+
+ios-build:
+	cd ios && $(MAKE) build
+
+ios-test:
+	cd ios && $(MAKE) test-app
+
+ios-kit-test:
+	cd ios && $(MAKE) test-kit
+
+test-ios-kit: ios-kit-test
 
 # E2E SDK integration tests (fetches API key from SSM)
 test-e2e-sdk:
@@ -93,39 +100,26 @@ test-e2e-sdk:
 test-record-fixture:
 	cd server && CODE_MONET_ENV=prod AWS_REGION=us-east-1 uv run pytest -m e2e tests/test_e2e_websocket_recording.py -v -k "test_record"
 
-# Run app reducer replay tests (fast, no API)
+# Run web reducer replay tests (fast, no API)
 test-replay:
-	npm run test -w app -- --testPathPattern=reducer.replay
+	npm run test -w web -- reducer.replay
 
-# Run all integration/E2E tests (excluding Maestro iOS simulator tests)
+# Run all integration/E2E tests (excluding iOS Simulator tests)
 test-e2e: test-e2e-sdk test-replay
 
 # Run tests with coverage
 coverage:
-	cd server && uv run pytest --cov=drawing_agent --cov-report=html
-	cd app && npm run test --coverage
-
-# E2E tests (iOS simulator via Maestro)
-e2e:
-	@./scripts/e2e.sh
-
-e2e-install:
-	@echo "Installing Maestro..."
-	@curl -Ls "https://get.maestro.mobile.dev" | bash
-	@echo "Add ~/.maestro/bin to your PATH if not already done"
+	cd server && uv run pytest --cov=code_monet --cov-report=html
 
 # Build shared library
 build-shared:
 	cd shared && npm run build
 
 # Lint all code
-lint: lint-server lint-app lint-shared lint-web
+lint: lint-server lint-shared lint-web
 
 lint-server:
 	cd server && uv run ruff check .
-
-lint-app:
-	cd app && npm run lint
 
 lint-shared:
 	cd shared && npm run lint
@@ -152,13 +146,10 @@ format-check-js:
 	npm run format:check
 
 # Type checking
-typecheck: typecheck-server typecheck-app typecheck-shared typecheck-web
+typecheck: typecheck-server typecheck-shared typecheck-web
 
 typecheck-server:
 	cd server && uv run python -m mypy code_monet
-
-typecheck-app:
-	cd app && npm run typecheck
 
 typecheck-shared:
 	cd shared && npm run typecheck
@@ -171,7 +162,6 @@ clean:
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".expo" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf server/.ruff_cache 2>/dev/null || true
-	rm -rf app/coverage 2>/dev/null || true
 	rm -rf shared/dist 2>/dev/null || true
+	cd ios && $(MAKE) clean

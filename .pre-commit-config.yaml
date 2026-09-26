@@ -15,3 +15,11 @@ repos:
         files: ^server/
         types: [python]
         pass_filenames: false
+      - id: npm-lockfile-sync
+        name: npm lockfile in sync (npm ci)
+        # Also require CI's platform binaries: a lock regenerated over existing
+        # node_modules drops them (npm/cli#4828) and breaks Linux CI.
+        entry: bash -c 'npm ci --dry-run --ignore-scripts --no-audit --no-fund && grep -q "node_modules/@rollup/rollup-linux-x64-gnu" package-lock.json || { echo "package-lock.json lacks Linux optional deps; rebuild from main lock with npm install"; exit 1; }'
+        language: system
+        files: (^|/)package(-lock)?\.json$
+        pass_filenames: false

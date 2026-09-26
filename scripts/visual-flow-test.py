@@ -18,13 +18,13 @@ Usage:
 Examples:
     uv run python scripts/visual-flow-test.py "draw a simple line"
     uv run python scripts/visual-flow-test.py "draw a landscape" --interval 0.5
-    uv run python scripts/visual-flow-test.py "draw shapes" --expo-port 5173 --no-headless
+    uv run python scripts/visual-flow-test.py "draw shapes" --no-headless
 
 Options:
     --interval N      Screenshot interval in seconds (default: 1.0)
     --timeout N       Max test duration in seconds (default: 120)
     --output DIR      Output directory (default: screenshots/flow-{timestamp}/)
-    --expo-port N     App port (8081 Expo mobile, 5173 Vite web; default: 8081)
+    --expo-port N     Vite dev server port (default: 5173)
     --viewport WxH    Viewport (default: 390x844 mobile, 1280x900 web)
     --renderer TYPE   Mobile renderer to select: svg or freehand (default: svg)
     --no-clear        Skip clearing canvas before test
@@ -52,7 +52,7 @@ import websockets
 BASE_URL = "http://localhost:8000"
 WS_URL = "ws://localhost:8000/ws"
 WS_MAX_SIZE = 16 * 1024 * 1024
-DEFAULT_EXPO_PORT = 8081
+DEFAULT_EXPO_PORT = 5173
 MOBILE_VIEWPORT = (390, 844)  # iPhone 14 Pro
 WEB_VIEWPORT = (1280, 900)  # Desktop studio layout
 CANVAS_SELECTOR = '[data-testid="canvas-view"]'
@@ -985,7 +985,7 @@ def main() -> None:
 Examples:
   uv run python scripts/visual-flow-test.py "draw a simple line"
   uv run python scripts/visual-flow-test.py "draw shapes" --interval 0.5
-  uv run python scripts/visual-flow-test.py "draw a cat" --expo-port 5173 --no-headless
+  uv run python scripts/visual-flow-test.py "draw a cat" --no-headless
 
 Prerequisites:
   - Dev servers running: make dev (or make dev-web for port 5173)

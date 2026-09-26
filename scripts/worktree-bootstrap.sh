@@ -125,9 +125,9 @@ fi
 echo "worktree-bootstrap: ready npm workspaces"
 
 # npm's legacy peer resolution can omit the root TypeScript peer needed by the
-# shared ESLint configuration. Reuse the locked app workspace installation.
-if [[ ! -e "$root/node_modules/typescript" && -d "$root/app/node_modules/typescript" ]]; then
-  ln -s ../app/node_modules/typescript "$root/node_modules/typescript"
+# shared ESLint configuration. Reuse the locked web workspace installation.
+if [[ ! -e "$root/node_modules/typescript" && -d "$root/web/node_modules/typescript" ]]; then
+  ln -s ../web/node_modules/typescript "$root/node_modules/typescript"
   echo "worktree-bootstrap: linked root TypeScript peer"
 fi
 

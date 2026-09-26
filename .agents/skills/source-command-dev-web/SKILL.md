@@ -21,4 +21,5 @@ The user can Ctrl+C to stop both servers cleanly.
 
 If servers are stuck, run `make dev-stop` first to force-kill by port.
 
-**Note:** For the Expo mobile app instead, use `/dev`.
+**Note:** For the native iOS app instead, build and run `ios/CodeMonet.xcodeproj`
+in Xcode or the Simulator (see `ios/Makefile` and `/screenshot`).

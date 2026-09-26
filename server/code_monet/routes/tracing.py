@@ -1,7 +1,7 @@
 """Client tracing endpoints for distributed tracing."""
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from code_monet.auth.rate_limit import TRACES_BY_IP, rate_limiter
 from code_monet.tracing import record_client_spans
@@ -21,6 +21,17 @@ class ClientSpan(BaseModel):
     attributes: dict[str, str | int | float | bool] = {}
     status: str = "ok"
     error: str | None = None
+
+    @field_validator("startTime", "endTime", mode="before")
+    @classmethod
+    def _truncate_to_millis(cls, value: float | int | None) -> int | None:
+        """Clients (Swift's `Date().timeIntervalSince1970 * 1000`, in
+        particular) send sub-millisecond-precision floats; truncate rather
+        than reject them (was a hard `int` field, so every flush from the
+        iOS client 422'd)."""
+        if value is None:
+            return None
+        return int(value)
 
 
 class TracesRequest(BaseModel):

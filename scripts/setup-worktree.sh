@@ -60,9 +60,9 @@ fi
 
 # Optional: symlink node_modules to save disk/install time
 # Uncomment if you want shared node_modules (can cause issues with different branches)
-# if [ -d "${MAIN_REPO}/app/node_modules" ] && [ ! -e app/node_modules ]; then
-#     ln -s "${MAIN_REPO}/app/node_modules" app/node_modules
-#     echo "✓ Symlinked app/node_modules"
+# if [ -d "${MAIN_REPO}/node_modules" ] && [ ! -e node_modules ]; then
+#     ln -s "${MAIN_REPO}/node_modules" node_modules
+#     echo "✓ Symlinked node_modules"
 # fi
 
 echo ""
@@ -75,8 +75,8 @@ if [ ! -d server/.venv ]; then
     echo "Run: cd server && uv sync --all-extras"
     NEEDS_INSTALL=true
 fi
-if [ ! -d app/node_modules ]; then
-    echo "Run: cd app && pnpm install"
+if [ ! -d node_modules ]; then
+    echo "Run: npm install"
     NEEDS_INSTALL=true
 fi
 

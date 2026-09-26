@@ -63,12 +63,12 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 
 ### Mobile Deployment
 
-**iOS via Expo + Fastlane**:
+**Native SwiftUI iOS app via XcodeGen + Fastlane**:
 
 - Automated TestFlight builds on version tags
 - iOS Universal Links for seamless magic link sign-in
 - Dynamic versioning from git tags
-- Pre-built native project via `expo prebuild`
+- `ios/CodeMonet.xcodeproj` generated from `ios/project.yml` by XcodeGen
 
 ### Observability
 
@@ -83,8 +83,9 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 
 - **Python**: Strict mypy, ruff formatting, async/await throughout, Pydantic validation
 - **TypeScript**: Strict mode, no `any` types, discriminated unions over runtime checks
-- **Shared library**: Platform-agnostic code shared between React Native and web
-- **Testing**: pytest + Jest with coverage reporting
+- **Swift**: `ios/MonetKit` is a standalone SwiftPM package (protocol types, reducer, performer, renderer, networking) that builds and tests without a simulator
+- **Shared library**: Platform-agnostic TypeScript used by the web app
+- **Testing**: pytest (server) + Vitest (web) + `swift test` (MonetKit)
 
 ---
 
@@ -92,18 +93,19 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 
 ```
 ┌─────────────────────┐                         ┌─────────────────────┐
-│  React Native App   │                         │   Python Backend    │
-│  (iOS / Web)        │◄── WebSocket (60fps) ──►│   (FastAPI)         │
-│                     │                         │                     │
-│  • SVG canvas       │    stroke events        │  • Claude Agent SDK │
-│  • Touch gestures   │    thinking stream      │  • In-process tools │
-│  • Real-time render │    state sync           │  • Path interpolation│
+│  Native iOS App     │                         │                     │
+│  (SwiftUI, MonetKit)│◄── WebSocket (60fps) ──►│   Python Backend    │
+├─────────────────────┤                         │   (FastAPI)         │
+│  Web App            │                         │                     │
+│  (Vite + React)     │◄── WebSocket (60fps) ──►│  • Claude Agent SDK │
+│                     │    stroke events        │  • In-process tools │
+│  • SVG/raster canvas│    thinking stream      │  • Path interpolation│
+│  • Real-time render │    state sync           │                     │
 └─────────────────────┘                         └─────────────────────┘
-         │                                               │
-         │              ┌─────────────┐                  │
-         └──────────────│   Shared    │──────────────────┘
-                        │   Library   │
-                        │ (TypeScript)│
+         │
+         │              ┌─────────────┐
+         └──────────────│ shared/ (web)│
+                        │ MonetKit (iOS)│
                         └─────────────┘
 ```
 
@@ -115,7 +117,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 | -------------- | ------------------------------------------------------- |
 | AI             | Claude Agent SDK or OpenAI Responses API, in-process tools, subprocess exec |
 | Backend        | Python 3.12+, FastAPI, SQLAlchemy async, Pydantic       |
-| Frontend       | React Native, Expo, TypeScript, react-native-svg        |
+| Frontend       | Native SwiftUI (iOS), Vite + React + TypeScript (web)   |
 | Shared         | TypeScript monorepo with npm workspaces                 |
 | Infrastructure | Fenton Platform, Terraform, AWS (EC2, ECR, Route 53, X-Ray) |
 | CI/CD          | GitHub Actions, Fastlane, Watchtower                    |
@@ -135,10 +137,12 @@ cp .env.example .env
 
 # Install and run
 make install
-make dev
+make dev-web
 ```
 
-Server runs at `localhost:8000`, app at `localhost:8081`.
+Server runs at `localhost:8000`, web app at `localhost:5173`. For the native
+iOS app, `cd ios && make generate` then open `CodeMonet.xcodeproj` in Xcode
+(or `make ios-build` for an unsigned Simulator build from the repo root).
 
 ---
 
