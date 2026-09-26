@@ -1373,11 +1373,12 @@ def output_svg_paths(svg_d_strings: list):
         run_dir = FilePath(tmp)
         script = run_dir / "generate.py"
         script.write_text(full_code, encoding="utf-8")
-        return await _run_script(script, canvas_width, canvas_height)
+        return await _run_script(script, run_dir, canvas_width, canvas_height)
 
 
-async def _run_script(script: FilePath, canvas_width: int, canvas_height: int) -> dict[str, Any]:
-    run_dir = script.parent
+async def _run_script(
+    script: FilePath, run_dir: FilePath, canvas_width: int, canvas_height: int
+) -> dict[str, Any]:
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-I",

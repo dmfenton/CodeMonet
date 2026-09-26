@@ -8,6 +8,7 @@ from pathlib import Path as FilePath
 
 import pytest
 
+from code_monet.tools import python_sandbox
 from code_monet.tools.python_sandbox import run_python_code
 
 PROBE = """
@@ -38,6 +39,8 @@ async def test_code_sees_no_server_environment(monkeypatch: pytest.MonkeyPatch) 
     assert set(seen["env"]) == {"PATH", "HOME", "TMPDIR", "LANG"}
     assert seen["env"]["PATH"] == os.defpath
     assert seen["isolated"] == 1
+    # The prelude loads no server code; agent code importing it explicitly is a
+    # documented residual (docs/program-painting.md, "Untrusted programs").
     assert seen["modules"] == []
     run_dir = FilePath(seen["env"]["HOME"])
     assert seen["env"]["TMPDIR"] == str(run_dir)
@@ -48,8 +51,24 @@ async def test_code_sees_no_server_environment(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
-async def test_paths_still_parse() -> None:
-    result = await run_python_code("output_paths([line(0, 0, 10, 10)])", 40, 30)
+@pytest.mark.parametrize(
+    "code",
+    ["output_paths([line(0, 0, 10, 10)])", 'output_svg_paths(["M 0 0 L 10 10"])'],
+)
+async def test_paths_still_parse(code: str) -> None:
+    result = await run_python_code(code, 40, 30)
 
     assert result["return_code"] == 0, result["stderr"]
     assert len(result["paths"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_timeout_kills_the_run(monkeypatch: pytest.MonkeyPatch, tmp_path: FilePath) -> None:
+    monkeypatch.setattr(python_sandbox, "PYTHON_TIMEOUT", 0.5)
+    monkeypatch.setattr(python_sandbox.tempfile, "tempdir", str(tmp_path))
+
+    result = await run_python_code("while True: pass", 40, 30)
+
+    assert result["return_code"] == -1
+    assert result["paths"] == []
+    assert list(tmp_path.glob("svg-run-*")) == []
