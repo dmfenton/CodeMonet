@@ -43,11 +43,17 @@ interface GalleryPiece {
   title?: string;
 }
 
+/** Public piece detail; fields past created_at are additive and may be absent. */
 interface PieceStrokes {
   id: string;
   strokes: unknown[];
   piece_number: number;
   created_at: string;
+  canvas_width?: number;
+  canvas_height?: number;
+  title?: string | null;
+  prompt?: string | null;
+  stroke_count?: number;
 }
 
 /**
@@ -107,7 +113,7 @@ async function createServer(): Promise<void> {
     app.use(
       '/api',
       createProxyMiddleware({
-        target: 'http://localhost:8000',
+        target: API_URL,
         changeOrigin: true,
         pathRewrite: { '^/api': '' },
       })
@@ -115,7 +121,7 @@ async function createServer(): Promise<void> {
     app.use(
       '/ws',
       createProxyMiddleware({
-        target: 'ws://localhost:8000',
+        target: API_URL.replace(/^http/, 'ws'),
         ws: true,
       })
     );
@@ -214,8 +220,12 @@ async function createServer(): Promise<void> {
                 id: pieceStrokes.id,
                 user_id: userId,
                 piece_number: pieceStrokes.piece_number,
-                stroke_count: pieceStrokes.strokes?.length ?? 0,
+                stroke_count: pieceStrokes.stroke_count ?? pieceStrokes.strokes?.length ?? 0,
+                width: pieceStrokes.canvas_width,
+                height: pieceStrokes.canvas_height,
                 created_at: pieceStrokes.created_at,
+                ...(pieceStrokes.title ? { title: pieceStrokes.title } : {}),
+                ...(pieceStrokes.prompt ? { prompt: pieceStrokes.prompt } : {}),
               },
               pieceStrokes,
             };

@@ -229,6 +229,9 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
     drawingStyle: message.drawing_style,
     styleConfig: message.style_config,
     painting: message.painting ?? null,
+    title: message.title,
+    prompt: message.prompt,
+    monologue: message.monologue,
   });
 };
 
@@ -249,6 +252,8 @@ export const handlePaintingVersion: MessageHandler<PaintingVersionMessage> = (
       image_width: message.image_width,
       image_height: message.image_height,
     },
+    stages: message.stages,
+    ops: message.ops,
   });
 };
 

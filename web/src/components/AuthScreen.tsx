@@ -4,6 +4,8 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { Icon } from './brand/Icon';
+import { Wordmark } from './brand/BrandMark';
 import './AuthScreen.css';
 
 interface AuthScreenProps {
@@ -55,65 +57,51 @@ export function AuthScreen({ onBack }: AuthScreenProps): React.ReactElement {
 
   return (
     <div className="auth-screen">
-      <div className="auth-container">
+      <div className="auth-card">
         {onBack && (
-          <button className="auth-back" onClick={onBack} type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            Back to Home
+          <button className="btn-link auth-back" onClick={onBack} type="button">
+            <Icon name="left" /> Home
           </button>
         )}
 
         <div className="auth-header">
-          <div className="auth-logo">
-            <svg viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="1.5" />
-              <path
-                d="M 12 28 Q 20 10, 28 28"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </div>
-          <h1 className="auth-title">Code Monet</h1>
-          <p className="auth-subtitle">Sign in with email</p>
+          <Wordmark size="lg" />
+          <h1 className="auth-title">Enter the studio</h1>
+          <p className="auth-subtitle">We&apos;ll email you a sign-in link.</p>
         </div>
 
         <form className="auth-form" onSubmit={handleSubmit}>
-          <div className="auth-field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={handleEmailChange}
-              placeholder="you@example.com"
-              autoComplete="email"
-              disabled={loading}
-              required
-            />
-          </div>
+          <label htmlFor="email" className="mono-label">
+            email
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={handleEmailChange}
+            placeholder="you@example.com"
+            autoComplete="email"
+            disabled={loading}
+            required
+          />
 
-          {error && <div className="auth-error">{error}</div>}
-          {success && <div className="auth-success">{success}</div>}
+          {error && (
+            <div className="auth-message is-error" role="alert">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="auth-message is-success" role="status">
+              {success}
+            </div>
+          )}
 
-          <button type="submit" className="auth-submit" disabled={loading}>
-            {loading ? (
-              <span className="auth-spinner" />
-            ) : (
-              'Send Magic Link'
-            )}
+          <button type="submit" className="btn btn-primary auth-submit" disabled={loading}>
+            {loading ? <span className="spinner spinner-sm" /> : 'Send sign-in link'}
           </button>
         </form>
 
-        <div className="auth-footer">
-          <p className="auth-note">
-            Sign-in is provided by the private Fenton identity service.
-          </p>
-        </div>
+        <p className="auth-note">Sign-in is provided by the private Fenton identity service.</p>
       </div>
     </div>
   );

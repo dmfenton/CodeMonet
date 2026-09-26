@@ -6,13 +6,13 @@
 import React, { useMemo } from 'react';
 import { CANVAS_HEIGHT, CANVAS_WIDTH } from '@code-monet/shared';
 
-// Particle colors - soft, artistic palette
+// Particle colors - Fenton palette (forest, moss, terracotta, brass)
 const PARTICLE_COLORS = [
-  'rgba(123, 104, 238, 0.3)', // Lavender
-  'rgba(78, 205, 196, 0.3)', // Teal
-  'rgba(255, 107, 107, 0.25)', // Coral
-  'rgba(255, 217, 61, 0.2)', // Gold
-  'rgba(233, 69, 96, 0.25)', // Rose
+  'rgba(31, 77, 52, 0.22)', // Forest
+  'rgba(58, 122, 83, 0.24)', // Moss
+  'rgba(184, 90, 46, 0.2)', // Terracotta
+  'rgba(196, 181, 142, 0.35)', // Brass paper
+  'rgba(148, 184, 158, 0.3)', // Lily vein
 ];
 
 const PARTICLE_COUNT = 12;

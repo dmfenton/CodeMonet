@@ -12,6 +12,7 @@ import type {
   PaintingVersionRef,
   RevealManifest,
   RevealOp,
+  RevealPacing,
   RevealSchedule,
 } from '@code-monet/shared';
 import {
@@ -19,11 +20,11 @@ import {
   PAINTING_MANIFEST_FILE,
   buildRevealSchedule,
   paintingAssetUrl,
-  parseRevealManifest,
   revealOpBounds,
   revealProgressAt,
   traceRevealOp,
 } from '@code-monet/shared';
+import { loadRevealManifest } from './revealManifest';
 
 /** Backing-store pixels per logical canvas unit. */
 const RASTER_SCALE = 2;
@@ -50,6 +51,8 @@ interface RasterRevealLayerProps {
   onPlaybackDone?: (assetBase: string) => void;
   /** Called every animation frame while playing, and once when idle. */
   onProgress?: (info: RevealPlaybackInfo) => void;
+  /** Playback pacing (default: live pacing from docs/program-painting.md). */
+  pacing?: RevealPacing;
 }
 
 const imageCache = new Map<string, Promise<HTMLImageElement>>();
@@ -73,14 +76,6 @@ function loadImage(url: string): Promise<HTMLImageElement> {
     if (oldest !== undefined) imageCache.delete(oldest);
   }
   return promise;
-}
-
-async function loadManifest(url: string): Promise<RevealManifest> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  const manifest = parseRevealManifest(await res.json());
-  if (!manifest) throw new Error(`Invalid reveal manifest: ${url}`);
-  return manifest;
 }
 
 /** Draw the whole image over the canvas. */
@@ -229,12 +224,16 @@ export function RasterRevealLayer({
   height,
   onPlaybackDone,
   onProgress,
+  pacing,
 }: RasterRevealLayerProps): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   /** asset_base whose final image the canvas currently shows in full ('' = blank). */
   const shownRef = useRef<string | null>(null);
   const callbacksRef = useRef({ onPlaybackDone, onProgress });
   callbacksRef.current = { onPlaybackDone, onProgress };
+  // Read when a version starts playing; changing it doesn't restart playback.
+  const pacingRef = useRef(pacing);
+  pacingRef.current = pacing;
   // Versions are immutable per asset_base; the effect is keyed by it.
   const playingRef = useRef(playing);
   playingRef.current = playing;
@@ -280,13 +279,13 @@ export function RasterRevealLayer({
 
     const play = async (ref: PaintingVersionRef): Promise<void> => {
       const url = (file: string): string => paintingAssetUrl(apiUrl, ref, file);
-      const manifest = await loadManifest(url(PAINTING_MANIFEST_FILE));
+      const manifest = await loadRevealManifest(url(PAINTING_MANIFEST_FILE));
       const images = await Promise.all(manifest.keyframes.map((kf) => loadImage(url(kf.image))));
       // Warm the final image while animating
       const finalImage = loadImage(url(PAINTING_FINAL_FILE));
       if (cancelled) return;
 
-      const schedule = buildRevealSchedule(manifest);
+      const schedule = buildRevealSchedule(manifest, pacingRef.current);
       const cursor: Cursor = { keyframe: 0, opsDone: 0 };
       shownRef.current = null; // canvas is mid-reveal
       const start = performance.now();

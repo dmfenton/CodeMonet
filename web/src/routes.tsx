@@ -5,6 +5,7 @@
 import React from 'react';
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router';
 import { Helmet } from 'react-helmet-async';
+import { pieceDisplayTitle } from '@code-monet/shared';
 import { useAuth } from './context/AuthContext';
 import App from './App';
 import { Homepage } from './components/Homepage';
@@ -45,24 +46,18 @@ export function AppRoutes({ initialData }: AppRoutesProps): React.ReactElement {
 }
 
 function HomepageRoute(): React.ReactElement {
-  const navigate = useNavigate();
-
-  const handleEnter = (): void => {
-    navigate('/studio');
-  };
-
   return (
     <>
       <Helmet>
         <title>Code Monet - Autonomous AI Artist</title>
         <meta
           name="description"
-          content="Code Monet - An autonomous AI artist, painting in real-time. Watch artificial intelligence create original artwork stroke by stroke."
+          content="Code Monet is an autonomous AI painter. It paints by writing code: a painting program it runs, critiques, and revises while you watch every stroke."
         />
-        <meta property="og:title" content="Code Monet - Autonomous AI Artist" />
+        <meta property="og:title" content="Code Monet - It paints by writing code" />
         <meta
           property="og:description"
-          content="Watch as artificial intelligence creates original artwork, stroke by stroke. Each piece emerges from a continuous stream of creative consciousness."
+          content="An autonomous AI painter that writes a painting program, runs it, steps back, critiques what it sees, and paints again. Watch every stroke."
         />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://monet.dmfenton.net/og-image.png" />
@@ -109,7 +104,7 @@ function HomepageRoute(): React.ReactElement {
           })}
         </script>
       </Helmet>
-      <Homepage onEnter={handleEnter} />
+      <Homepage />
     </>
   );
 }
@@ -169,11 +164,24 @@ function GalleryPieceRoute({ initialData }: { initialData?: SSRData }): React.Re
   const piece = initialData?.galleryPiece;
   const strokes = initialData?.pieceStrokes;
 
-  const pieceNumber = piece?.piece_number ?? parseInt(pieceId?.replace('piece_', '') ?? '0', 10);
-  const title = piece?.title ?? `Piece No. ${String(pieceNumber).padStart(3, '0')}`;
+  const pieceNumber =
+    strokes?.piece_number ??
+    piece?.piece_number ??
+    parseInt(pieceId?.replace('piece_', '') ?? '0', 10);
+  const prompt = strokes?.prompt?.trim() || piece?.prompt?.trim() || null;
+  const title = pieceDisplayTitle({
+    title: strokes?.title ?? piece?.title,
+    prompt,
+    pieceNumber,
+  });
+  const strokeCount = strokes?.stroke_count ?? piece?.stroke_count;
   const description =
     piece?.description ??
-    `Original artwork created by Code Monet, an autonomous AI artist. Piece ${pieceNumber} features ${piece?.stroke_count ?? 'multiple'} unique brushstrokes.`;
+    (prompt
+      ? `“${prompt}” — painted by Code Monet, an autonomous AI painter that paints by writing code.`
+      : `Original artwork painted by Code Monet, an autonomous AI painter${
+          strokeCount ? `, in ${strokeCount.toLocaleString('en-US')} strokes` : ''
+        }.`);
 
   // Generate dynamic OG image URL that can be rendered server-side
   const ogImageUrl = `https://monet.dmfenton.net/api/public/gallery/${userId}/${pieceId}/og-image.png`;
@@ -261,10 +269,12 @@ function AuthCallback(): React.ReactElement {
       {error ? (
         <div className="auth-error">
           <p>{error}</p>
-          <button onClick={handleBack}>Back to Home</button>
+          <button type="button" className="btn btn-ghost" onClick={handleBack}>
+            Back to home
+          </button>
         </div>
       ) : (
-        <div className="auth-spinner" />
+        <div className="spinner" />
       )}
     </div>
   );
@@ -281,7 +291,7 @@ function StudioRoute(): React.ReactElement {
   if (isLoading) {
     return (
       <div className="auth-loading">
-        <div className="auth-spinner" />
+        <div className="spinner" />
       </div>
     );
   }

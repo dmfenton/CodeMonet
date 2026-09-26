@@ -14,6 +14,9 @@ export * from './canvas';
 // WebSocket message handling
 export * from './websocket';
 
+// Studio view models (notebook, version history, stage bar, titles, phase)
+export * from './studio';
+
 // React hooks
 export * from './hooks';
 

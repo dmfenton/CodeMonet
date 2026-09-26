@@ -1,4 +1,4 @@
-import { renderHook } from '@testing-library/react';
+import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useWebSocket } from './useWebSocket';
 
@@ -71,5 +71,25 @@ describe('useWebSocket', () => {
     rerender({ token: 'refreshed' });
 
     expect(FakeSocket.instances.at(-1)?.url).toContain('token=refreshed');
+  });
+
+  it('ignores events from a socket it already replaced (StrictMode remount)', () => {
+    const onMessage = vi.fn();
+    const { result, rerender } = renderHook(({ token }) => useWebSocket({ onMessage, token }), {
+      initialProps: { token: 'a' },
+    });
+    const first = FakeSocket.instances[0]!;
+    rerender({ token: 'b' }); // closes the first socket, opens a second
+    const second = FakeSocket.instances.at(-1)!;
+    expect(second).not.toBe(first);
+
+    act(() => second.onopen?.());
+    expect(result.current.status).toBe('connected');
+
+    // The superseded socket's late close must not mark the live one disconnected
+    act(() => first.onclose?.({ code: 1006, reason: '' } as CloseEvent));
+    vi.advanceTimersByTime(10_000);
+    expect(result.current.status).toBe('connected');
+    expect(FakeSocket.instances).toHaveLength(2);
   });
 });

@@ -1,397 +1,119 @@
 /**
- * Auth Screen Styles
- * Uses shared theme from theme.css
+ * Auth screen and auth loading states.
  */
 
-/* Import shared theme - provides all CSS variables, fonts, and animations */
-@import '../theme.css';
-
-/* Legacy alias for backward compatibility */
-:root {
-  --text-light: var(--text-inverse);
-  --shadow-heavy: var(--shadow-xl);
-}
-
-/* ============================================
-   BASE STYLES
-   ============================================ */
-
-.auth-screen {
+.auth-screen,
+.auth-loading {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--atelier-cream);
-  padding: 2rem;
-  position: relative;
-  overflow: hidden;
-  font-family: var(--font-body);
+  padding: 24px var(--gutter);
+  background: var(--bg);
 }
 
-/* Canvas texture overlay - like homepage */
-.auth-screen::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.4;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-}
-
-/* Subtle gradient wash - like homepage hero */
-.auth-screen::after {
-  content: '';
-  position: absolute;
-  top: -20%;
-  right: -10%;
-  width: 70%;
-  height: 70%;
-  background: radial-gradient(ellipse at center, rgba(200, 184, 208, 0.2) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ============================================
-   AUTH CONTAINER - Parchment card style
-   ============================================ */
-
-.auth-container {
+.auth-card {
   width: 100%;
-  max-width: 440px;
-  background: var(--atelier-parchment);
-  border: 1px solid rgba(107, 68, 35, 0.1);
-  border-radius: 4px;
-  padding: 3rem;
-  box-shadow: var(--shadow-heavy);
-  position: relative;
-  z-index: 1;
-  animation: fadeInUp 0.6s ease-out;
+  max-width: 400px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 28px 28px 24px;
+  display: grid;
+  gap: 22px;
 }
-
-/* Subtle inner border effect */
-.auth-container::before {
-  content: '';
-  position: absolute;
-  inset: 8px;
-  border: 1px solid rgba(31, 77, 52, 0.18);
-  border-radius: 2px;
-  pointer-events: none;
-}
-
-/* ============================================
-   BACK BUTTON
-   ============================================ */
 
 .auth-back {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 2rem;
-  transition: color 0.3s ease;
+  justify-self: start;
+  font-size: 13px;
+  color: var(--muted);
 }
-
-.auth-back:hover {
-  color: var(--atelier-sienna);
-}
-
-.auth-back svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* ============================================
-   HEADER
-   ============================================ */
 
 .auth-header {
-  text-align: center;
-  margin-bottom: 2.5rem;
-}
-
-.auth-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 1.5rem;
-  color: var(--atelier-indigo);
-  animation: gentleBreathe 4s ease-in-out infinite;
-}
-
-.auth-logo svg {
-  width: 100%;
-  height: 100%;
+  display: grid;
+  gap: 10px;
+  justify-items: start;
 }
 
 .auth-title {
-  font-family: var(--font-display);
-  font-size: 2.5rem;
-  font-weight: 300;
-  color: var(--atelier-indigo);
-  margin: 0 0 0.5rem;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  line-height: 1.1;
+  margin-top: 8px;
 }
 
 .auth-subtitle {
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-style: italic;
-  color: var(--text-secondary);
-  margin: 0;
-  line-height: 1.6;
+  color: var(--muted);
 }
-
-/* ============================================
-   FORM STYLES
-   ============================================ */
 
 .auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
+  display: grid;
+  gap: 8px;
 }
 
-.auth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.auth-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.4 var(--sans);
 }
 
-.auth-field label {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-}
-
-.auth-field input {
-  height: 56px;
-  padding: 0 1.25rem;
-  background: var(--atelier-cream);
-  border: 1px solid rgba(107, 68, 35, 0.15);
-  border-radius: 4px;
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  font-size: 1.1rem;
-  transition: all 0.3s ease;
-}
-
-.auth-field input::placeholder {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.auth-field input:focus {
+.auth-form input:focus {
   outline: none;
-  border-color: var(--atelier-ochre);
-  box-shadow: 0 0 0 3px rgba(31, 77, 52, 0.14);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
 }
 
-.auth-field input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.auth-form input::placeholder {
+  color: var(--faint);
 }
-
-/* Code input - monospace styling */
-.auth-code-input {
-  font-family: var(--font-mono) !important;
-  font-size: 1.5rem !important;
-  font-weight: 500;
-  letter-spacing: 0.4em;
-  text-align: center;
-}
-
-.auth-field-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-/* ============================================
-   ERROR & SUCCESS MESSAGES
-   ============================================ */
-
-.auth-error {
-  padding: 1rem 1.25rem;
-  background: rgba(155, 79, 69, 0.1);
-  border: 1px solid rgba(155, 79, 69, 0.25);
-  border-left: 3px solid var(--atelier-rose);
-  border-radius: 4px;
-  color: var(--atelier-rose);
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  text-align: center;
-}
-
-.auth-success {
-  padding: 1rem 1.25rem;
-  background: rgba(58, 122, 85, 0.1);
-  border: 1px solid rgba(58, 122, 85, 0.25);
-  border-left: 3px solid var(--atelier-sage);
-  border-radius: 4px;
-  color: #5a6b52;
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  text-align: center;
-}
-
-/* ============================================
-   SUBMIT BUTTON - Primary CTA style from homepage
-   ============================================ */
 
 .auth-submit {
-  height: 56px;
-  background: var(--atelier-indigo);
-  border: none;
-  border-radius: 4px;
-  color: var(--text-light);
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 0.5rem;
-  position: relative;
-  overflow: hidden;
+  margin-top: 8px;
+  min-height: 42px;
+  width: 100%;
 }
 
-.auth-submit::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, var(--atelier-prussian), var(--atelier-indigo));
-  opacity: 0;
-  transition: opacity 0.4s ease;
+.auth-message {
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border-left: 2px solid;
 }
 
-.auth-submit span {
-  position: relative;
-  z-index: 1;
+.auth-message.is-error {
+  background: var(--danger-bg);
+  border-color: var(--danger);
+  color: var(--ink);
 }
 
-.auth-submit:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-heavy);
-}
-
-.auth-submit:hover:not(:disabled)::before {
-  opacity: 1;
-}
-
-.auth-submit:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.auth-submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-/* ============================================
-   SPINNER
-   ============================================ */
-
-.auth-spinner {
-  width: 22px;
-  height: 22px;
-  border: 2px solid rgba(245, 240, 230, 0.3);
-  border-top-color: var(--text-light);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  position: relative;
-  z-index: 1;
-}
-
-/* ============================================
-   FOOTER
-   ============================================ */
-
-.auth-footer {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(107, 68, 35, 0.1);
+.auth-message.is-success {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--ink);
 }
 
 .auth-note {
-  font-family: var(--font-display);
-  font-size: 0.9rem;
-  font-style: italic;
-  color: var(--text-muted);
+  font: 400 12px/1.5 var(--mono);
+  color: var(--faint);
+}
+
+.spinner-sm {
+  width: 16px;
+  height: 16px;
+  border-color: color-mix(in srgb, var(--on-accent) 35%, transparent);
+  border-top-color: var(--on-accent);
+}
+
+/* Callback error (routes.tsx) */
+.auth-error {
+  display: grid;
+  gap: 14px;
+  justify-items: center;
   text-align: center;
-  margin: 0;
-  line-height: 1.6;
-}
-
-/* ============================================
-   LOADING STATE
-   ============================================ */
-
-.auth-loading {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--atelier-cream);
-}
-
-.auth-loading .auth-spinner {
-  width: 40px;
-  height: 40px;
-  border-width: 3px;
-  border-color: rgba(31, 77, 52, 0.25);
-  border-top-color: var(--atelier-ochre);
-}
-
-/* ============================================
-   RESPONSIVE DESIGN
-   ============================================ */
-
-@media (max-width: 640px) {
-  .auth-screen {
-    padding: 1rem;
-  }
-
-  .auth-container {
-    padding: 2rem 1.5rem;
-  }
-
-  .auth-title {
-    font-size: 2rem;
-  }
-
-  .auth-field input {
-    height: 52px;
-  }
-
-  .auth-submit {
-    height: 52px;
-  }
-}
-
-/* ============================================
-   REDUCED MOTION
-   ============================================ */
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+  color: var(--ink-2);
 }
