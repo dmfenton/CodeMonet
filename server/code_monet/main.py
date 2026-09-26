@@ -330,5 +330,7 @@ if __name__ == "__main__":
         host=settings.host,
         port=settings.port,
         reload=True,
-        reload_excludes=["logs/*"],
+        # Watch source only: agent workspaces under data/ hold *.py painting
+        # programs, and writing one must not restart the server mid-run.
+        reload_dirs=["code_monet"],
     )
