@@ -35,8 +35,10 @@ COPY server/alembic/ alembic/
 COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
 
-# Create logs directory for structured logging
-RUN mkdir -p /app/server/data/logs
+# Persistent data lives on the /app/data volume. Config paths are relative
+# (data/drawing_agent.db, data/agent_workspace/users) and resolve from this
+# WORKDIR, so data/ must be the volume, not a directory inside the image.
+RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # Remove the unused system package installer, then create the non-root runtime user.
 RUN apk upgrade --no-cache \
