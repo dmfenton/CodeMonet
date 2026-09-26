@@ -46,7 +46,6 @@
 		B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54494DA646E353267BCAFDC /* StudioUITests.swift */; };
 		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		BA4835DB5CC9E34A940E0C2A /* LiveStatusView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B1BEB566974A1F12AB91DDA /* LiveStatusView.swift */; };
-		BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */; };
 		D148D506115831798F412C22 /* CanvasSizeProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = E87B814D1DEB6E37C2A522A2 /* CanvasSizeProfile.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E2BBA512FFAF2E4B6F825356 /* ActionBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48FBE71A271190830A2BC772 /* ActionBarView.swift */; };
@@ -110,7 +109,6 @@
 		965DD7F1D2381A4B9D118405 /* MessageBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubbleView.swift; sourceTree = "<group>"; };
 		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetIdentityClient.swift; sourceTree = "<group>"; };
 		AB4114FAE9F17A0ACB34391A /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		ABB6028F4BF86D455BE8AFF1 /* StylePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StylePicker.swift; sourceTree = "<group>"; };
 		B4E557AA1ADAAA86E5D6CC25 /* CodeMonetTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -152,7 +150,6 @@
 			isa = PBXGroup;
 			children = (
 				E22EBD765435D2E439AA9DE0 /* AuthService.swift */,
-				A275E411AFB2BC7384DCD0C5 /* CodeMonetIdentityClient.swift */,
 				CF72546FBFC9133172136F1B /* StudioStore.swift */,
 			);
 			path = Services;
@@ -575,7 +572,6 @@
 				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
 				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
-				BB670B048ECECAD1BA81C27E /* CodeMonetIdentityClient.swift in Sources */,
 				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
 				FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */,
 				62DCF0199133CF953BE8297E /* GalleryView.swift in Sources */,
