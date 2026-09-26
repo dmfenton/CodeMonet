@@ -133,6 +133,9 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
                     "width": data.get("width", 800),
                     "height": data.get("height", 600),
                     "created_at": data.get("created_at", ""),
+                    "drawing_style": parse_drawing_style(
+                        data.get("drawing_style", "plotter")
+                    ).value,
                 }
                 if data.get("title"):
                     piece_entry["title"] = data["title"]

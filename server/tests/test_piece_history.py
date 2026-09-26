@@ -386,6 +386,7 @@ class TestPublicPieceEndpoint:
         ):
             mock_settings.workspace_base_dir = str(tmp_path)
             mock_repo.get_user_by_id = AsyncMock(return_value=user)
+            mock_repo.list_users_with_public_gallery = AsyncMock(return_value=[user])
             from code_monet.main import app
 
             yield state, TestClient(app)
@@ -410,6 +411,19 @@ class TestPublicPieceEndpoint:
         assert [v["version"] for v in data["versions"]] == [1, 2]
         assert set(data["versions"][0]) == VERSION_REF_KEYS
         assert data["versions"][0]["asset_base"].startswith(f"/painting-assets/{state.user_id}/")
+
+    @pytest.mark.asyncio
+    async def test_listing_includes_drawing_style(
+        self, public_workspace: tuple[WorkspaceState, TestClient]
+    ) -> None:
+        state, client = public_workspace
+        await _record(state, ops=10)
+        await state.save_to_gallery()
+
+        [entry] = client.get("/public/gallery").json()
+
+        assert entry["drawing_style"] == "paint"
+        assert entry["stroke_count"] == 10
 
     @pytest.mark.asyncio
     async def test_legacy_raster_piece_synthesizes_version(
