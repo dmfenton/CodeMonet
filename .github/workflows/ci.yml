@@ -9,7 +9,8 @@ on:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     outputs:
       server: ${{ steps.filter.outputs.server }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -27,7 +28,9 @@ jobs:
               - 'fenton-platform.lock'
               - 'scripts/worktree-bootstrap.sh'
               - 'scripts/publish-tenant-manifest.sh'
-              - '.github/workflows/publish-tenant-manifest.yml'
+              - '.github/workflows/**'
+              - 'ios/fastlane/**'
+              - 'ios/project.yml'
             frontend:
               - 'web/**'
               - 'shared/**'
@@ -39,7 +42,8 @@ jobs:
 
   server:
     name: Server (Python)
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 20
     needs: changes
     if: needs.changes.outputs.server == 'true'
 
@@ -111,7 +115,8 @@ jobs:
 
   app:
     name: Frontend
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
 
@@ -145,7 +150,8 @@ jobs:
   # Uses pre-recorded fixtures - no API key needed, fast
   replay:
     name: Replay Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
 
@@ -168,9 +174,15 @@ jobs:
 
   docker:
     name: Docker Build
-    runs-on: ubuntu-latest
+    # Needs a Docker daemon: trusted pool only. The isolated PR pool has no
+    # Docker socket and pull-request code must never reach the trusted pool,
+    # so this is skipped entirely on pull_request (matches the platform
+    # runtime-image scan pattern: docker-daemon jobs run on trusted main code
+    # only; PR validation stays inside the unprivileged container).
+    runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 20
     needs: [changes, server]
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.server == 'true' && github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v6
@@ -189,6 +201,20 @@ jobs:
       - name: Build Docker image
         run: docker build -t code-monet-server:ci -f server/Dockerfile .
 
+      # Production passes relative data paths (compute's codemonet.env); they
+      # must land on the /app/data volume, not in the image's filesystem.
+      - name: Verify data paths resolve to the volume
+        run: |
+          docker run --rm -e CODE_MONET_ENV=ci -e DATABASE_URL=sqlite+aiosqlite:///data/drawing_agent.db \
+            code-monet-server:ci /app/server/.venv/bin/python -c "
+          import os
+          from code_monet.config import settings
+          paths = [settings.database_url.split(':///', 1)[1], settings.workspace_base_dir]
+          resolved = [os.path.realpath(p) for p in paths]
+          print(dict(zip(paths, resolved)))
+          assert all(r.startswith('/app/data/') for r in resolved), resolved
+          "
+
       - name: Scan Docker image
         env:
           TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
@@ -196,7 +222,10 @@ jobs:
           mkdir -p .trivy-cache
           docker run --rm \
             --volume /var/run/docker.sock:/var/run/docker.sock \
-            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            --user "$(id -u):$(id -g)" \
+            --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+            --env TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            --volume "$PWD/.trivy-cache:/tmp/trivy-cache" \
             "$TRIVY_IMAGE" image \
             --exit-code 1 \
             --no-progress \
@@ -206,12 +235,31 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    runs-on: macos-26
+    # Physical laptop runner, not isolable like the Linux PR pool: fork PRs
+    # must never run here. Same-repo PRs and pushes are trusted.
+    runs-on: [self-hosted, codemonet-ios, laptop]
+    # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
+    # budget below, since a legitimately-held lock (e.g. a concurrent
+    # testflight.yml build-ios run) can make this job wait most of that
+    # budget before swift test / xcodebuild ever start.
+    timeout-minutes: 90
     needs: changes
-    if: needs.changes.outputs.ios == 'true'
+    if: >-
+      needs.changes.outputs.ios == 'true' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Acquire shared macOS CI lock
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        # wait_seconds=2700 (45m, leaves >=45m of the 90m job timeout for
+        # the actual build). stale_seconds=9000 (150m): longer than any
+        # job that can hold this lock (build-ios's own 150m timeout), so a
+        # live job's lock is never mistaken for an abandoned one.
+        run: .github/scripts/macos-ci-lock.sh acquire "$LOCK_OWNER" 2700 9000
 
       - name: Resolve platform pin
         id: platform
@@ -228,9 +276,6 @@ jobs:
         working-directory: ios/MonetKit
         run: swift test
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
@@ -240,12 +285,20 @@ jobs:
         run: |
           xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
             -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData-ci-ios" \
             build CODE_SIGNING_ALLOWED=NO
+
+      - name: Release shared macOS CI lock
+        if: always()
+        env:
+          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
+        run: .github/scripts/macos-ci-lock.sh release "$LOCK_OWNER"
 
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
     name: CI Success
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 5
     needs: [server, app, replay, docker, ios]
     if: always()
     steps:

@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    # Push to main / workflow_dispatch only: AWS OIDC + SSM needs the trusted pool.
+    runs-on: [self-hosted, codemonet-docker, lilserver]
     environment: codemonet-production
     permissions:
       contents: read

@@ -23,3 +23,9 @@ repos:
         language: system
         files: (^|/)package(-lock)?\.json$
         pass_filenames: false
+      - id: workflow-contracts
+        name: workflow contract tests (server)
+        entry: bash -c 'cd server && uv run pytest -q tests/test_testflight_signing.py tests/test_release_contract.py tests/test_tenant_manifest.py'
+        language: system
+        files: ^(\.github/workflows/|ios/fastlane/|ios/project\.yml|server/Dockerfile)
+        pass_filenames: false

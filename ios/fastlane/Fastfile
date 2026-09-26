@@ -27,11 +27,17 @@ platform :ios do
     archive_path = File.join(app_root, "build/CodeMonet.xcarchive")
     ipa_path = File.join(app_root, "build/CodeMonet.ipa")
 
+    # Scoped to this job's own runner temp dir (falls back to app_root
+    # outside CI) so a concurrent build on a shared self-hosted runner
+    # account can't collide on DerivedData.
+    derived_data_path = File.join(ENV.fetch("RUNNER_TEMP", app_root), "DerivedData-testflight-ios")
+
     # Build the app
     build_app(
       project: File.join(app_root, "CodeMonet.xcodeproj"),
       scheme: "CodeMonet",
       archive_path: archive_path,
+      derived_data_path: derived_data_path,
       clean: true,
       skip_codesigning: true,
       skip_package_ipa: true,

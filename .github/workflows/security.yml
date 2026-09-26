@@ -13,7 +13,8 @@ permissions:
 jobs:
   changes:
     name: Detect dependency changes
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     outputs:
       javascript: ${{ steps.filter.outputs.javascript }}
       python: ${{ steps.filter.outputs.python }}
@@ -36,7 +37,8 @@ jobs:
 
   javascript-dependencies:
     name: JavaScript dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 10
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.javascript == 'true'
     steps:
@@ -49,7 +51,8 @@ jobs:
 
   python-dependencies:
     name: Python dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    timeout-minutes: 15
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.python == 'true'
     steps:
@@ -71,7 +74,12 @@ jobs:
 
   repository:
     name: Repository and secret scan
-    runs-on: ubuntu-latest
+    # Uses a Docker socket to run Trivy: trusted pool only, and skipped on
+    # pull_request since the isolated PR pool has no Docker daemon and PR
+    # code must never reach the trusted pool (see ci.yml's docker job).
+    runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:
@@ -83,7 +91,9 @@ jobs:
           mkdir -p .trivy-cache
           docker run --rm \
             --volume "$PWD:/workspace:ro" \
-            --volume "$PWD/.trivy-cache:/root/.cache/trivy" \
+            --user "$(id -u):$(id -g)" \
+            --env TRIVY_CACHE_DIR=/tmp/trivy-cache \
+            --volume "$PWD/.trivy-cache:/tmp/trivy-cache" \
             "$TRIVY_IMAGE" fs \
             --exit-code 1 \
             --no-progress \
