@@ -1,0 +1,9 @@
+self-hosted-runner:
+  labels:
+    - codemonet-docker
+    - codemonet-ios
+    - codemonet-pr
+    - dedicated-signing
+    - laptop
+    - lilserver
+    - pr-isolated

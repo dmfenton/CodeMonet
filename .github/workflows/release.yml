@@ -22,7 +22,9 @@ concurrency:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    # Tag push only (never pull_request): docker build/push + AWS OIDC + SSM
+    # deploy needs the trusted pool's Docker daemon and credentials.
+    runs-on: [self-hosted, codemonet-docker, lilserver]
     environment: codemonet-production
     permissions:
       contents: write
