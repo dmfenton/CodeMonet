@@ -29,7 +29,6 @@ import {
   sealThought,
   seedVersionHistory,
   summaryFromRef,
-  toolDetail,
   upsertVersion,
 } from '../studio';
 
@@ -183,7 +182,9 @@ export interface CanvasHookState {
   painting: PaintingState;
   /** Versions of the piece on the easel (paint mode), for version chips. */
   versionHistory: VersionHistory;
-  /** Piece title: from init, or the agent's name_piece call this session. */
+  /** An agent turn is running (server turn_state / init.turn_active). */
+  turnActive: boolean;
+  /** Piece title: from init, then the server's piece_title messages. */
   pieceTitle: string | null;
   /** Direction the piece was started with (init, or this session's New piece). */
   piecePrompt: string | null;
@@ -239,7 +240,6 @@ export function hasInProgressEvents(messages: AgentMessage[]): boolean {
 
 /**
  * Derive agent status from messages and state.
- * Status is computed entirely from messages and state - no server-side status.
  *
  * Status priority (highest to lowest):
  * 1. paused - explicitly paused
@@ -247,7 +247,9 @@ export function hasInProgressEvents(messages: AgentMessage[]): boolean {
  * 3. thinking - words in buffer/onStage
  * 4. executing - code_execution started but not completed
  * 5. drawing - strokes in buffer/onStage
- * 6. idle - default
+ * 6. thinking - nothing streaming, but the server says a turn is running
+ *    (reconnect mid-turn, silent gaps between tool calls)
+ * 7. idle - default
  */
 export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   // Paused overrides everything
@@ -279,7 +281,7 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
   if (hasStrokesOnStage || hasStrokesInBuffer) return 'drawing';
   if (state.painting.playing !== null) return 'drawing';
 
-  return 'idle';
+  return state.turnActive ? 'thinking' : 'idle';
 }
 
 /**
@@ -356,6 +358,8 @@ export type CanvasAction =
       title?: string | null;
       prompt?: string | null;
       monologue?: string;
+      /** Absent (older server) = no turn running. */
+      turnActive?: boolean;
     }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_ITERATION'; current: number; max: number }
@@ -366,6 +370,10 @@ export type CanvasAction =
   | { type: 'PAINTING_VERSION'; version: PaintingVersionRef; stages?: string[]; ops?: number }
   // Program painting: the client finished revealing a version (matched by asset_base)
   | { type: 'PAINTING_PLAYBACK_DONE'; assetBase: string }
+  // Server: an agent turn started or ended
+  | { type: 'SET_TURN_ACTIVE'; active: boolean }
+  // Server: the agent named a piece (applied only to the current piece)
+  | { type: 'SET_PIECE_TITLE'; pieceNumber: number; title: string }
   // Studio: the viewer nudged the agent (local echo into the notebook)
   | { type: 'ADD_NUDGE'; text: string }
   // Studio: the viewer started this piece with a direction
@@ -401,6 +409,7 @@ export const initialState: CanvasHookState = {
   styleConfig: PLOTTER_STYLE,
   painting: initialPaintingState,
   versionHistory: EMPTY_VERSION_HISTORY,
+  turnActive: false,
   pieceTitle: null,
   piecePrompt: null,
   notebook: [],
@@ -511,19 +520,8 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       const message = action.message;
       const versions = notebookVersions(state);
       let notebook = state.notebook;
-      let pieceTitle = state.pieceTitle;
       if (message.type === 'code_execution') {
         notebook = recordToolMessage(notebook, message, versions);
-        // The title counts once naming succeeded (a completed, non-failed result).
-        const returnCode = message.metadata?.return_code;
-        const succeeded = typeof returnCode !== 'number' || returnCode === 0;
-        if (
-          message.status === 'completed' &&
-          succeeded &&
-          message.metadata?.tool_name === 'name_piece'
-        ) {
-          pieceTitle = toolDetail('name_piece', message.metadata.tool_input) ?? pieceTitle;
-        }
       } else if (message.type === 'error') {
         notebook = addNote(notebook, 'error', message.text, versions.working);
       } else if (message.type === 'piece_complete') {
@@ -533,8 +531,16 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         ...state,
         messages: boundedPush(state.messages, message, MAX_MESSAGES),
         notebook,
-        pieceTitle,
       };
+    }
+
+    case 'SET_TURN_ACTIVE':
+      return state.turnActive === action.active ? state : { ...state, turnActive: action.active };
+
+    case 'SET_PIECE_TITLE': {
+      // The server is the title authority; other pieces' titles don't apply here.
+      if (action.pieceNumber !== state.pieceNumber) return state;
+      return { ...state, pieceTitle: action.title.trim() || null };
     }
 
     case 'ADD_NUDGE':
@@ -653,6 +659,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         ),
         pieceTitle: title?.trim() || null,
         piecePrompt: prompt?.trim() || null,
+        turnActive: action.turnActive ?? false,
         notebook: initNotebook(state, samePiece, prompt?.trim() || null, action.monologue),
         // Reset transient state on init
         messages: [],

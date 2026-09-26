@@ -19,8 +19,10 @@ import type {
   PaintingVersionMessage,
   PausedMessage,
   PieceStateMessage,
+  PieceTitleMessage,
   ServerMessage,
   ThinkingDeltaMessage,
+  TurnStateMessage,
 } from '../types';
 
 import type { CanvasAction } from '../canvas/reducer';
@@ -232,7 +234,18 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
     title: message.title,
     prompt: message.prompt,
     monologue: message.monologue,
+    turnActive: message.turn_active,
   });
+};
+
+/** An agent turn started or ended: the studio shows the painter working while active. */
+export const handleTurnState: MessageHandler<TurnStateMessage> = (message, dispatch) => {
+  dispatch({ type: 'SET_TURN_ACTIVE', active: message.active });
+};
+
+/** The agent named a piece; the reducer applies it only to the current piece. */
+export const handlePieceTitle: MessageHandler<PieceTitleMessage> = (message, dispatch) => {
+  dispatch({ type: 'SET_PIECE_TITLE', pieceNumber: message.piece_number, title: message.title });
 };
 
 /**
@@ -272,6 +285,8 @@ const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessa
   load_canvas: handleLoadCanvas as MessageHandler<ServerMessage>,
   init: handleInit as MessageHandler<ServerMessage>,
   painting_version: handlePaintingVersion as MessageHandler<ServerMessage>,
+  turn_state: handleTurnState as MessageHandler<ServerMessage>,
+  piece_title: handlePieceTitle as MessageHandler<ServerMessage>,
 };
 
 /**
