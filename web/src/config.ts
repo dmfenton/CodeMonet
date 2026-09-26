@@ -50,12 +50,7 @@ export const getWebSocketUrl = (): string => {
     return import.meta.env.VITE_WS_URL;
   }
 
-  // In dev, connect directly to backend
-  if (isDev) {
-    return 'ws://localhost:8000/ws';
-  }
-
-  // In production, construct WebSocket URL from current location
+  // Dev and production: same origin (the Vite dev server proxies /ws to API_URL)
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
 };

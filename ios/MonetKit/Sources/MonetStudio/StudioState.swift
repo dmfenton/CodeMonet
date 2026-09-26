@@ -123,9 +123,36 @@ public struct StudioState: Equatable, Sendable {
     /// agent hasn't called `paint` on yet (legacy stamped/freehand rendering
     /// applies in that case instead, spec §6).
     public var painting = PaintingState()
+    /// The live piece's program-painting versions, oldest first: seeded from
+    /// `init.painting.versions` when the server sends it, else from
+    /// `init.painting` alone, then extended by every accepted
+    /// `painting_version` this session. Reset on `clear`/`new_canvas`.
+    /// Untouched by gallery viewing — it always describes the live piece.
+    public var versions: [PaintingVersionSummary] = []
+    /// The live piece's title (`init.title`, or a completed `name_piece`
+    /// call's input). `nil` until named.
+    public var title: String?
+    /// The direction the live piece was started with, when known.
+    public var prompt: String?
+    /// The live piece's notebook log: the same messages as `messages`, but
+    /// with its own, larger bound (`maxNotebookEntries` notebook entries, a
+    /// tool call's started/completed pair counting once) so a long turn
+    /// doesn't evict the prompt and early critiques. `messages` stays the
+    /// short window the status selectors read. Kept across a reconnect to
+    /// the same piece; reset with the piece.
+    public var notebook: [AgentMessage] = []
 
     public init() {}
 
+    /// The version new agent work is heading toward: one past the latest
+    /// known version (1 before any version exists).
+    public var workingVersion: Int {
+        (versions.map(\.version).max() ?? 0) + 1
+    }
+
     /// `MAX_MESSAGES` bound on `messages` (protocol-state spec §4).
     public static let maxMessages = 50
+    /// Bound on notebook entries (matches the web client's
+    /// `MAX_NOTEBOOK_ENTRIES`).
+    public static let maxNotebookEntries = 200
 }

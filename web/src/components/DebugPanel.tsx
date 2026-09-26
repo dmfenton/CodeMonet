@@ -163,7 +163,7 @@ export function DebugPanel({
         }
 
         .label {
-          color: var(--text-muted);
+          color: var(--faint);
           min-width: 100px;
           font-size: 11px;
           text-transform: uppercase;
@@ -171,12 +171,12 @@ export function DebugPanel({
         }
 
         .value {
-          color: var(--text-primary);
+          color: var(--ink);
         }
 
         .value.notes,
         .value.monologue {
-          background: var(--bg-primary);
+          background: var(--bg-2);
           padding: 10px 12px;
           border-radius: 8px;
           max-height: 100px;
@@ -184,25 +184,25 @@ export function DebugPanel({
           white-space: pre-wrap;
           word-break: break-word;
           font-size: 11px;
-          border: 1px solid var(--border-light);
+          border: 1px solid var(--line);
         }
 
         .badge {
           padding: 3px 8px;
-          background: linear-gradient(135deg, var(--warning), var(--atelier-indigo));
-          color: var(--text-inverse);
+          background: var(--emph);
+          color: var(--on-accent);
           border-radius: 6px;
           font-size: 10px;
           font-weight: 600;
           letter-spacing: 0.05em;
         }
 
-        .status-idle { color: var(--text-muted); }
+        .status-idle { color: var(--faint); }
         .status-thinking { color: var(--accent); }
-        .status-executing { color: var(--warning); }
-        .status-drawing { color: var(--success); }
-        .status-paused { color: var(--text-secondary); }
-        .status-error { color: var(--error); }
+        .status-executing { color: var(--emph); }
+        .status-drawing { color: var(--accent); }
+        .status-paused { color: var(--ink-2); }
+        .status-error { color: var(--danger); }
 
         .files-list {
           display: flex;
@@ -214,18 +214,18 @@ export function DebugPanel({
           display: flex;
           justify-content: space-between;
           padding: 8px 12px;
-          background: var(--bg-primary);
+          background: var(--bg-2);
           border-radius: 8px;
-          border: 1px solid var(--border-light);
+          border: 1px solid var(--line);
         }
 
         .file-name {
-          color: var(--text-primary);
+          color: var(--ink);
           font-size: 12px;
         }
 
         .file-size {
-          color: var(--text-muted);
+          color: var(--faint);
           font-size: 11px;
         }
 
@@ -240,24 +240,24 @@ export function DebugPanel({
           justify-content: space-between;
           align-items: center;
           padding-bottom: 10px;
-          border-bottom: 1px solid var(--border-light);
+          border-bottom: 1px solid var(--line);
           margin-bottom: 10px;
         }
 
         .log-header button {
           padding: 4px 10px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border);
+          background: var(--bg-2);
+          border: 1px solid var(--line);
           border-radius: 6px;
-          color: var(--text-muted);
+          color: var(--faint);
           cursor: pointer;
           font-size: 11px;
           transition: all 0.2s ease;
         }
 
         .log-header button:hover {
-          background: var(--bg-tertiary);
-          color: var(--text-secondary);
+          background: var(--bg-3);
+          color: var(--ink-2);
         }
 
         .log-entries {
@@ -273,15 +273,15 @@ export function DebugPanel({
           flex-wrap: wrap;
           gap: 8px;
           padding: 8px 10px;
-          background: var(--bg-primary);
+          background: var(--bg-2);
           border-radius: 8px;
           font-size: 11px;
-          border: 1px solid var(--border-light);
+          border: 1px solid var(--line);
         }
 
         .log-time {
-          color: var(--text-muted);
-          font-family: 'SF Mono', 'Fira Code', monospace;
+          color: var(--faint);
+          font-family: var(--mono);
         }
 
         .log-type {
@@ -291,15 +291,15 @@ export function DebugPanel({
           font-size: 10px;
         }
 
-        .type-pen { background: rgba(78, 205, 196, 0.15); color: var(--success); }
-        .type-thinking_delta { background: rgba(233, 69, 96, 0.15); color: var(--accent); }
-        .type-status { background: rgba(255, 217, 61, 0.15); color: var(--warning); }
-        .type-human_stroke { background: rgba(78, 205, 196, 0.15); color: var(--success); }
-        .type-init { background: rgba(123, 104, 238, 0.15); color: var(--accent-violet); }
+        .type-pen { background: var(--accent-bg); color: var(--accent); }
+        .type-thinking_delta { background: var(--bg-3); color: var(--ink-2); }
+        .type-status { background: var(--bg-3); color: var(--emph); }
+        .type-human_stroke { background: var(--accent-bg); color: var(--accent); }
+        .type-init { background: var(--accent-bg); color: var(--accent); }
 
         .log-data {
           width: 100%;
-          color: var(--text-muted);
+          color: var(--faint);
           font-size: 10px;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -308,7 +308,7 @@ export function DebugPanel({
 
         .empty,
         .loading {
-          color: var(--text-muted);
+          color: var(--faint);
           text-align: center;
           padding: 24px;
           font-style: italic;

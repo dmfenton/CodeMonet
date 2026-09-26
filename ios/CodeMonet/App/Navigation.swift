@@ -11,12 +11,6 @@ public enum AppScreen: Equatable, Sendable {
     case gallery
 }
 
-/// At most one modal sheet at a time (ux spec §7).
-public enum ActiveModal: Equatable, Sendable {
-    case nudge
-    case newCanvas
-}
-
 /// Screen-transition side effects (ux spec §1.1) live in `StudioStore`/
 /// `AuthService` calls made by the view layer around a `NavigationState`
 /// mutation — this type only tracks *where the user is*, not the pause/
@@ -27,15 +21,19 @@ public enum ActiveModal: Equatable, Sendable {
 @Observable
 public final class NavigationState {
     public var screen: AppScreen = .home
-    public var activeModal: ActiveModal?
     /// Which screen opened the gallery, so its header can offer the right
     /// "back"/"home" affordances (ux spec §8).
     public var galleryOpenedFrom: AppScreen = .home
 
     public init() {}
 
-    public func openGallery(from screen: AppScreen) {
+    /// A piece the gallery should open straight into (Home's recent row).
+    /// Consumed (cleared) by the gallery once shown.
+    public var galleryFocusPiece: Int?
+
+    public func openGallery(from screen: AppScreen, focusing pieceNumber: Int? = nil) {
         galleryOpenedFrom = screen
+        galleryFocusPiece = pieceNumber
         self.screen = .gallery
     }
 

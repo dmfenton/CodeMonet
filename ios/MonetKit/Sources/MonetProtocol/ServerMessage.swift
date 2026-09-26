@@ -27,6 +27,17 @@ public struct InitPayload: Codable, Equatable, Sendable {
     /// field**. A client shows this version's `final.png` immediately, with
     /// no reveal animation — `init` never replays history.
     public var painting: PaintingVersionRef?
+    /// The current piece's title (additive server field; `nil` until the
+    /// agent names the piece, or from a server that doesn't send it).
+    public var title: String?
+    /// `init.painting.versions`: every version of the current piece, oldest
+    /// first. Additive server field — empty when absent, in which case the
+    /// client builds its version list from this session's
+    /// `painting_version` messages instead.
+    public var paintingVersions: [PaintingVersionSummary]
+    /// The direction the current piece was started with: top-level
+    /// `init.prompt`, else `init.painting.prompt` (both additive fields).
+    public var prompt: String?
 
     enum CodingKeys: String, CodingKey {
         case strokes, gallery, status, paused
@@ -37,6 +48,25 @@ public struct InitPayload: Codable, Equatable, Sendable {
         case drawingStyle = "drawing_style"
         case styleConfig = "style_config"
         case painting
+        case title, prompt
+    }
+
+    /// The additive keys `init.painting` may carry beside the ref fields.
+    private struct PaintingExtras: Decodable {
+        let versions: [PaintingVersionSummary]
+        let prompt: String?
+
+        enum CodingKeys: String, CodingKey { case versions, prompt }
+
+        /// Additive fields: a malformed version entry is skipped, and a
+        /// wrongly-typed `versions`/`prompt` reads as absent — neither may
+        /// fail `init`.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            versions = (try? container.decodeIfPresent(LossyArray<PaintingVersionSummary>.self, forKey: .versions))?
+                .elements ?? []
+            prompt = try? container.decodeIfPresent(String.self, forKey: .prompt)
+        }
     }
 
     public init(
@@ -50,7 +80,10 @@ public struct InitPayload: Codable, Equatable, Sendable {
         monologue: String,
         drawingStyle: DrawingStyleType,
         styleConfig: DrawingStyleConfig,
-        painting: PaintingVersionRef? = nil
+        painting: PaintingVersionRef? = nil,
+        title: String? = nil,
+        paintingVersions: [PaintingVersionSummary] = [],
+        prompt: String? = nil
     ) {
         self.strokes = strokes
         self.gallery = gallery
@@ -63,6 +96,9 @@ public struct InitPayload: Codable, Equatable, Sendable {
         self.drawingStyle = drawingStyle
         self.styleConfig = styleConfig
         self.painting = painting
+        self.title = title
+        self.paintingVersions = paintingVersions
+        self.prompt = prompt
     }
 
     /// Custom decode: `canvas_width`/`canvas_height` are documented as always
@@ -85,6 +121,10 @@ public struct InitPayload: Codable, Equatable, Sendable {
         drawingStyle = try container.decode(DrawingStyleType.self, forKey: .drawingStyle)
         styleConfig = try container.decode(DrawingStyleConfig.self, forKey: .styleConfig)
         painting = try container.decodeIfPresent(PaintingVersionRef.self, forKey: .painting)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        let extras = painting == nil ? nil : try container.decodeIfPresent(PaintingExtras.self, forKey: .painting)
+        paintingVersions = extras?.versions ?? []
+        prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? extras?.prompt
     }
 }
 
@@ -238,9 +278,11 @@ public enum ServerMessage: Equatable, Sendable {
     /// pieces. No `animation_done`-style ack exists for this message; the
     /// agent never waits for the client to finish revealing it. `stages` is
     /// the deduplicated (consecutive-only), in-order list of `cv.stage(...)`
-    /// labels used so far in this program run — display-only, never routed
-    /// into reducer state (spec §4.2).
-    case paintingVersion(PaintingVersionRef, stages: [String])
+    /// labels used so far in this program run — display-only (spec §4.2);
+    /// the reducer keeps it only in the version history for the Studio's
+    /// version list. `ops` is the render's total reveal-op count, an
+    /// additive server field (`nil` from a server that doesn't send it).
+    case paintingVersion(PaintingVersionRef, stages: [String], ops: Int? = nil)
     /// Any `type` this build doesn't recognize. Carries the raw type string
     /// so a caller can at least log what arrived.
     case unknown(type: String)
@@ -295,7 +337,7 @@ extension ServerMessage: Decodable {
             )
         case "painting_version":
             let envelope = try PaintingVersionEnvelope(from: decoder)
-            self = .paintingVersion(envelope.ref, stages: envelope.stages)
+            self = .paintingVersion(envelope.ref, stages: envelope.stages, ops: envelope.ops)
         default:
             self = .unknown(type: type)
         }
@@ -334,13 +376,14 @@ private struct AgentStrokesReadyEnvelope: Decodable {
 private struct PaintingVersionEnvelope: Decodable {
     let ref: PaintingVersionRef
     let stages: [String]
+    let ops: Int?
     enum CodingKeys: String, CodingKey {
         case pieceNumber = "piece_number"
         case version
         case assetBase = "asset_base"
         case imageWidth = "image_width"
         case imageHeight = "image_height"
-        case stages
+        case stages, ops
     }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -352,5 +395,6 @@ private struct PaintingVersionEnvelope: Decodable {
             imageHeight: try container.decode(Int.self, forKey: .imageHeight)
         )
         stages = try container.decode([String].self, forKey: .stages)
+        ops = try container.decodeIfPresent(Int.self, forKey: .ops)
     }
 }

@@ -152,11 +152,19 @@ struct PaintingStateReducerTests {
         #expect(restored.painting.playing == nil)
     }
 
-    @Test("message routing: painting_version dispatches PAINTING_VERSION with stages stripped")
-    func messageRoutingStripsStages() {
+    @Test("message routing: painting_version carries stages/ops for the version history only")
+    func messageRoutingCarriesDisplayFields() {
         let environment = RoutingEnvironment(now: { 0 }, nextID: { "id" })
-        let events = MessageRouter.route(.paintingVersion(ref(piece: 1, version: 1), stages: ["ground", "sky"]), environment: environment)
-        #expect(events == [.paintingVersion(ref(piece: 1, version: 1))])
+        let events = MessageRouter.route(
+            .paintingVersion(ref(piece: 1, version: 1), stages: ["ground", "sky"], ops: 42), environment: environment
+        )
+        #expect(events == [.paintingVersion(ref(piece: 1, version: 1), stages: ["ground", "sky"], ops: 42)])
+        // Display fields never affect playback state.
+        var state = StudioState()
+        state.pieceNumber = 1
+        let withFields = StudioReducer.reduce(state, events[0])
+        let without = StudioReducer.reduce(state, .paintingVersion(ref(piece: 1, version: 1)))
+        #expect(withFields.painting == without.painting)
     }
 
     @Test("message routing: init.painting flows into the INIT action's painting field")

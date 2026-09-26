@@ -34,7 +34,7 @@ public final class StudioStore {
     /// incorrectly sign out a session that's actually fine.
     public var onAuthenticationFailure: (@Sendable (String) async -> Void)?
 
-    private let socket: StudioWebSocketClient
+    let socket: StudioWebSocketClient
     private var rest: CodeMonetRESTClient
     private let traceBuffer: TraceSpanBuffer
     @ObservationIgnored private var performer = PerformerEngine()
@@ -63,6 +63,10 @@ public final class StudioStore {
     /// the socket wasn't open) would otherwise leak forever.
     private var pendingSelfStrokes: [Path] = []
     private static let maxPendingSelfStrokes = 32
+    /// The direction this device just sent with `new_canvas`, applied as the
+    /// piece's prompt once the server's `new_canvas` confirms the new piece
+    /// (see `startNewPiece`).
+    var pendingPrompt: String?
 
     public init(environment: CodeMonetEnvironment, tokenProvider: any TokenProviding) {
         socket = StudioWebSocketClient(baseURL: environment.wsBaseURL)
@@ -224,13 +228,9 @@ public final class StudioStore {
         apply(.paintingPlaybackDone(assetBase: assetBase))
     }
 
-    /// Persists the user's Plotter/Paint choice into the shared,
-    /// session-lived `StudioState.drawingStyle` (protocol-state spec's
-    /// canonical "current style" slot, matching RN's
-    /// `canvasState.drawingStyle`) rather than a per-view `@State`, so the
-    /// choice survives Home <-> Studio round trips instead of resetting to
-    /// Plotter every time Home is recreated. Mirrors `clearViewing()`'s
-    /// pattern for exposing a client-only `StudioEvent` publicly.
+    /// Sets the session's current style (`StudioState.drawingStyle`, the
+    /// protocol-state spec's canonical "current style" slot). Called only
+    /// when a new piece starts, so the piece on the easel keeps its style.
     public func setStyle(_ style: DrawingStyleType) {
         apply(.setStyle(style, style == .paint ? .paint : .plotter))
     }
@@ -297,6 +297,7 @@ public final class StudioStore {
             await route(message)
         case let .disconnected(reason):
             connected = false
+            pendingPrompt = nil  // a reconnect's `init` carries the prompt instead
             switch reason {
             case .authenticationFailed:
                 recordSpan(name: "ws.auth_error")
@@ -330,6 +331,9 @@ public final class StudioStore {
         )
         for studioEvent in MessageRouter.route(message, environment: environment) {
             apply(studioEvent)
+        }
+        if case .newCanvas = message {
+            applyPendingPrompt()
         }
     }
 
@@ -383,7 +387,7 @@ public final class StudioStore {
         }
     }
 
-    private func apply(_ event: StudioEvent) {
+    func apply(_ event: StudioEvent) {
         state = StudioReducer.reduce(state, event)
     }
 

@@ -3,113 +3,60 @@ import MonetProtocol
 import MonetStudio
 import Testing
 
-/// Pure-function tests for `HomeSelectors` (ux spec §5.2, §5.4) — built
-/// against plain `StudioState` fixtures, no live `StudioStore`/socket
-/// needed.
+/// Pure-function tests for `HomeSelectors` and the easel status line.
 @Suite("HomeSelectors")
 struct HomeSelectorsTests {
-    @Test("no recent work when canvas is empty, no gallery, no session")
-    func noRecentWork() {
-        let state = StudioState()
-        #expect(HomeSelectors.hasRecentWork(state) == false)
-        #expect(HomeSelectors.continueCardKind(state) == .none)
-    }
+    private static let ref = PaintingVersionRef(
+        pieceNumber: 4, version: 4, assetBase: "/painting-assets/u/t/", imageWidth: 1600, imageHeight: 1200
+    )
 
-    @Test("live strokes alone count as recent work")
-    func liveStrokesCountAsRecentWork() {
+    @Test("nothing on the easel before any piece; a started blank piece stays resumable")
+    func emptyEasel() throws {
         var state = StudioState()
-        state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 10, y: 10)])]
-        #expect(HomeSelectors.hasRecentWork(state))
-        #expect(HomeSelectors.hasCurrentWork(state))
-        #expect(HomeSelectors.continueSectionHeader(state) == "Continue where you left off")
+        #expect(HomeSelectors.easel(state) == nil)
+        state.pieceNumber = 3
+        let easel = try #require(HomeSelectors.easel(state))
+        #expect(easel.preview == .blank)
+        #expect(easel.title == "Piece 3")
     }
 
-    @Test("gallery entry alone counts as recent work, but not current work")
-    func galleryAloneCountsAsRecentWork() {
+    @Test("a painting shows its latest version, title, and a status line with version and stage")
+    func paintingEasel() throws {
         var state = StudioState()
-        state.gallery = [Self.makeEntry(pieceNumber: 3, title: "Sunset")]
-        #expect(HomeSelectors.hasRecentWork(state))
-        #expect(HomeSelectors.hasCurrentWork(state) == false)
-        #expect(HomeSelectors.continueSectionHeader(state) == "Recent work")
+        state.pieceNumber = 4
+        state.paused = false
+        state.drawingStyle = .paint
+        state.title = "Poplars at dusk"
+        state.painting = PaintingState(base: nil, playing: Self.ref)
+        state.versions = [PaintingVersionSummary(ref: Self.ref, stages: ["ground", "sky", "poplars"], ops: 318)]
+        let easel = try #require(HomeSelectors.easel(state))
+        #expect(easel.title == "Poplars at dusk")
+        #expect(easel.preview == .painting(Self.ref))
+        #expect(easel.statusLine == "painting · v4 · poplars")
+        #expect(easel.isActive)
     }
 
-    @Test("active session with zero strokes still counts as recent work")
-    func activeSessionAloneCountsAsRecentWork() {
+    @Test("an untitled piece falls back to its prompt, then 'Piece N'")
+    func titleFallback() throws {
         var state = StudioState()
         state.pieceNumber = 2
-        #expect(HomeSelectors.hasRecentWork(state))
-    }
+        state.prompt = "a small pond with lilies at dusk"
+        #expect(try #require(HomeSelectors.easel(state)).title == "a small pond with lilies at dusk")
+        #expect(try #require(HomeSelectors.easel(state)).preview == .blank)
 
-    @Test("continueCardKind is .live with a live preview when strokes exist")
-    func continueCardKindLiveWithStrokes() {
-        var state = StudioState()
-        state.strokes = [Path(type: .polyline, points: [Point(x: 1, y: 1), Point(x: 2, y: 2)])]
-        state.canvasWidth = 800
-        state.canvasHeight = 600
-
-        guard case let .live(strokes, width, height, _, title) = HomeSelectors.continueCardKind(state) else {
-            Issue.record("expected .live")
-            return
-        }
-        #expect(strokes.count == 1)
-        #expect(width == 800)
-        #expect(height == 600)
-        #expect(title == "Current Drawing")
-    }
-
-    @Test("continueCardKind is .completed when only a gallery entry exists")
-    func continueCardKindCompletedFromGallery() {
-        var state = StudioState()
-        state.gallery = [Self.makeEntry(pieceNumber: 5, title: nil)]
-
-        guard case let .completed(entry) = HomeSelectors.continueCardKind(state) else {
-            Issue.record("expected .completed")
-            return
-        }
-        #expect(entry.pieceNumber == 5)
-    }
-
-    @Test("continueCardKind prefers live strokes over a stale gallery thumbnail")
-    func continueCardKindPrefersLiveOverGallery() {
-        var state = StudioState()
+        state.prompt = nil
         state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
-        state.gallery = [Self.makeEntry(pieceNumber: 1, title: "Old piece")]
-
-        guard case .live = HomeSelectors.continueCardKind(state) else {
-            Issue.record("expected .live even with a gallery entry present")
-            return
-        }
+        let easel = try #require(HomeSelectors.easel(state))
+        #expect(easel.title == "Piece 2")
+        #expect(easel.statusLine == "paused")
+        #expect(!easel.isActive)
     }
 
-    /// RN's `title = recentCanvas?.title || (hasCurrentWork ? 'Current
-    /// Drawing' : ...)` (ContinueCard.tsx) — `recentCanvas` is the last
-    /// *completed* gallery entry, independent of `hasCurrentWork`, so its
-    /// title takes precedence over "Current Drawing" even while live work
-    /// is in progress.
-    @Test("continueCardKind's live title prefers the last gallery entry's title, if any")
-    func continueCardKindLiveTitlePrefersGalleryTitle() {
+    @Test("recent pieces are the three newest")
+    func recentPieces() {
         var state = StudioState()
-        state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
-        state.gallery = [Self.makeEntry(pieceNumber: 1, title: "Whispers at Dusk")]
-
-        guard case let .live(_, _, _, _, title) = HomeSelectors.continueCardKind(state) else {
-            Issue.record("expected .live")
-            return
-        }
-        #expect(title == "Whispers at Dusk")
-    }
-
-    @Test("continueCardKind's live title falls back to 'Current Drawing' when the last gallery entry has no title")
-    func continueCardKindLiveTitleFallsBackWhenGalleryEntryUntitled() {
-        var state = StudioState()
-        state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
-        state.gallery = [Self.makeEntry(pieceNumber: 1, title: nil)]
-
-        guard case let .live(_, _, _, _, title) = HomeSelectors.continueCardKind(state) else {
-            Issue.record("expected .live")
-            return
-        }
-        #expect(title == "Current Drawing")
+        state.gallery = [1, 2, 3, 4, 5].map(Self.makeEntry)
+        #expect(HomeSelectors.recentPieces(state).map(\.pieceNumber) == [5, 4, 3])
     }
 
     @Test("canSubmit requires non-whitespace text and a connected socket")
@@ -120,7 +67,7 @@ struct HomeSelectorsTests {
         #expect(HomeSelectors.canSubmit(prompt: "", connected: true) == false)
     }
 
-    private static func makeEntry(pieceNumber: Int, title: String?) -> GalleryEntry {
+    private static func makeEntry(_ pieceNumber: Int) -> GalleryEntry {
         GalleryEntry(
             id: "piece_\(pieceNumber)",
             createdAt: "2026-09-20T12:00:00Z",
@@ -129,7 +76,7 @@ struct HomeSelectorsTests {
             width: 800,
             height: 600,
             drawingStyle: .plotter,
-            title: title,
+            title: nil,
             thumbnailToken: "piece_\(pieceNumber)"
         )
     }

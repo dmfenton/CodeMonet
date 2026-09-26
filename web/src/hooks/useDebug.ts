@@ -102,12 +102,14 @@ export function useDebug({ token }: UseDebugOptions): UseDebugReturn {
     setState((s) => ({ ...s, messageLog: [] }));
   }, []);
 
-  // Initial fetch and polling
+  // Initial fetch and polling — only with a token (the studio passes null
+  // while the debug panel is hidden), so a hidden panel costs nothing.
   useEffect(() => {
-    refresh();
+    if (!token) return;
+    void refresh();
     const interval = setInterval(refresh, 5000);
     return (): void => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, token]);
 
   return {
     ...state,

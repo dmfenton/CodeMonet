@@ -1,6 +1,6 @@
 /**
- * HeroPainting — theatrical replay of a real Code Monet artwork being
- * painted, stroke by stroke, with the production stamp renderer.
+ * HeroPainting — replay of a real Code Monet artwork being painted, stroke
+ * by stroke, with the production stamp renderer.
  *
  * Entirely deterministic: it fetches recorded stroke data (a JSON export
  * of an actual piece) and performs it. No model calls, no randomness that
@@ -17,16 +17,16 @@ import { drawStampsToContext } from '../../renderers/stampSprites';
 const HERO_PIECE_URL = '/hero/poplars-at-dusk.json';
 const HERO_TITLE = 'Poplars at Dusk';
 
-/** Painting phases: caption + tempo, keyed to fraction of strokes done.
+/** Painting passes: label + tempo, keyed to fraction of strokes done.
  * Boundaries measured from the piece's recorded stroke order. */
 const PHASES: { at: number; label: string; speed: number }[] = [
-  { at: 0.0, label: 'flooding the canvas with dusk…', speed: 1.7 },
-  { at: 0.05, label: 'a low sun, barely holding…', speed: 0.9 },
-  { at: 0.13, label: 'the far bank settles in…', speed: 1.2 },
-  { at: 0.22, label: 'four poplars rise against the light…', speed: 0.8 },
-  { at: 0.53, label: "the water takes the sky's color…", speed: 1.6 },
-  { at: 0.84, label: 'the trees fall into the river…', speed: 0.95 },
-  { at: 0.96, label: 'last sparks on the water…', speed: 0.5 },
+  { at: 0.0, label: 'dusk wash', speed: 1.7 },
+  { at: 0.05, label: 'low sun', speed: 0.9 },
+  { at: 0.13, label: 'far bank', speed: 1.2 },
+  { at: 0.22, label: 'poplars', speed: 0.8 },
+  { at: 0.53, label: 'water', speed: 1.6 },
+  { at: 0.84, label: 'reflections', speed: 0.95 },
+  { at: 0.96, label: 'last sparks', speed: 0.5 },
 ];
 
 const BASE_STAMPS_PER_FRAME = 7;
@@ -294,32 +294,21 @@ export function HeroPainting(): React.ReactElement {
   }, []);
 
   return (
-    <>
-      <div className="canvas-easel">
-        <div className="canvas-frame">
-          <div className={`canvas-body hero-painting-stage${fading ? ' hero-painting-fading' : ''}`}>
-            <canvas
-              ref={canvasRef}
-              className="hero-painting-canvas"
-              aria-label={`${HERO_TITLE} being painted stroke by stroke`}
-            />
-            <div className={`hero-painting-title${finished ? ' hero-painting-title-visible' : ''}`}>
-              <span className="hero-painting-title-text">{HERO_TITLE}</span>
-              <span className="hero-painting-title-sub">painted live, stroke by stroke</span>
-            </div>
-          </div>
-        </div>
+    <figure className="hero-painting">
+      <div className={`mat hero-painting-mat${fading ? ' is-fading' : ''}`}>
+        <canvas
+          ref={canvasRef}
+          className="hero-painting-canvas"
+          aria-label={`${HERO_TITLE} being painted stroke by stroke`}
+        />
       </div>
-      <div className="thought-stream">
-        <div className="thought-label">
-          <span className="thought-dot" />
-          {finished ? 'signed' : 'painting'}
-        </div>
-        <p className="thought-text">
-          {finished ? HERO_TITLE : typed}
-          <span className="cursor" />
-        </p>
-      </div>
-    </>
+      <figcaption className="hero-painting-status">
+        <span className="mono-label hero-painting-state">
+          <span className={`status-dot${finished ? '' : ' is-live'}`} aria-hidden="true" />
+          {finished ? 'replay · finished' : `replay · stage: ${typed || '…'}`}
+        </span>
+        <span className="serif-italic hero-painting-title">{HERO_TITLE}</span>
+      </figcaption>
+    </figure>
   );
 }

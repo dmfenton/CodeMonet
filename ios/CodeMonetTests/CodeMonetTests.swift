@@ -34,6 +34,17 @@ struct NavigationStateTests {
         navigation.openGallery(from: .studio)
         #expect(navigation.screen == .gallery)
         #expect(navigation.galleryOpenedFrom == .studio)
+        #expect(navigation.galleryFocusPiece == nil)
+    }
+
+    @Test("openGallery can focus a piece to open straight into")
+    @MainActor
+    func openGalleryFocusingPiece() {
+        let navigation = NavigationState()
+        navigation.openGallery(from: .home, focusing: 12)
+        #expect(navigation.galleryFocusPiece == 12)
+        navigation.openGallery(from: .home)
+        #expect(navigation.galleryFocusPiece == nil)
     }
 
     @Test("closeGallery returns to whichever screen opened it")
@@ -47,15 +58,6 @@ struct NavigationStateTests {
         navigation.openGallery(from: .studio)
         navigation.closeGallery()
         #expect(navigation.screen == .studio)
-    }
-
-    @Test("activeModal defaults to nil and tracks New Canvas")
-    @MainActor
-    func activeModalDefaultsToNil() {
-        let navigation = NavigationState()
-        #expect(navigation.activeModal == nil)
-        navigation.activeModal = .newCanvas
-        #expect(navigation.activeModal == .newCanvas)
     }
 }
 

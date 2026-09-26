@@ -141,13 +141,16 @@ describe('painting_version routing', () => {
     return actions;
   };
 
-  it('dispatches PAINTING_VERSION without the stage list', () => {
+  it('dispatches PAINTING_VERSION with the stage list and op count', () => {
     const msg: PaintingVersionMessage = {
       type: 'painting_version',
       ...ref(12, 3),
       stages: ['ground', 'sky'],
+      ops: 4180,
     };
-    expect(collect(msg)).toEqual([{ type: 'PAINTING_VERSION', version: ref(12, 3) }]);
+    expect(collect(msg)).toEqual([
+      { type: 'PAINTING_VERSION', version: ref(12, 3), stages: ['ground', 'sky'], ops: 4180 },
+    ]);
   });
 
   it('passes init.painting through INIT', () => {

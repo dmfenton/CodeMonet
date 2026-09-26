@@ -23,7 +23,7 @@ struct GalleryRasterImageView: View {
                     .resizable()
                     .accessibilityHidden(true)
             } else {
-                Color.white
+                CodeMonetDesignSystem.Extra.canvasBackground
             }
         }
         .task(id: urlString) {

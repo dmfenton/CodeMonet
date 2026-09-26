@@ -50,12 +50,12 @@ struct AuthView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 4) {
-            Text("Code Monet")
-                .font(.system(size: titleSize, weight: .bold))
-                .foregroundStyle(palette.text)
+        VStack(spacing: 14) {
+            BrandMark(size: titleSize * 2.4)
+            BrandLockup(wordSize: titleSize, showsMark: false)
+                .accessibilityAddTraits(.isHeader)
             Text("Sign in with email")
-                .font(.system(size: subtitleSize))
+                .font(.system(size: subtitleSize, design: .serif).italic())
                 .foregroundStyle(palette.secondaryText)
         }
         .padding(.bottom, 24)
@@ -88,6 +88,10 @@ struct AuthView: View {
             .frame(minHeight: 48)
             .background(
                 RoundedRectangle(cornerRadius: 12)
+                    .fill(palette.elevatedSurface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
                     .strokeBorder(palette.divider, lineWidth: 1)
             )
             .accessibilityIdentifier("email-input")
@@ -102,7 +106,7 @@ struct AuthView: View {
             Group {
                 if isSubmitting {
                     ProgressView()
-                        .tint(.white)
+                        .tint(palette.surface)
                 } else {
                     Text("Send Magic Link")
                         .font(.system(size: fieldFontSize, weight: .semibold))
@@ -111,7 +115,7 @@ struct AuthView: View {
             .frame(maxWidth: .infinity, minHeight: 48)
         }
         .background(palette.accent)
-        .foregroundStyle(.white)
+        .foregroundStyle(palette.surface)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .opacity(isSubmitting ? 0.6 : 1)
         .disabled(isSubmitting)

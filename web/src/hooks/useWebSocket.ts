@@ -18,7 +18,8 @@ interface UseWebSocketOptions {
 
 interface UseWebSocketReturn {
   status: ConnectionStatus;
-  send: (message: ClientMessage) => void;
+  /** Sends when connected; returns false (and drops the message) otherwise. */
+  send: (message: ClientMessage) => boolean;
   connect: () => void;
   disconnect: () => void;
 }
@@ -52,6 +53,7 @@ export function useWebSocket({
       wsRef.current = ws;
 
       ws.onopen = (): void => {
+        if (wsRef.current !== ws) return; // superseded socket
         console.log('[WebSocket] Connected');
         setStatus('connected');
       };
@@ -66,6 +68,8 @@ export function useWebSocket({
       };
 
       ws.onclose = (event: CloseEvent): void => {
+        // A socket we already replaced or closed on purpose must not touch state.
+        if (wsRef.current !== ws) return;
         console.log('[WebSocket] Disconnected:', event.code, event.reason);
         setStatus('disconnected');
         wsRef.current = null;
@@ -107,20 +111,20 @@ export function useWebSocket({
       reconnectTimeoutRef.current = null;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    const ws = wsRef.current;
+    wsRef.current = null;
+    ws?.close();
 
     setStatus('disconnected');
   }, []);
 
-  const send = useCallback((message: ClientMessage) => {
+  const send = useCallback((message: ClientMessage): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(message));
-    } else {
-      console.warn('[WebSocket] Cannot send, not connected');
+      return true;
     }
+    console.warn('[WebSocket] Cannot send, not connected');
+    return false;
   }, []);
 
   // Auto-connect on mount
@@ -133,9 +137,9 @@ export function useWebSocket({
       if (reconnectTimeoutRef.current) {
         window.clearTimeout(reconnectTimeoutRef.current);
       }
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      const ws = wsRef.current;
+      wsRef.current = null;
+      ws?.close();
     };
   }, [autoConnect, connect]);
 

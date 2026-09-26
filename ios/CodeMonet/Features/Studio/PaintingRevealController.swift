@@ -1,9 +1,9 @@
 import CoreGraphics
 import Foundation
-import Observation
 import MonetNetworking
 import MonetProtocol
 import MonetRender
+import Observation
 
 /// Drives the paint-mode raster layer: fetches a program-painting version's
 /// `reveal.json` + keyframe/final images (program-painting spec §3-4) and
@@ -27,7 +27,29 @@ final class PaintingRevealController {
     /// painting restored from `init` has nothing animating).
     private(set) var revision = 0
 
+    /// Which keyframe of which version is being revealed right now, for the
+    /// Studio's stage bar; `nil` when nothing is animating. Published off
+    /// the render pass (see `publishRevealing`) and only when it changes.
+    private(set) var revealing: RevealMarker?
+
+    /// `reveal.json` manifests fetched so far, keyed by `asset_base` — the
+    /// playback path fills it, and the stage bar/notebook read (or request)
+    /// entries for versions that aren't playing.
+    private(set) var manifests: [String: RevealManifest] = [:]
+
+    struct RevealMarker: Equatable {
+        var assetBase: String
+        var keyframe: Int
+    }
+
     @ObservationIgnored private let assetClient: PaintingAssetClient
+    @ObservationIgnored private var manifestLoads: Set<String> = []
+    /// `manifests` keys, least recently used first (LRU bound).
+    @ObservationIgnored private var manifestOrder: [String] = []
+    /// Matches the web client's manifest cache size.
+    static let manifestCacheLimit = 24
+    /// The last marker handed to `publishRevealing` (possibly not yet applied).
+    @ObservationIgnored private var publishedMarker: RevealMarker?
 
     // MARK: - What's currently loaded / being loaded
 
@@ -89,6 +111,44 @@ final class PaintingRevealController {
         return staticImage
     }
 
+    /// Fetches (once) and caches a version's `reveal.json`. Failures are
+    /// silent: the stage bar just stays hidden for that version.
+    func loadManifest(for ref: PaintingVersionRef, apiBaseURL: URL) async {
+        let key = ref.assetBase
+        if manifests[key] != nil { touchManifest(key) }
+        guard manifests[key] == nil, !manifestLoads.contains(key) else { return }
+        manifestLoads.insert(key)
+        defer { manifestLoads.remove(key) }
+        let url = PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: Self.manifestFile)
+        if let manifest = try? await assetClient.manifest(at: url) {
+            cacheManifest(manifest, for: key)
+        }
+    }
+
+    private func cacheManifest(_ manifest: RevealManifest, for key: String) {
+        manifests[key] = manifest
+        touchManifest(key)
+        while manifestOrder.count > Self.manifestCacheLimit {
+            manifests[manifestOrder.removeFirst()] = nil
+        }
+    }
+
+    private func touchManifest(_ key: String) {
+        manifestOrder.removeAll { $0 == key }
+        manifestOrder.append(key)
+    }
+
+    /// Deferred to the next main-actor turn: `frame()` runs inside a
+    /// `TimelineView` render pass, which must not mutate observed state.
+    private func publishRevealing(_ marker: RevealMarker?) {
+        guard marker != publishedMarker else { return }
+        publishedMarker = marker
+        Task { [weak self] in
+            guard let self, self.revealing != marker else { return }
+            self.revealing = marker
+        }
+    }
+
     // MARK: - Loading
 
     private func startLoad(
@@ -119,6 +179,7 @@ final class PaintingRevealController {
         playingAssetBase = nil
         finalImageForPlayback = nil
         lastRevealImage = nil
+        publishRevealing(nil)
 
         Task { [weak self, assetClient] in
             guard let self else { return }
@@ -153,8 +214,15 @@ final class PaintingRevealController {
         onPlaybackDone: @escaping (String) -> Void
     ) async {
         do {
-            let manifestURL = PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: Self.manifestFile)
-            let manifest = try await assetClient.manifest(at: manifestURL)
+            let manifest: RevealManifest
+            if let cached = manifests[ref.assetBase] {
+                manifest = cached
+                touchManifest(ref.assetBase)
+            } else {
+                let manifestURL = PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: Self.manifestFile)
+                manifest = try await assetClient.manifest(at: manifestURL)
+                cacheManifest(manifest, for: ref.assetBase)
+            }
             let builtPlan = buildRevealPlan(manifest)
 
             var keyframeImages: [CGImage] = []
@@ -216,7 +284,11 @@ final class PaintingRevealController {
         if tracker.dirty || lastRevealImage == nil {
             lastRevealImage = sink.context.makeImage()
         }
-        guard done else { return }
+        guard done else {
+            publishRevealing(RevealMarker(assetBase: assetBase, keyframe: cursor.kf))
+            return
+        }
+        publishRevealing(nil)
 
         // Finish: show the pixel-exact final image if we have one (an
         // in-flight reveal's last keyframe is only ever "close" — see

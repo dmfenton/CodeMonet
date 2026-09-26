@@ -32,7 +32,7 @@ struct SplashView: View {
             foreground
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(uiColor: .systemBackground))
+        .background(palette.surface)
         .opacity(overlayOpacity)
         .ignoresSafeArea()
         // Decorative, non-interactive, no skip/tap in the source (ux spec
@@ -107,8 +107,7 @@ struct SplashView: View {
                 titleRow
                 underlineBars
                 Text("An autonomous AI artist")
-                    .font(.system(size: 22, weight: .regular))
-                    .tracking(1)
+                    .font(.system(size: 22, design: .serif).italic())
                     .foregroundStyle(palette.secondaryText)
                     .opacity(subtitleOpacity)
                 glowBadge
@@ -127,45 +126,28 @@ struct SplashView: View {
     }
 
     private var titleRow: some View {
-        HStack(alignment: .lastTextBaseline, spacing: 8) {
-            Text("Code")
-                .font(.system(size: 48, weight: .light))
-                .foregroundStyle(palette.accent)
-            Text("Monet")
-                .font(.system(size: 48, weight: .thin))
-                .foregroundStyle(palette.text)
-        }
-        .offset(y: titleOffset)
-        .scaleEffect(titleScale)
-        .opacity(titleOpacity)
+        BrandLockup(markSize: 72, wordSize: 48)
+            .offset(y: titleOffset)
+            .scaleEffect(titleScale)
+            .opacity(titleOpacity)
     }
 
     private var underlineBars: some View {
         HStack(spacing: 4) {
             Capsule().fill(palette.accent).frame(width: 60, height: 3)
-            Capsule().fill(CodeMonetDesignSystem.Extra.teal).frame(width: 40, height: 3)
+            Capsule().fill(palette.emphasis).frame(width: 40, height: 3)
         }
         .offset(y: titleOffset)
         .opacity(titleOpacity)
     }
 
     private var glowBadge: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [palette.accent, CodeMonetDesignSystem.Extra.coral],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 44, height: 44)
-                .shadow(color: palette.accent.opacity(0.6), radius: 16)
-            Image(systemName: "paintbrush.fill")
-                .font(.system(size: 18))
-                .foregroundStyle(.white)
-                .accessibilityHidden(true)
-        }
+        Image(systemName: "paintbrush.pointed.fill")
+            .font(.system(size: 18))
+            .foregroundStyle(palette.surface)
+            .frame(width: 44, height: 44)
+            .background(Circle().fill(palette.accent))
+            .accessibilityHidden(true)
     }
 
     // MARK: - Animation sequence
@@ -226,8 +208,8 @@ struct SplashView: View {
     private static func splatters(palette: FentonTheme.Palette) -> [Splatter] {
         [
             Splatter(id: 0, x: 0.12, y: 0.16, diameter: 18, color: palette.accent),
-            Splatter(id: 1, x: 0.86, y: 0.22, diameter: 14, color: CodeMonetDesignSystem.Extra.gold),
-            Splatter(id: 2, x: 0.78, y: 0.82, diameter: 20, color: CodeMonetDesignSystem.Extra.coral),
+            Splatter(id: 1, x: 0.86, y: 0.22, diameter: 14, color: palette.warning),
+            Splatter(id: 2, x: 0.78, y: 0.82, diameter: 20, color: palette.success),
             Splatter(id: 3, x: 0.16, y: 0.85, diameter: 16, color: palette.emphasis)
         ]
     }
@@ -235,8 +217,8 @@ struct SplashView: View {
     private static func brushStrokes(palette: FentonTheme.Palette) -> [BrushStroke] {
         [
             BrushStroke(id: 0, x: 0.2, y: 0.36, rotationDegrees: -20, color: palette.accent),
-            BrushStroke(id: 1, x: 0.8, y: 0.3, rotationDegrees: 15, color: CodeMonetDesignSystem.Extra.teal),
-            BrushStroke(id: 2, x: 0.25, y: 0.76, rotationDegrees: 35, color: CodeMonetDesignSystem.Extra.coral),
+            BrushStroke(id: 1, x: 0.8, y: 0.3, rotationDegrees: 15, color: palette.success),
+            BrushStroke(id: 2, x: 0.25, y: 0.76, rotationDegrees: 35, color: palette.emphasis),
             BrushStroke(id: 3, x: 0.82, y: 0.78, rotationDegrees: -30, color: palette.emphasis)
         ]
     }

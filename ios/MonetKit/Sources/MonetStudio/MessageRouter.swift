@@ -96,7 +96,18 @@ public enum MessageRouter {
             return [.loadCanvas(payload)]
         case let .codeExecution(payload):
             let message = ToolLabels.agentMessage(for: payload, id: environment.nextID(), timestamp: environment.now())
-            return [.enqueueEvent(message), .addMessage(message)]
+            var events: [StudioEvent] = [.enqueueEvent(message)]
+            // A tool call closes the thinking that led up to it, so the
+            // notebook reads thought -> tool -> thought in order instead of
+            // one turn-long thought block.
+            if payload.status == .started {
+                events.append(.archiveThinking(messageID: environment.nextID(), timestamp: environment.now()))
+            }
+            events.append(.addMessage(message))
+            if let title = Self.pieceTitle(from: payload) {
+                events.append(.setTitle(title))
+            }
+            return events
         case let .error(text, details):
             let message = AgentMessage(
                 id: environment.nextID(),
@@ -125,15 +136,23 @@ public enum MessageRouter {
         case .agentStrokesReady:
             // Handled by `routeStrokesReady` — never reaches the reducer directly.
             return []
-        case let .paintingVersion(ref, _):
-            // `stages` is display-only and never reaches reducer state
-            // (program-painting spec §4.2) — a UI wanting to show it reads
-            // it directly off this `ServerMessage` case, or off a fetched
-            // `reveal.json`'s keyframe labels, not from `StudioState`.
-            return [.paintingVersion(ref)]
+        case let .paintingVersion(ref, stages, ops):
+            // `stages`/`ops` are display-only (program-painting spec §4.2):
+            // they ride along into the version history, never playback.
+            return [.paintingVersion(ref, stages: stages, ops: ops)]
         case .unknown:
             return []
         }
+    }
+
+    /// The server doesn't broadcast a title when the agent names the piece;
+    /// a successful `name_piece` call's own input is that title.
+    static func pieceTitle(from payload: CodeExecutionPayload) -> String? {
+        guard payload.toolName == "name_piece", payload.status == .completed, (payload.returnCode ?? 0) == 0,
+              case let .object(fields)? = payload.toolInput, case let .string(title)? = fields["title"]
+        else { return nil }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// Applies the gallery/stale-piece/piece-sync guards from protocol-state

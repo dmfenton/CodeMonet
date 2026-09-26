@@ -3,6 +3,10 @@ import react from '@vitejs/plugin-react';
 
 const version = process.env.VERSION || 'dev';
 
+// Same API_URL the SSR server reads (src/config.ts); lets a worktree run its
+// backend on a non-default port.
+const devApiUrl = process.env.API_URL || 'http://localhost:8000';
+
 export default defineConfig({
   plugins: [
     react(),
@@ -28,12 +32,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: devApiUrl,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
       '/ws': {
-        target: 'ws://localhost:8000',
+        target: devApiUrl.replace(/^http/, 'ws'),
         ws: true,
       },
     },

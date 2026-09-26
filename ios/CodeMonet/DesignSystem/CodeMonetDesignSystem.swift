@@ -1,68 +1,63 @@
 import FentonDesignSystem
 import SwiftUI
+import UIKit
 
-/// Code Monet's `FentonTheme.Palette` mapping (ux spec §9.1). The shared
-/// package owns the 12 semantic slots; app-local colors that don't have a
-/// Fenton slot (secondary/gold/coral/canvas/human-stroke/pen-indicator) are
-/// defined as a small extension below, following Garden's
-/// `DesignSystem.swift` convention of building app colors *on top of*
-/// `FentonTheme` rather than modifying the shared package.
+/// Code Monet's `FentonTheme.Palette` mapping: the Fenton paper / ink /
+/// forest palette (matches `brand/mark.svg` and the web client). The shared
+/// package owns the 12 semantic slots; the few app-local colors without a
+/// Fenton slot live in `Extra` below, built on top of the theme rather than
+/// modifying the shared package.
 public enum CodeMonetDesignSystem {
     public static let theme = FentonTheme(
         light: FentonTheme.Palette(
-            accent: Color(hex: "#e94560"),
-            accentPressed: Color(hex: "#a83248"),
-            emphasis: Color(hex: "#7b68ee"),
-            surface: Color(hex: "#F5F5F8"),
-            elevatedSurface: Color(hex: "#FFFFFF"),
-            subtleSurface: Color(hex: "#FAFAFA"),
-            text: Color(hex: "#1a1a2e"),
-            secondaryText: Color(hex: "#4a4a6a"),
-            tertiaryText: Color(hex: "#8888a8"),
-            divider: Color(hex: "#e0e0e8"),
-            success: Color(hex: "#4ade80"),
-            warning: Color(hex: "#fbbf24")
+            accent: Color(hex: "#1f4d34"),
+            accentPressed: Color(hex: "#0f2a1c"),
+            emphasis: Color(hex: "#b85a2e"),
+            surface: Color(hex: "#fdfbf5"),
+            elevatedSurface: Color(hex: "#fffdf8"),
+            subtleSurface: Color(hex: "#f8f3e7"),
+            text: Color(hex: "#1a1d18"),
+            secondaryText: Color(hex: "#5e6358"),
+            tertiaryText: Color(hex: "#7a7f74"),
+            divider: Color(hex: "#e2d5b3"),
+            success: Color(hex: "#3a7a53"),
+            warning: Color(hex: "#9a6a12")
         ),
         dark: FentonTheme.Palette(
-            accent: Color(hex: "#e94560"),
-            accentPressed: Color(hex: "#a83248"),
-            emphasis: Color(hex: "#7b68ee"),
-            surface: Color(hex: "#0a0a0f"),
-            elevatedSurface: Color(hex: "#12121a"),
-            subtleSurface: Color(hex: "#1a1a2e"),
-            text: Color(hex: "#ffffff"),
-            secondaryText: Color.white.opacity(0.7),
-            tertiaryText: Color.white.opacity(0.4),
-            divider: Color(hex: "#2a2a3e"),
-            success: Color(hex: "#4ade80"),
-            warning: Color(hex: "#fbbf24")
+            accent: Color(hex: "#8bbda1"),
+            accentPressed: Color(hex: "#71ab8a"),
+            emphasis: Color(hex: "#e07d4f"),
+            surface: Color(hex: "#15160f"),
+            elevatedSurface: Color(hex: "#1d1e16"),
+            subtleSurface: Color(hex: "#2b2d23"),
+            text: Color(hex: "#ece6d2"),
+            secondaryText: Color(hex: "#b9b29c"),
+            tertiaryText: Color(hex: "#8f8a79"),
+            divider: Color(hex: "#3b3e31"),
+            success: Color(hex: "#71ab8a"),
+            warning: Color(hex: "#e3c07a")
         )
     )
 
-    /// App-local additions beyond `FentonTheme.Palette` (ux spec §9.1).
-    /// Identical hex in both color schemes today (flagged in the spec as an
-    /// intentional-but-unconfirmed choice, not silently "fixed" here).
+    /// App-local colors with no `FentonTheme.Palette` slot.
     public enum Extra {
-        public static let teal = Color(hex: "#4ecdc4")
-        public static let gold = Color(hex: "#ffd93d")
-        public static let coral = Color(hex: "#ff6b6b")
-        public static let error = Color(hex: "#ef4444")
-        /// The canvas paper stays white in both light and dark mode by design.
-        public static let canvasBackground = Color(hex: "#FFFFFF")
-        public static let strokeInk = Color(hex: "#1a1a2e")
-        public static let humanStroke = Color(hex: "#7b68ee")
-        public static let penIndicator = Color(hex: "#e94560")
+        /// The canvas paper stays light in both color schemes by design, so
+        /// a painting always reads true.
+        public static let canvasBackground = Color(hex: "#fffdf8")
+        public static let strokeInk = Color(hex: "#1a1d18")
+        /// Human marks on the canvas (rose). The canvas is always light
+        /// paper, so this is a single, non-adaptive color.
+        public static let humanStroke = Color(hex: "#9b4f45")
+        /// The agent's pen position on the (always light) canvas: the light
+        /// palette's emphasis.
+        public static let penIndicator = theme.light.emphasis
+        /// Error text/rules on app surfaces — adapts to the color scheme.
+        public static let error = Color(light: "#9b4f45", dark: "#d98a7e")
     }
 }
 
 /// Presents a `.sheet` as a bottom detent sheet on compact width, or a
-/// centered form sheet on regular width (ux spec §10 item 7: "definitely
-/// allow ... a proper centered/form-sheet rather than a bottom sheet that
-/// looks awkward at iPad width"). `StudioView`/`GalleryView` already branch
-/// on `horizontalSizeClass == .regular` for their own iPad-specific
-/// presentation; this gives sheet-presented modals (New Canvas, Nudge) the
-/// same treatment via one shared modifier instead of duplicating the
-/// detents/adaptation calls at each call site.
+/// centered form sheet on regular width (ux spec §10 item 7).
 public struct AdaptiveSheetPresentation: ViewModifier {
     let isRegularWidth: Bool
 
@@ -72,12 +67,8 @@ public struct AdaptiveSheetPresentation: ViewModifier {
 
     public func body(content: Content) -> some View {
         if isRegularWidth {
-            // No `presentationDetents` here: adding one is what makes
-            // iPadOS render a `.sheet` as a bottom-anchored resizable
-            // detent sheet in the first place. Leaving it unset gives the
-            // platform default for a regular-width presentation — a
-            // centered form sheet — matching the RN app's own
-            // `NewCanvasModal`-equivalent behavior on iPad.
+            // No `presentationDetents`: that's what makes iPadOS render a
+            // bottom-anchored detent sheet instead of a centered form sheet.
             content
         } else {
             content
@@ -92,15 +83,33 @@ extension Color {
     /// to opaque black rather than crashing — this is UI theming, not a
     /// server-trust boundary.
     init(hex: String) {
+        self = Color(uiColor: UIColor(hex: hex))
+    }
+
+    /// A color that resolves per color scheme (for app-local extras that
+    /// have no palette slot but still need a dark-mode value).
+    init(light: String, dark: String) {
+        let lightColor = UIColor(hex: light)
+        let darkColor = UIColor(hex: dark)
+        self = Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? darkColor : lightColor
+        })
+    }
+}
+
+private extension UIColor {
+    convenience init(hex: String) {
         var sanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
         if sanitized.hasPrefix("#") { sanitized.removeFirst() }
         guard sanitized.count == 6, let value = UInt32(sanitized, radix: 16) else {
-            self = .black
+            self.init(red: 0, green: 0, blue: 0, alpha: 1)
             return
         }
-        let r = Double((value >> 16) & 0xFF) / 255.0
-        let g = Double((value >> 8) & 0xFF) / 255.0
-        let b = Double(value & 0xFF) / 255.0
-        self = Color(red: r, green: g, blue: b)
+        self.init(
+            red: CGFloat((value >> 16) & 0xFF) / 255.0,
+            green: CGFloat((value >> 8) & 0xFF) / 255.0,
+            blue: CGFloat(value & 0xFF) / 255.0,
+            alpha: 1
+        )
     }
 }

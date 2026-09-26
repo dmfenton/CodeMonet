@@ -489,6 +489,7 @@ export interface GalleryEntry {
   drawing_style?: DrawingStyleType; // Style used for this piece (defaults to plotter)
   thumbnail_token?: string; // Capability token for thumbnail access
   title?: string; // Piece title (set by agent via name_piece tool)
+  prompt?: string; // Direction the piece was started with (when the server records it)
 }
 
 // Backwards compatibility alias
@@ -529,7 +530,11 @@ export interface InitMessage {
   drawing_style?: DrawingStyleType;
   style_config?: DrawingStyleConfig;
   /** Current program-painting version (paint mode), shown immediately without animating. */
-  painting?: PaintingVersionRef | null;
+  painting?: InitPaintingRef | null;
+  /** Current piece title, when the agent has named it (additive; may be absent). */
+  title?: string | null;
+  /** Direction the current piece was started with (additive; may be absent). */
+  prompt?: string | null;
 }
 
 // ============================================================================
@@ -549,10 +554,37 @@ export interface PaintingVersionRef {
   image_height: number;
 }
 
+/**
+ * One rendered version in a piece's history. `stages`, `ops` and
+ * `created_at` are additive server fields and may be absent.
+ */
+export interface PaintingVersionSummary {
+  version: number;
+  /** Path relative to the API base URL, ending in '/'. */
+  asset_base: string;
+  image_width: number;
+  image_height: number;
+  stages?: string[];
+  /** Recorded marks (reveal ops) in the version. */
+  ops?: number;
+  created_at?: string;
+}
+
+/**
+ * `init.painting`: the current version plus, when the server provides them,
+ * the piece's version history and the prompt it was started with.
+ */
+export interface InitPaintingRef extends PaintingVersionRef {
+  versions?: PaintingVersionSummary[];
+  prompt?: string | null;
+}
+
 /** Server -> client: a new version is ready to reveal. */
 export interface PaintingVersionMessage extends PaintingVersionRef {
   type: 'painting_version';
   stages: string[];
+  /** Recorded marks (reveal ops) in the version (additive; may be absent). */
+  ops?: number;
 }
 
 /** Brush stroke footprint: polyline of `width` through [x0, y0, x1, y1, ...] (image px). */
@@ -575,6 +607,48 @@ export interface RevealManifest {
   width: number;
   height: number;
   keyframes: RevealKeyframe[];
+}
+
+// ============================================================================
+// Public gallery (HTTP) — see server/code_monet/routes/public_gallery.py
+// ============================================================================
+
+/** GET /public/gallery item. Fields past `created_at` are optional. */
+export interface PublicGalleryPiece {
+  id: string;
+  user_id: string;
+  piece_number: number;
+  stroke_count: number;
+  width?: number;
+  height?: number;
+  created_at: string;
+  title?: string;
+  prompt?: string;
+  drawing_style?: DrawingStyleType;
+}
+
+/**
+ * Piece detail: GET /gallery/{n}/strokes and
+ * GET /public/gallery/{user_id}/{piece_id}/strokes.
+ * `title`, `prompt`, `stroke_count`, `drawing_style` and `versions` are
+ * additive and may be absent.
+ */
+export interface GalleryPieceDetail {
+  id: string;
+  strokes: Path[];
+  piece_number: number;
+  canvas_width?: number;
+  canvas_height?: number;
+  created_at: string;
+  /** 'raster' for program paintings: show image_url instead of strokes. */
+  format?: 'raster' | 'strokes' | 'vector';
+  /** Absolute-path URL (relative to the API base) of the final image, raster pieces only. */
+  image_url?: string | null;
+  title?: string | null;
+  prompt?: string | null;
+  stroke_count?: number;
+  drawing_style?: DrawingStyleType;
+  versions?: PaintingVersionSummary[];
 }
 
 export interface PieceStateMessage {

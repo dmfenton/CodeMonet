@@ -8,6 +8,9 @@ public enum AgentMessageType: String, Codable, Equatable, Sendable {
     case pieceComplete = "piece_complete"
     case codeExecution = "code_execution"
     case iteration
+    /// A nudge (or starting direction) the user sent from this device —
+    /// client-local, never on the wire as a message of its own.
+    case userNudge = "user_nudge"
 }
 
 public enum ToolExecutionStatus: String, Codable, Equatable, Sendable {
@@ -71,6 +74,10 @@ public struct AgentMessage: Codable, Equatable, Sendable, Identifiable {
     public var iteration: Int?
     public var status: ToolExecutionStatus?
     public var metadata: AgentMessageMetadata?
+    /// The painting version this entry is work toward (`N` for everything
+    /// after v(N-1) arrived). Stamped by the reducer when the message is
+    /// added; `nil` on a message not yet reduced.
+    public var version: Int?
 
     public init(
         id: String,
@@ -79,7 +86,8 @@ public struct AgentMessage: Codable, Equatable, Sendable, Identifiable {
         timestamp: Double,
         iteration: Int? = nil,
         status: ToolExecutionStatus? = nil,
-        metadata: AgentMessageMetadata? = nil
+        metadata: AgentMessageMetadata? = nil,
+        version: Int? = nil
     ) {
         self.id = id
         self.type = type
@@ -88,6 +96,7 @@ public struct AgentMessage: Codable, Equatable, Sendable, Identifiable {
         self.iteration = iteration
         self.status = status
         self.metadata = metadata
+        self.version = version
     }
 }
 

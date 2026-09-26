@@ -8,6 +8,7 @@ import type {
   DrawingStyleConfig,
   DrawingStyleType,
   GalleryEntry,
+  InitPaintingRef,
   PaintingVersionRef,
   Path,
   PendingStroke,
@@ -16,6 +17,21 @@ import type {
 } from '../types';
 import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE, getStyleConfig } from '../types';
 import { boundedPush } from '../utils';
+import type { NotebookEntry, NotebookVersions, VersionHistory } from '../studio';
+import {
+  EMPTY_VERSION_HISTORY,
+  addNote,
+  addNudge,
+  appendThought,
+  attachProducedVersion,
+  latestVersionNumber,
+  recordToolMessage,
+  sealThought,
+  seedVersionHistory,
+  summaryFromRef,
+  toolDetail,
+  upsertVersion,
+} from '../studio';
 
 // Max messages to keep in state to prevent memory issues
 export const MAX_MESSAGES = 50;
@@ -165,6 +181,14 @@ export interface CanvasHookState {
   styleConfig: DrawingStyleConfig; // Full style configuration
   /** Program painting (paint mode): server-rendered versions */
   painting: PaintingState;
+  /** Versions of the piece on the easel (paint mode), for version chips. */
+  versionHistory: VersionHistory;
+  /** Piece title: from init, or the agent's name_piece call this session. */
+  pieceTitle: string | null;
+  /** Direction the piece was started with (init, or this session's New piece). */
+  piecePrompt: string | null;
+  /** Studio notebook for the piece on the easel. */
+  notebook: NotebookEntry[];
   /** Saved canvas state before viewing a gallery piece (for restoring on exit) */
   savedCanvas: {
     strokes: Path[];
@@ -327,7 +351,11 @@ export type CanvasAction =
       paused: boolean;
       drawingStyle?: DrawingStyleType;
       styleConfig?: DrawingStyleConfig;
-      painting?: PaintingVersionRef | null;
+      painting?: InitPaintingRef | null;
+      /** Additive server fields: undefined = not sent (older server). */
+      title?: string | null;
+      prompt?: string | null;
+      monologue?: string;
     }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_ITERATION'; current: number; max: number }
@@ -335,9 +363,13 @@ export type CanvasAction =
   | { type: 'CLEAR_VIEWING' }
   | { type: 'SET_STYLE'; drawingStyle: DrawingStyleType; styleConfig: DrawingStyleConfig }
   // Program painting: a version arrived (guards applied in the reducer)
-  | { type: 'PAINTING_VERSION'; version: PaintingVersionRef }
+  | { type: 'PAINTING_VERSION'; version: PaintingVersionRef; stages?: string[]; ops?: number }
   // Program painting: the client finished revealing a version (matched by asset_base)
   | { type: 'PAINTING_PLAYBACK_DONE'; assetBase: string }
+  // Studio: the viewer nudged the agent (local echo into the notebook)
+  | { type: 'ADD_NUDGE'; text: string }
+  // Studio: the viewer started this piece with a direction
+  | { type: 'SET_PIECE_PROMPT'; prompt: string }
   // Performance actions (merged into CanvasAction for single reducer)
   | PerformanceAction;
 
@@ -368,8 +400,42 @@ export const initialState: CanvasHookState = {
   drawingStyle: 'plotter',
   styleConfig: PLOTTER_STYLE,
   painting: initialPaintingState,
+  versionHistory: EMPTY_VERSION_HISTORY,
+  pieceTitle: null,
+  piecePrompt: null,
+  notebook: [],
   savedCanvas: null,
 };
+
+/**
+ * Version tags for new notebook entries (paint mode only): the version the
+ * agent is working toward, and the latest one that exists, for the current piece.
+ */
+export function notebookVersions(state: CanvasHookState): NotebookVersions {
+  if (state.drawingStyle !== 'paint') return { working: null, latest: null };
+  const piece = state.pieceNumber;
+  const fromHistory =
+    state.versionHistory.piece === piece ? latestVersionNumber(state.versionHistory) : 0;
+  const refs = [state.painting.base, state.painting.playing].filter(
+    (ref): ref is PaintingVersionRef => ref !== null && ref.piece_number === piece
+  );
+  const latest = Math.max(fromHistory, ...refs.map((ref) => ref.version));
+  return { working: latest + 1, latest: latest > 0 ? latest : null };
+}
+
+/** Notebook after (re)connecting: keep this session's entries for the same piece. */
+function initNotebook(
+  state: CanvasHookState,
+  samePiece: boolean,
+  prompt: string | null,
+  monologue: string | undefined
+): NotebookEntry[] {
+  if (samePiece) return state.notebook;
+  let entries: NotebookEntry[] = [];
+  if (prompt) entries = addNudge(entries, prompt, null, true);
+  if (monologue?.trim()) entries = sealThought(appendThought(sealThought(entries), monologue, null));
+  return entries;
+}
 
 export function canvasReducer(state: CanvasHookState, action: CanvasAction): CanvasHookState {
   switch (action.type) {
@@ -395,6 +461,10 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         messages: [],
         thinking: '',
         painting: initialPaintingState,
+        versionHistory: EMPTY_VERSION_HISTORY,
+        pieceTitle: null,
+        piecePrompt: null,
+        notebook: [],
       };
 
     case 'START_STROKE':
@@ -412,12 +482,16 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       return { ...state, thinking: action.text };
 
     case 'APPEND_THINKING':
-      return { ...state, thinking: state.thinking + action.text };
+      return {
+        ...state,
+        thinking: state.thinking + action.text,
+        notebook: appendThought(state.notebook, action.text, notebookVersions(state).working),
+      };
 
     case 'ARCHIVE_THINKING': {
       // Move current thinking to message history (used when loading/archiving)
       if (!state.thinking.trim()) {
-        return { ...state, thinking: '' };
+        return { ...state, thinking: '', notebook: sealThought(state.notebook) };
       }
       const archived: AgentMessage = {
         id: generateThinkingId(),
@@ -429,14 +503,55 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         ...state,
         thinking: '',
         messages: boundedPush(state.messages, archived, MAX_MESSAGES),
+        notebook: sealThought(state.notebook),
       };
     }
 
-    case 'ADD_MESSAGE':
+    case 'ADD_MESSAGE': {
+      const message = action.message;
+      const versions = notebookVersions(state);
+      let notebook = state.notebook;
+      let pieceTitle = state.pieceTitle;
+      if (message.type === 'code_execution') {
+        notebook = recordToolMessage(notebook, message, versions);
+        // The title counts once naming succeeded (a completed, non-failed result).
+        const returnCode = message.metadata?.return_code;
+        const succeeded = typeof returnCode !== 'number' || returnCode === 0;
+        if (
+          message.status === 'completed' &&
+          succeeded &&
+          message.metadata?.tool_name === 'name_piece'
+        ) {
+          pieceTitle = toolDetail('name_piece', message.metadata.tool_input) ?? pieceTitle;
+        }
+      } else if (message.type === 'error') {
+        notebook = addNote(notebook, 'error', message.text, versions.working);
+      } else if (message.type === 'piece_complete') {
+        notebook = addNote(notebook, 'done', message.text, versions.latest);
+      }
       return {
         ...state,
-        messages: boundedPush(state.messages, action.message, MAX_MESSAGES),
+        messages: boundedPush(state.messages, message, MAX_MESSAGES),
+        notebook,
+        pieceTitle,
       };
+    }
+
+    case 'ADD_NUDGE':
+      return {
+        ...state,
+        notebook: addNudge(state.notebook, action.text, notebookVersions(state).working),
+      };
+
+    case 'SET_PIECE_PROMPT': {
+      const prompt = action.prompt.trim();
+      if (!prompt) return state;
+      return {
+        ...state,
+        piecePrompt: prompt,
+        notebook: addNudge(state.notebook, prompt, notebookVersions(state).working, true),
+      };
+    }
 
     case 'CLEAR_MESSAGES':
       return { ...state, messages: [] };
@@ -509,6 +624,13 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       // Use provided style or default to plotter
       const initStyle = action.drawingStyle || 'plotter';
       const initStyleConfig = action.styleConfig || getStyleConfig(initStyle);
+      // Reconnecting to the piece already on screen keeps this session's notebook.
+      const samePiece = state.notebook.length > 0 && action.pieceNumber === state.pieceNumber;
+      const title =
+        action.title !== undefined ? action.title : samePiece ? state.pieceTitle : null;
+      const serverPrompt = action.prompt !== undefined ? action.prompt : action.painting?.prompt;
+      const prompt =
+        serverPrompt !== undefined ? serverPrompt : samePiece ? state.piecePrompt : null;
       return {
         ...state,
         // Reset performance state on init
@@ -525,6 +647,13 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         styleConfig: initStyleConfig,
         // Current version is shown immediately (no reveal animation)
         painting: { base: action.painting ?? null, playing: null },
+        versionHistory: seedVersionHistory(
+          samePiece ? state.versionHistory : EMPTY_VERSION_HISTORY,
+          action.painting
+        ),
+        pieceTitle: title?.trim() || null,
+        piecePrompt: prompt?.trim() || null,
+        notebook: initNotebook(state, samePiece, prompt?.trim() || null, action.monologue),
         // Reset transient state on init
         messages: [],
         thinking: '',
@@ -558,6 +687,12 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         // A version arriving mid-playback finishes the current one (jump to its final);
         // a version for a new piece starts from a blank base.
         painting: { base: samePiece ? current : null, playing: incoming },
+        versionHistory: upsertVersion(
+          state.versionHistory,
+          incoming.piece_number,
+          summaryFromRef(incoming, { stages: action.stages, ops: action.ops })
+        ),
+        notebook: attachProducedVersion(state.notebook, incoming.version, action.ops ?? null),
       };
     }
 

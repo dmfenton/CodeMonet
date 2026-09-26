@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Code Monet">
+  <path d="M50 50 L54.7 16.3 A34 34 0 1 1 45.3 16.3 Z" fill="#2a6243"/>
+  <g stroke="#94b89e" stroke-width="1.8" stroke-linecap="round">
+    <line x1="50" y1="50" x2="73.4" y2="36.5"/>
+    <line x1="50" y1="50" x2="76.6" y2="54.7"/>
+    <line x1="50" y1="50" x2="67.4" y2="70.7"/>
+    <line x1="50" y1="50" x2="50" y2="77"/>
+    <line x1="50" y1="50" x2="32.6" y2="70.7"/>
+    <line x1="50" y1="50" x2="23.4" y2="54.7"/>
+    <line x1="50" y1="50" x2="26.6" y2="36.5"/>
+  </g>
+  <circle cx="50" cy="50" r="5.8" fill="#b85a2e"/>
+</svg>

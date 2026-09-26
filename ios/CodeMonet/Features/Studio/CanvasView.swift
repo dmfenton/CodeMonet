@@ -25,14 +25,18 @@ struct CanvasView: View {
     /// `StudioView` owns it as view state and passes it straight through
     /// rather than reading `environment.studio.state.drawingEnabled`.
     let drawingEnabled: Bool
-
-    @Environment(AppEnvironment.self) private var environment
-    @State private var canvasCache = IncrementalCanvasCache()
     /// Drives the raster layer for paint-mode pieces (program-painting spec
     /// §4) — a piece with a live/base `painting_version` has no vector
     /// `Path` strokes to draw, so `frame(state:canvasSize:)` renders this
     /// layer instead of `canvasCache`'s whenever `hasPainting` is true.
-    @State private var paintingController = PaintingRevealController()
+    /// Owned by `StudioView` so the stage bar can read its reveal progress.
+    let paintingController: PaintingRevealController
+    /// An older version's `final.png` shown over the live canvas (a version
+    /// chip was tapped). The live reveal keeps running underneath.
+    var pinnedImageURL: String?
+
+    @Environment(AppEnvironment.self) private var environment
+    @State private var canvasCache = IncrementalCanvasCache()
 
     @State private var isDragging = false
 
@@ -40,7 +44,7 @@ struct CanvasView: View {
         let state = environment.studio.state
         let canvasSize = CGSize(width: state.canvasWidth, height: state.canvasHeight)
         let viewOnly = state.viewingPiece != nil
-        let gestureEnabled = drawingEnabled && !viewOnly
+        let gestureEnabled = drawingEnabled && !viewOnly && pinnedImageURL == nil
 
         GeometryReader { proxy in
             let containerSize = CGSize(width: proxy.size.width, height: proxy.size.width * canvasSize.height / max(canvasSize.width, 1))
@@ -79,6 +83,12 @@ struct CanvasView: View {
 
                 penIndicator(state: state, containerSize: containerSize, canvasSize: canvasSize)
 
+                if let pinnedImageURL {
+                    GalleryRasterImageView(urlString: pinnedImageURL)
+                        .frame(width: containerSize.width, height: containerSize.height)
+                        .transition(.opacity)
+                }
+
                 if gestureEnabled {
                     drawingModePill
                 }
@@ -88,9 +98,7 @@ struct CanvasView: View {
             .gesture(dragGesture(containerSize: containerSize, canvasSize: canvasSize, enabled: gestureEnabled))
         }
         .aspectRatio(canvasSize.width / max(canvasSize.height, 1), contentMode: .fit)
-        .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .shadow(color: Color.black.opacity(0.1), radius: 12, x: 0, y: 4)
+        .background(CodeMonetDesignSystem.Extra.canvasBackground)
         .accessibilityIdentifier("canvas-view")
         .accessibilityLabel(accessibilityLabel(state: state))
     }
@@ -113,14 +121,14 @@ struct CanvasView: View {
                     .resizable()
                     .accessibilityHidden(true)
             } else {
-                Color.white
+                CodeMonetDesignSystem.Extra.canvasBackground
             }
         } else if let image = canvasCache.frame(state: state, canvasSize: canvasSize) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .accessibilityHidden(true)
         } else {
-            Color.white
+            CodeMonetDesignSystem.Extra.canvasBackground
         }
     }
 
@@ -173,10 +181,10 @@ struct CanvasView: View {
     private var drawingModePill: some View {
         Text("Drawing Mode")
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(Color.white)
+            .foregroundStyle(CodeMonetDesignSystem.Extra.canvasBackground)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Capsule().fill(CodeMonetDesignSystem.Extra.coral))
+            .background(Capsule().fill(CodeMonetDesignSystem.Extra.humanStroke))
             .padding(8)
             .allowsHitTesting(false)
     }

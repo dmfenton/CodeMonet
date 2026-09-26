@@ -100,8 +100,8 @@ this is safe to call on every re-entry into `.signedIn` (e.g. after a
 silent `refreshSessionOnForeground()` pass). Nothing else in the app calls
 `connect()`; if that `onChange` wiring is ever removed or the state
 transition it watches changes shape, the socket never opens and every
-`connected`-gated UI element (Home's prompt/Surprise-Me/Continue card, New
-Canvas's Start button) stays permanently disabled. A live 4001 (WS) or a
+`connected`-gated UI element (Home's composer Begin/Surprise me, the easel's
+Watch/Continue, Studio's nudge bar) stays permanently disabled. A live 4001 (WS) or a
 401/403 (REST, via `CodeMonetRESTClient`'s `onUnauthorized`) both route
 through `StudioStore.onAuthenticationFailure`, which `AppEnvironment` wires
 to `AuthService.signOut(ifBearerTokenMatches:)` — gated by the bearer token
@@ -118,7 +118,7 @@ incorrectly sign out an otherwise-healthy session.
 | `ios/MonetKit/Sources/MonetRender`, `ios/MonetKit/Sources/monet-render`, `ios/MonetKit/Tests/MonetRenderTests`, `scripts/render-study.py` | 3. renderer |
 | `ios/MonetKit/Sources/MonetNetworking`, `ios/MonetKit/Tests/MonetNetworkingTests`, `ios/CodeMonet/Services/AuthService.swift`, `ios/CodeMonet/Services/StudioStore.swift`, `ios/CodeMonet/App/AppConfig.swift` | 4. networking+auth |
 | `ios/CodeMonet/Features/Studio/` | 5. studio UI |
-| `ios/CodeMonet/Features/Home/`, `ios/CodeMonet/Features/Gallery/`, `ios/CodeMonet/Features/NewCanvas/` | 6. home+gallery+new-canvas UI |
+| `ios/CodeMonet/Features/Home/`, `ios/CodeMonet/Features/Gallery/` | 6. home+gallery UI |
 | `ios/CodeMonet/App/CodeMonetApp.swift`, `AppDelegate.swift`, `RootView.swift`, `AppEnvironment.swift`, `Navigation.swift`, `SplashView.swift`, `ios/CodeMonet/Features/Auth/`, `ios/CodeMonet/DesignSystem/`, `ios/CodeMonetTests/`, `ios/CodeMonetUITests/`, `ios/project.yml`, `ios/.swiftlint.yml`, `ios/Config/`, `ios/CodeMonet/Resources/` | 7. app shell |
 
 `ios/MonetKit/Package.swift` and this file (`ios/ARCHITECTURE.md`) are
@@ -215,10 +215,10 @@ code — they contain exact constants/formulas this document doesn't repeat.
   - `cd ios && make test-app` (CodeMonetUITests still passes with your accessibility identifiers in place)
   - Manual: pause/resume, nudge send, and the draw gesture round-trip against a local server (`make dev` in the repo root).
 
-### 6. Home+Gallery+NewCanvas UI (home panel, continue card, prompt input, surprise me, style picker, gallery grid with authenticated thumbnails)
-- **ownedPaths**: `ios/CodeMonet/Features/Home/`, `ios/CodeMonet/Features/Gallery/`, `ios/CodeMonet/Features/NewCanvas/`
+### 6. Home+Gallery UI (home panel, composer, recent row, gallery grid with authenticated thumbnails)
+- **ownedPaths**: `ios/CodeMonet/Features/Home/`, `ios/CodeMonet/Features/Gallery/`
 - **specFiles**: `scratchpad/specs/ux.md` §5, §7.2, §8, §9.2 (authenticated images), §10 (7, 11 apply directly)
-- **instructions**: Replace the skeleton's placeholder `HomeView`/`GalleryView`/`NewCanvasView`. Home needs the Continue-card (live-strokes SVG-equivalent preview vs. authenticated thumbnail fallback per §5.2) and the conditional OR-divider logic (§5.2's `hasRecentWork` rule). Gallery needs real thumbnail loading via `CodeMonetRESTClient.thumbnailData(pieceID:)` (already provided) and a 2-column grid. `NewCanvasView` exists as a real, reachable sheet already (a deliberate native-improvement divergence from the RN app's unreachable one, per ux spec §7.2's note) — finish its size-profile picker.
+- **instructions**: (Historical; superseded by §8.) Replace the skeleton's placeholder `HomeView`/`GalleryView`. Gallery needs real thumbnail loading via `CodeMonetRESTClient.thumbnailData(pieceID:)` (already provided) and a 2-column grid. The New Canvas sheet this package originally owned was folded into Home's composer (`HomeComposer`: prompt, style chips, canvas-size menu, Surprise me, Begin) and deleted in the redesign.
 - **acceptance**:
   - `cd ios && make build`
   - `cd ios && make test-app`
@@ -354,3 +354,51 @@ already-listed `sources` paths.
   only ever pushes `.strokes` pieces over it) — harmless, since the app's
   actual gallery-open flow is the REST round-trip above, not that
   message; flagged as a gap if a future flow needs the WS path too.
+
+## 8. Redesign (Fenton palette, notebook, versions)
+
+The app now uses the Fenton paper/ink/forest palette
+(`CodeMonet/DesignSystem/CodeMonetDesignSystem.swift`), a native `BrandMark`
+drawn from `brand/mark.svg`, and system serif/monospaced type roles
+(`MonetStyle.swift`). Screens:
+
+- **Home** (`Features/Home`): brand header + account menu (sign out), "on the
+  easel" row (`HomeSelectors.easel`), one composer (`HomeComposer`: prompt,
+  Paint/Plotter chips, canvas-size menu, Surprise me, Begin) that replaces the
+  New Canvas sheet (deleted, with `ActiveModal`), and a recent row.
+- **Studio** (`Features/Studio`): top bar (back, title, status pill, menu with
+  New piece / Gallery / Draw on canvas / Pause), canvas in a paper mat, stage
+  bar (`MonetStudio.StageBar` over the displayed version's `reveal.json`) and
+  version chips (tap an older version to pin its `final.png` over the live
+  canvas), the notebook (`MonetStudio.Notebook`) and an always-visible nudge
+  bar with pause/resume. The action bar, LiveStatus, message stream and nudge
+  sheet are gone. `StudioView` owns the `PaintingRevealController`, which now
+  also publishes the revealing keyframe and caches manifests by `asset_base`.
+- **Gallery** (`Features/Gallery`): filters, featured latest piece, grid, and
+  `GalleryPieceDetailView` (meta, prompt, version replay through a second
+  `PaintingRevealController`, `painting.py` sheet, "Open in studio").
+
+Contract changes (all additive on the wire; flagged per §4 rule 1):
+
+- `ServerMessage.paintingVersion` gained `ops: Int? = nil`; `StudioEvent
+  .paintingVersion` carries `stages`/`ops` (defaults `[]`/`nil`) into the
+  version history only — playback is unchanged.
+- `InitPayload` gained `title`, `prompt` (top-level, else `painting.prompt`)
+  and `paintingVersions` (`painting.versions`); `GalleryPieceStrokes` gained
+  `title`, `prompt`, `strokeCount`, `versions`. New `PaintingVersionSummary`.
+- `AgentMessage` gained `version` (stamped by the reducer: work toward vN is
+  everything after v(N-1) arrived) and `AgentMessageType.userNudge`.
+- `StudioState` gained `versions` (seeded from `init`, accumulated from
+  `painting_version`, reset on `clear`/`new_canvas`), `title` (init or a
+  completed `name_piece` input), `prompt`; events `.setTitle`/`.setPrompt`.
+- `MessageRouter` archives pending thinking when a tool call starts, so the
+  notebook interleaves thought and tool lines.
+- `StudioState.notebook` is the notebook's own log (bounded to
+  `maxNotebookEntries` = 200 entries, a tool call's started/completed pair
+  counting once), separate from the 50-message `messages` status window.
+  `init` for the same piece (non-empty notebook) keeps it, merges versions and
+  keeps an omitted title/prompt; a different piece seeds it from the payload's
+  prompt and monologue.
+- Additive `versions` arrays decode element-wise (`LossyArray`): a malformed
+  entry is skipped, never failing `init` or the gallery detail.
+- `PaintingAssetClient.text(at:)` fetches a version's `painting.py`.

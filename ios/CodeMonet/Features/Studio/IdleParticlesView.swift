@@ -8,13 +8,18 @@ import SwiftUI
 struct IdleParticlesView: View {
     private static let particleCount = 12
     fileprivate static let cycleDuration: Double = 15
-    private static let colors: [Color] = [
-        Color(hex: "#7b68ee").opacity(0.3), // Lavender
-        Color(hex: "#4ecdc4").opacity(0.3), // Teal
-        Color(hex: "#ff6b6b").opacity(0.25), // Coral
-        Color(hex: "#ffd93d").opacity(0.2), // Gold
-        Color(hex: "#e94560").opacity(0.25), // Rose
-    ]
+    /// Brand tones from the light palette — the canvas paper stays light in
+    /// both color schemes, so these never adapt.
+    private static let colors: [Color] = {
+        let light = CodeMonetDesignSystem.theme.light
+        return [
+            light.accent.opacity(0.22),
+            light.emphasis.opacity(0.22),
+            light.success.opacity(0.22),
+            light.warning.opacity(0.18),
+            CodeMonetDesignSystem.Extra.humanStroke.opacity(0.18),
+        ]
+    }()
 
     private let particles: [Particle] = Self.generate()
 

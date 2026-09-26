@@ -13,6 +13,7 @@ export {
   MAX_MESSAGES,
   MAX_HISTORY,
   MAX_WORDS_PER_CHUNK,
+  notebookVersions,
   shouldShowIdleAnimation,
 } from './reducer';
 

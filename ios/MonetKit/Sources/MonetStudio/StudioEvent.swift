@@ -34,6 +34,11 @@ public enum StudioEvent: Equatable, Sendable {
     case setPaused(Bool)
     case setIteration(current: Int, max: Int)
     case resetTurn
+    /// The live piece's title (a completed `name_piece` call).
+    case setTitle(String?)
+    /// The direction the live piece was started with (this device's own
+    /// `new_canvas` request, applied once the server confirms the new piece).
+    case setPrompt(String?)
 
     // Canvas lifecycle (§5.4)
     case clear
@@ -58,10 +63,10 @@ public enum StudioEvent: Equatable, Sendable {
     /// A `painting_version` message arrived (or `init.painting` was
     /// non-nil, routed the same way minus the `INIT` guards — see
     /// `.initialize`, which sets `painting` directly rather than going
-    /// through this event's guard chain). `stages` is intentionally not
-    /// carried here — it's dropped at message-routing time (spec §4.2),
-    /// never reaches reducer state.
-    case paintingVersion(PaintingVersionRef)
+    /// through this event's guard chain). `stages`/`ops` never affect
+    /// playback (spec §4.2); they're kept only on the accepted version's
+    /// `StudioState.versions` entry for display.
+    case paintingVersion(PaintingVersionRef, stages: [String] = [], ops: Int? = nil)
     /// The reveal layer finished animating `playing` and drew its final
     /// image. `assetBase` is the version that just finished, so a stale
     /// completion (a newer version already superseded it) can be detected

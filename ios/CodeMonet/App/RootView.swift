@@ -189,36 +189,22 @@ enum MagicLinkDeepLinkError {
 /// Bare full-screen spinner, no chrome (ux spec §1 root gating step 1).
 private struct LoadingScreen: View {
     var body: some View {
-        ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(uiColor: .systemBackground))
+        PaletteReader { palette in
+            ProgressView()
+                .tint(palette.accent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(palette.surface)
+        }
     }
 }
 
 /// The current screen underneath the one-shot Splash overlay (ux spec §1,
-/// §5-§8). Owned by the "app shell" package for the switch/plumbing; each
-/// case's view is owned by its own feature package.
-///
-/// The New Canvas sheet (ux spec §7.2, native improvement #1) is presented
-/// by `HomeView` itself (home+gallery+new-canvas UI package), pre-seeded
-/// from Home's own style picker via `NewCanvasView(initialStyle:)` — not
-/// duplicated here. An earlier version of this file independently added a
-/// second entry point/sheet at this level (built in parallel, before
-/// `NewCanvasView` grew its `initialStyle` parameter); that duplicate had
-/// no style to seed, collided with `HomeView`'s identical
-/// `"home-new-canvas-button"` accessibility identifier, and failed to
-/// compile once merged — removed during integration in favor of the
-/// correctly-owned, richer implementation.
+/// §5-§8). Starting a piece happens from Home's composer and nudging from
+/// Studio's always-visible nudge bar, so there are no app-level modals.
 private struct MainAppView: View {
     @Environment(AppEnvironment.self) private var environment
 
     var body: some View {
-        screenContent
-            .sensoryFeedback(.selection, trigger: environment.navigation.activeModal)
-    }
-
-    @ViewBuilder
-    private var screenContent: some View {
         switch environment.navigation.screen {
         case .home:
             HomeView()

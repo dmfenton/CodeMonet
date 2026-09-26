@@ -39,6 +39,8 @@ interface CanvasProps {
   apiUrl?: string;
   onPaintingPlaybackDone?: (assetBase: string) => void;
   onPaintingProgress?: (info: RevealPlaybackInfo) => void;
+  /** Rendered over the canvas, inside the frame (e.g. an older version's image). */
+  overlay?: React.ReactNode;
   onStrokeStart: (x: number, y: number) => void;
   onStrokeMove: (x: number, y: number) => void;
   onStrokeEnd: () => void;
@@ -78,6 +80,7 @@ export function Canvas({
   apiUrl = '',
   onPaintingPlaybackDone,
   onPaintingProgress,
+  overlay,
   onStrokeStart,
   onStrokeMove,
   onStrokeEnd,
@@ -257,24 +260,10 @@ export function Canvas({
           <Renderer {...rendererProps} />
         </svg>
 
+        {overlay}
+
         {/* Drawing mode indicator */}
-        {drawingEnabled && (
-          <div
-            style={{
-              position: 'absolute',
-              top: 8,
-              left: 8,
-              padding: '4px 8px',
-              background: styleConfig.human_stroke.color,
-              color: '#fff',
-              borderRadius: 4,
-              fontSize: 12,
-              fontWeight: 600,
-            }}
-          >
-            Drawing Mode
-          </div>
-        )}
+        {drawingEnabled && <div className="canvas-drawing-badge">drawing</div>}
       </div>
     </div>
   );

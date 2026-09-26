@@ -9,51 +9,15 @@ import { StaticRouter } from 'react-router';
 import { HelmetProvider, HelmetServerState } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { RendererProvider } from './context/RendererContext';
+import type { GalleryPieceDetail, PublicGalleryPiece } from '@code-monet/shared';
 import { AppRoutes } from './routes';
 
 export interface SSRData {
-  galleryPieces?: GalleryPieceData[];
-  galleryPiece?: GalleryPieceData;
-  pieceStrokes?: PieceStrokesData;
-}
-
-export interface GalleryPieceData {
-  id: string;
-  user_id: string;
-  piece_number: number;
-  stroke_count: number;
-  width?: number;
-  height?: number;
-  created_at: string;
-  title?: string;
-  description?: string;
-}
-
-export interface PieceStrokesData {
-  id: string;
-  strokes: PathData[];
-  piece_number: number;
-  canvas_width?: number;
-  canvas_height?: number;
-  created_at: string;
-  /** 'raster' for program paintings: show image_url instead of strokes. */
-  format?: 'raster' | 'vector';
-  /** Absolute-path URL (relative to the API base) of the final image, raster pieces only. */
-  image_url?: string;
-}
-
-export type PathDataType = 'line' | 'quadratic' | 'cubic' | 'polyline' | 'svg';
-
-export interface PathData {
-  type: PathDataType;
-  points?: { x: number; y: number }[];
-  d?: string;
-  author?: string;
-  color?: string;
-  stroke_width?: number;
-  opacity?: number;
-  fill?: string;
-  fill_opacity?: number;
+  /** Pathname the data was rendered for; ignored on any other path. */
+  path?: string;
+  galleryPieces?: PublicGalleryPiece[];
+  galleryPiece?: PublicGalleryPiece & { description?: string };
+  pieceStrokes?: GalleryPieceDetail;
 }
 
 export interface RenderResult {

@@ -10,7 +10,7 @@ import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
 import { AppRoutes } from './routes';
 import './styles.css';
-import './homepage.css';
+import './site.css';
 import './components/AuthScreen.css';
 
 // Get initial data injected by SSR

@@ -43,6 +43,16 @@ public struct PaintingAssetClient: Sendable {
         try await data(at: urlString)
     }
 
+    /// Fetches a version's `painting.py` (the program that rendered it) as
+    /// UTF-8 text.
+    public func text(at urlString: String) async throws -> String {
+        let raw = try await data(at: urlString)
+        guard let text = String(data: raw, encoding: .utf8) else {
+            throw FetchError.decoding("not UTF-8 text")
+        }
+        return text
+    }
+
     private func data(at urlString: String) async throws -> Data {
         guard let url = URL(string: urlString) else {
             throw FetchError.invalidURL(urlString)
