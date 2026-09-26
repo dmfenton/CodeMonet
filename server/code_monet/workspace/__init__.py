@@ -12,6 +12,7 @@ import asyncio
 import json
 import logging
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path as FilePath
 from typing import TYPE_CHECKING, Any
@@ -468,6 +469,15 @@ class WorkspaceState:
             piece_number = self._piece_number
             async with self._gallery_thumbnail_lock(piece_number):
                 await atomic_write(piece_file, json.dumps(piece_data, indent=2))
+                # Sidecars belong to the previous revision of this piece. Their
+                # mtimes can equal the new JSON's mtime, so timestamp checks
+                # alone cannot tell that they are stale after a resave.
+                for sidecar in (
+                    piece_file.with_suffix(".meta"),
+                    self._gallery_dir / f"piece_{piece_number:06d}.thumb.png",
+                ):
+                    with suppress(FileNotFoundError):
+                        await aiofiles.os.remove(sidecar)
 
             saved_id = f"piece_{piece_number:06d}"
             title_info = (
