@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-09-26
+
 ### Added
 
 - New lily pad mark (`brand/mark.svg`) with `scripts/build-brand.py` generating the light and dark iOS app icons, launch mark, web favicon, touch icon, and social preview image.
@@ -21,8 +23,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Redesign the iOS and web apps on the Fenton paper, ink, and forest palette. Home is a single composer (prompt, Paint or Plotter, canvas size, surprise me) replacing the New Canvas sheet; the web landing page is rebuilt around a real painting program and the stage it produced.
 - Web dev proxy and dev WebSocket follow `API_URL`, so a worktree can run its backend on a non-default port.
-- Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
-- Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
 - Adopt the shared platform `FentonIdentityClient` in place of the app's own `CodeMonetIdentityClient`, removing duplicated Fenton Identity PKCE/token-exchange code; app-specific `GET /auth/me` identity mapping stays in `AuthService`. No behavior change. Bumps `fenton-platform.lock`, which also moves the server's `fenton-platform` Python dependency and drops `AuthenticationController`'s now-removed `refreshRotationStore` parameter (upstream replaced the persisted rotation marker with single-flight in-memory refresh coalescing).
 
 ### Fixed
@@ -30,14 +30,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Concurrent users' agents no longer act on each other's pieces. Drawing tools read process-global callbacks that every turn overwrote, so with two users painting at once one user's `paint`, `draw_paths`, `view_canvas`, `critique_canvas`, `sign_canvas`, or `imagine` could run against the other user's workspace, and one user's critique verdict could block or open the other's finish gate. Each agent now owns its tool context (turn bindings, finish gate, reference image) and its tools are bound to it, on both the Claude and OpenAI backends; `/debug/agent` reports the user's own finish gate.
 - The status pill no longer reads idle while the painter works between tool calls or after a mid-turn reconnect: the server broadcasts `turn_state` around each agent turn and reports `turn_active` in `init`. The piece title now updates live from a server `piece_title` message instead of clients parsing the `name_piece` tool call.
 - Pin the Codex review gate to `codex-review-gate@aeb8ac3`: the base branch advancing after a PR's final review, and review rounds beyond the budget, are now warnings instead of blocks, so merging one companion PR no longer deadlocks the other; only P0/P1 findings block.
+- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, refuse a symlinked painting program, publish the program bytes read before the run (not the executed copy), and refuse symlinked painting assets.
+- Dev server hot-reloads on source changes only, so a paint run writing its program under the data directory no longer restarts it mid-run.
+
+## [1.40.1] - 2026-09-26
+
+Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these entries cover that range.
+
+### Added
+
+- Program painting: the agent writes a Python painting program against `code_monet.paintlib`, the server renders each run as a version, and clients reveal it stroke by stroke (#313).
+- Native SwiftUI iOS app (`ios/`, MonetKit) replaces the React Native app (#315).
+
+### Changed
+
+- Share the Anthropic workload-identity access token across agent subprocesses (#307).
+- Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
+- Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
+
+### Fixed
+
+- Keep production server data on the persistent volume (#316).
+- Patch OpenSSL in the SSR image and remediate JavaScript dependency advisories, including js-yaml (#304, #310, #312).
 - Authenticate the WebSocket handshake with the same platform-token authority as the REST API; production WebSocket connections previously rejected Fenton Identity tokens.
 - Treat an unavailable identity service as no verdict (WebSocket close 1011, REST 503) instead of an invalid token, scoped to tokens whose signing key could not be fetched, so clients retry rather than sign out.
 - Web client keeps the stored session and retries with backoff when the server cannot give an auth verdict, persists rotated refresh tokens before the user lookup, and refreshes the session when the WebSocket rejects its token.
 - Make server unit tests hermetic: they no longer read the repo `.env` or dev SSM parameters, matching CI.
 - Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
-- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, refuse a symlinked painting program, publish the program bytes read before the run (not the executed copy), and refuse symlinked painting assets.
-- Dev server hot-reloads on source changes only, so a paint run writing its program under the data directory no longer restarts it mid-run.
 
 ## [1.39.3] - 2026-08-23
 
@@ -1227,7 +1247,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/sketchpad/compare/v1.38.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...HEAD
+[1.41.0]: https://github.com/dmfenton/CodeMonet/compare/v1.40.1...v1.41.0
+[1.40.1]: https://github.com/dmfenton/CodeMonet/compare/v1.39.3...v1.40.1
 [1.38.0]: https://github.com/dmfenton/sketchpad/compare/v1.37.7...v1.38.0
 [1.37.3]: https://github.com/dmfenton/sketchpad/compare/v1.37.2...v1.37.3
 [1.37.2]: https://github.com/dmfenton/sketchpad/compare/v1.37.1...v1.37.2
