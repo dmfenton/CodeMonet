@@ -5,7 +5,8 @@ import SwiftUI
 /// Version-by-version replay control: play/pause, a track with one tick per
 /// version (tap or drag to jump), and "replay · v2 of 4".
 struct ReplayScrubber: View {
-    let versionCount: Int
+    /// Version numbers, oldest first (not necessarily 1…N).
+    let versionNumbers: [Int]
     /// `nil` = not replaying (the final image is shown).
     let selectedIndex: Int?
     let isPlaying: Bool
@@ -39,9 +40,14 @@ struct ReplayScrubber: View {
         }
     }
 
+    private var versionCount: Int { versionNumbers.count }
+
+    /// "v2 of 4": the selected version's own number, of the latest.
     private var label: String {
-        guard let selectedIndex else { return "\(versionCount) version\(versionCount == 1 ? "" : "s")" }
-        return "v\(selectedIndex + 1) of \(versionCount)"
+        guard let selectedIndex, versionNumbers.indices.contains(selectedIndex), let latest = versionNumbers.last else {
+            return "\(versionCount) version\(versionCount == 1 ? "" : "s")"
+        }
+        return "v\(versionNumbers[selectedIndex]) of \(latest)"
     }
 
     private func fraction(for index: Int) -> CGFloat {

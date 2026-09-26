@@ -24,12 +24,13 @@ struct StudioPresentationTests {
     func executingPills() {
         var state = StudioState()
         state.paused = false
-        state.messages = [makeMessage(type: .codeExecution, toolName: "critique_canvas", status: .started)]
-        #expect(StudioPresentation.statusPill(for: state) == .init(label: "critique", isActive: true))
-        state.messages = [makeMessage(type: .codeExecution, toolName: "paint", status: .started)]
-        #expect(StudioPresentation.statusPill(for: state).label == "painting")
-        state.messages = [makeMessage(type: .codeExecution, toolName: "view_canvas", status: .started)]
-        #expect(StudioPresentation.statusPill(for: state).label == "looking")
+        // Messages reach both the status window and the notebook log via the reducer.
+        for tool in ["critique_canvas", "paint", "view_canvas"] {
+            state = StudioReducer.reduce(state, .clearMessages)
+            state = StudioReducer.reduce(state, .addMessage(makeMessage(type: .codeExecution, toolName: tool, status: .started)))
+            let expected = ["critique_canvas": "critique", "paint": "painting", "view_canvas": "looking"][tool]
+            #expect(StudioPresentation.statusPill(for: state) == .init(label: expected ?? "", isActive: true))
+        }
     }
 
     @Test("a revealing painting reads as painting; plotter strokes as drawing")

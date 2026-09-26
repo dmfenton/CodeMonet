@@ -134,6 +134,13 @@ public struct StudioState: Equatable, Sendable {
     public var title: String?
     /// The direction the live piece was started with, when known.
     public var prompt: String?
+    /// The live piece's notebook log: the same messages as `messages`, but
+    /// with its own, larger bound (`maxNotebookEntries` notebook entries, a
+    /// tool call's started/completed pair counting once) so a long turn
+    /// doesn't evict the prompt and early critiques. `messages` stays the
+    /// short window the status selectors read. Kept across a reconnect to
+    /// the same piece; reset with the piece.
+    public var notebook: [AgentMessage] = []
 
     public init() {}
 
@@ -145,4 +152,7 @@ public struct StudioState: Equatable, Sendable {
 
     /// `MAX_MESSAGES` bound on `messages` (protocol-state spec §4).
     public static let maxMessages = 50
+    /// Bound on notebook entries (matches the web client's
+    /// `MAX_NOTEBOOK_ENTRIES`).
+    public static let maxNotebookEntries = 200
 }

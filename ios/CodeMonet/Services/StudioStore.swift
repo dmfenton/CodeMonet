@@ -34,7 +34,7 @@ public final class StudioStore {
     /// incorrectly sign out a session that's actually fine.
     public var onAuthenticationFailure: (@Sendable (String) async -> Void)?
 
-    private let socket: StudioWebSocketClient
+    let socket: StudioWebSocketClient
     private var rest: CodeMonetRESTClient
     private let traceBuffer: TraceSpanBuffer
     @ObservationIgnored private var performer = PerformerEngine()
@@ -301,6 +301,7 @@ public final class StudioStore {
             await route(message)
         case let .disconnected(reason):
             connected = false
+            pendingPrompt = nil  // a reconnect's `init` carries the prompt instead
             switch reason {
             case .authenticationFailed:
                 recordSpan(name: "ws.auth_error")

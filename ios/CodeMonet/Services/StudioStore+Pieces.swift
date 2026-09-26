@@ -11,11 +11,24 @@ extension StudioStore {
     public func startNewPiece(direction: String?, style: DrawingStyleType, width: Int?, height: Int?) {
         let trimmed = direction?.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = trimmed?.isEmpty == false ? trimmed : nil
-        pendingPrompt = prompt
         setStyle(style)
-        send(.newCanvas(direction: prompt, drawingStyle: style, canvasWidth: width, canvasHeight: height))
-        setPausedLocally(false)
-        send(.resume(direction: nil))
+        // Recorded before the send completes (the server's `new_canvas`
+        // confirmation can be routed before the send's continuation
+        // resumes) and dropped again if the send fails, so a prompt is only
+        // kept for a request that actually went out.
+        pendingPrompt = prompt
+        let request = ClientMessage.newCanvas(direction: prompt, drawingStyle: style, canvasWidth: width, canvasHeight: height)
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.socket.send(request)
+            } catch {
+                if self.pendingPrompt == prompt { self.pendingPrompt = nil }
+                return
+            }
+            self.setPausedLocally(false)
+            self.send(.resume(direction: nil))
+        }
     }
 
     /// Sends a nudge and records it in the notebook as the user's own entry.

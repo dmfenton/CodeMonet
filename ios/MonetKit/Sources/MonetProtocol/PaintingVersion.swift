@@ -256,3 +256,24 @@ public extension RevealManifest {
         }
     }
 }
+
+/// Decodes a JSON array element by element, skipping elements that fail to
+/// decode, so one malformed entry (e.g. in an additive `versions` list)
+/// can't fail the whole payload.
+struct LossyArray<Element: Decodable>: Decodable {
+    var elements: [Element]
+
+    init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        var elements: [Element] = []
+        while !container.isAtEnd {
+            if let element = try? container.decode(Element.self) {
+                elements.append(element)
+            } else {
+                // Consume the bad element so decoding moves on.
+                _ = try container.decode(JSONValue.self)
+            }
+        }
+        self.elements = elements
+    }
+}

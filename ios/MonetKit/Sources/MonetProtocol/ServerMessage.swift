@@ -53,8 +53,20 @@ public struct InitPayload: Codable, Equatable, Sendable {
 
     /// The additive keys `init.painting` may carry beside the ref fields.
     private struct PaintingExtras: Decodable {
-        let versions: [PaintingVersionSummary]?
+        let versions: [PaintingVersionSummary]
         let prompt: String?
+
+        enum CodingKeys: String, CodingKey { case versions, prompt }
+
+        /// Additive fields: a malformed version entry is skipped, and a
+        /// wrongly-typed `versions`/`prompt` reads as absent — neither may
+        /// fail `init`.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            versions = (try? container.decodeIfPresent(LossyArray<PaintingVersionSummary>.self, forKey: .versions))?
+                .elements ?? []
+            prompt = try? container.decodeIfPresent(String.self, forKey: .prompt)
+        }
     }
 
     public init(

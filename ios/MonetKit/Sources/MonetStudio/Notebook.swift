@@ -79,7 +79,7 @@ public enum Notebook {
 
     public static func entries(_ state: StudioState) -> [NotebookEntry] {
         entries(
-            messages: state.messages,
+            messages: state.notebook,
             liveThinking: state.thinking,
             versions: state.versions,
             workingVersion: state.workingVersion
@@ -150,7 +150,7 @@ public enum Notebook {
         let knownVersions: Set<Int>
         var entries: [NotebookEntry] = []
         /// Open (started, not yet completed) tool calls: entry index + start time.
-        private var open: [(toolName: String?, index: Int, startedAt: Double)] = []
+        private var open: [(toolName: String?, iteration: Int?, index: Int, startedAt: Double)] = []
 
         init(knownVersions: Set<Int>) {
             self.knownVersions = knownVersions
@@ -188,12 +188,14 @@ public enum Notebook {
                     producedVersion: producedVersion(toolName: toolName, version: message.version),
                     title: Self.inputTitle(message)
                 )
-                open.append((toolName, entries.count, message.timestamp))
+                open.append((toolName, message.iteration, entries.count, message.timestamp))
                 append(message, .tool(call))
                 return
             }
             let failed = (message.metadata?.returnCode ?? 0) != 0
-            guard let openIndex = open.lastIndex(where: { $0.toolName == toolName }) else {
+            // Parallel calls of one tool: a completion closes the oldest
+            // still-running call with the same tool and iteration.
+            guard let openIndex = open.firstIndex(where: { $0.toolName == toolName && $0.iteration == message.iteration }) else {
                 // Its `started` was dropped from the bounded message list.
                 let call = NotebookToolCall(toolName: toolName, inProgress: false, failed: failed, title: Self.inputTitle(message))
                 entries.append(completedEntry(id: message.id, version: message.version, call: call, message: message))

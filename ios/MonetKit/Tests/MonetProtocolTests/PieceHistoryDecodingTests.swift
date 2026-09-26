@@ -148,3 +148,44 @@ struct PieceHistoryDecodingTests {
         #expect(manifest.strokeOpCount == 2)
     }
 }
+
+@Suite("Lossy version decoding")
+struct LossyVersionDecodingTests {
+    @Test("one malformed version entry doesn't fail init; the rest decode")
+    func initSkipsBadVersion() throws {
+        let json = Data("""
+        {
+          "type": "init", "strokes": [], "gallery": [], "status": "idle", "paused": true,
+          "piece_number": 2, "canvas_width": 800, "canvas_height": 600, "monologue": "",
+          "drawing_style": "paint", "style_config": \(PaintingVersionDecodingTests.styleConfigJSON),
+          "painting": {
+            "piece_number": 2, "version": 2, "asset_base": "/a/2/", "image_width": 10, "image_height": 10,
+            "versions": [
+              {"version": 1, "asset_base": "/a/1/"},
+              {"version": "two", "asset_base": 5},
+              {"version": 2, "asset_base": "/a/2/", "ops": 20}
+            ]
+          }
+        }
+        """.utf8)
+        guard case let .initial(payload) = try JSONDecoder().decode(ServerMessage.self, from: json) else {
+            Issue.record("expected .initial")
+            return
+        }
+        #expect(payload.paintingVersions.map(\.version) == [1, 2])
+        #expect(payload.painting?.version == 2)
+    }
+
+    @Test("one malformed version entry doesn't fail gallery detail; a non-array versions reads as empty")
+    func galleryDetailSkipsBadVersion() throws {
+        let base = """
+        "strokes": [], "piece_number": 7, "canvas_width": 800, "canvas_height": 600, "drawing_style": "paint", "style_config": null
+        """
+        let detail = try JSONDecoder().decode(GalleryPieceStrokes.self, from: Data("""
+        {\(base), "versions": [null, {"version": 3, "asset_base": "/a/3/"}, {"asset_base": "/a/x/"}]}
+        """.utf8))
+        #expect(detail.versions.map(\.version) == [3])
+        let wrongType = try JSONDecoder().decode(GalleryPieceStrokes.self, from: Data("{\(base), \"versions\": \"nope\"}".utf8))
+        #expect(wrongType.versions.isEmpty)
+    }
+}

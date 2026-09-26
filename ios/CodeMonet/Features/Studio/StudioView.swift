@@ -189,18 +189,11 @@ struct StudioView: View {
         NotebookView(
             entries: Notebook.entries(state),
             showsVersions: state.drawingStyle == .paint || !state.versions.isEmpty,
-            strokes: strokeCount(forVersion:),
-            requestStrokes: { version in
-                guard let summary = state.versions.first(where: { $0.version == version }) else { return }
-                Task { await painting.loadManifest(for: summary.ref(pieceNumber: state.pieceNumber), apiBaseURL: apiBaseURL) }
-            }
+            // Only the server's `ops` count: never fetch a whole reveal.json
+            // just to count strokes — the count is hidden when `ops` is absent.
+            strokes: { version in state.versions.first { $0.version == version }?.ops }
         )
         .frame(maxHeight: .infinity)
-    }
-
-    private func strokeCount(forVersion version: Int) -> Int? {
-        guard let summary = state.versions.first(where: { $0.version == version }) else { return nil }
-        return summary.ops ?? painting.manifests[summary.assetBase]?.strokeOpCount
     }
 
     private var nudgeBar: some View {

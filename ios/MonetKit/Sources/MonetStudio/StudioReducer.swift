@@ -33,14 +33,17 @@ public enum StudioReducer {
                     id: messageID, type: .thinking, text: s.thinking, timestamp: timestamp, version: s.workingVersion
                 )
                 s.messages = Self.boundedPush(s.messages, message, limit: StudioState.maxMessages)
+                s.notebook = Self.notebookPush(s.notebook, message)
             }
             s.thinking = ""
         case let .addMessage(message):
             var stamped = message
             stamped.version = s.workingVersion
             s.messages = Self.boundedPush(s.messages, stamped, limit: StudioState.maxMessages)
+            s.notebook = Self.notebookPush(s.notebook, stamped)
         case .clearMessages:
             s.messages = []
+            s.notebook = []
 
         // MARK: Metadata (§5.3)
         case .toggleDrawing:
@@ -79,6 +82,7 @@ public enum StudioReducer {
             s.viewingImageURL = nil
             s.savedCanvas = nil
             s.messages = []
+            s.notebook = []
             s.thinking = ""
             // `clear` and `new_canvas` (routed through this same event, see
             // `MessageRouter`) both reset painting to none (program-painting
@@ -152,29 +156,7 @@ public enum StudioReducer {
                 s.viewingImageURL = nil
             }
         case let .initialize(payload):
-            s.performance = PerformanceState()
-            s.strokes = payload.strokes
-            s.gallery = payload.gallery
-            s.pieceNumber = payload.pieceNumber
-            s.paused = payload.paused
-            s.canvasWidth = payload.canvasWidth
-            s.canvasHeight = payload.canvasHeight
-            s.viewingPiece = nil
-            s.viewingImageURL = nil
-            s.savedCanvas = nil
-            s.drawingStyle = payload.drawingStyle
-            s.styleConfig = payload.styleConfig
-            s.messages = []
-            s.thinking = ""
-            s.currentStroke = []
-            // Latest known version only, shown immediately with no reveal
-            // animation — `INIT` never starts a `playing` reveal, no matter
-            // how recent the version (program-painting spec §4.1 `INIT`,
-            // §4.6's reconnect row).
-            s.painting = PaintingState(base: payload.painting, playing: nil)
-            s.versions = Self.seedVersions(payload)
-            s.title = payload.title
-            s.prompt = payload.prompt
+            Self.applyInitialize(payload, to: &s)
 
         // MARK: Performance / animation pipeline (§5.5)
         case let .enqueueWords(text):
@@ -298,6 +280,93 @@ public enum StudioReducer {
         history.removeAll { $0.version >= incoming.version }
         history.append(entry)
         state.versions = history
+    }
+
+    /// `INIT`. Reconnecting to the piece already on screen (same piece
+    /// number, notebook non-empty — the web client's `samePiece` rule) keeps
+    /// the notebook, merges the version history, and keeps a title/prompt the
+    /// payload omits. A different piece resets all of it and seeds the
+    /// notebook from the payload's prompt and monologue.
+    private static func applyInitialize(_ payload: InitPayload, to s: inout StudioState) {
+        let samePiece = !s.notebook.isEmpty && payload.pieceNumber == s.pieceNumber
+        s.performance = PerformanceState()
+        s.strokes = payload.strokes
+        s.gallery = payload.gallery
+        s.pieceNumber = payload.pieceNumber
+        s.paused = payload.paused
+        s.canvasWidth = payload.canvasWidth
+        s.canvasHeight = payload.canvasHeight
+        s.viewingPiece = nil
+        s.viewingImageURL = nil
+        s.savedCanvas = nil
+        s.drawingStyle = payload.drawingStyle
+        s.styleConfig = payload.styleConfig
+        // The short status window restarts: a `started` whose `completed`
+        // was lost with the old socket must not read as still running.
+        s.messages = []
+        s.thinking = ""
+        s.currentStroke = []
+        // Latest known version only, shown immediately with no reveal
+        // animation — `INIT` never starts a `playing` reveal, no matter
+        // how recent the version (program-painting spec §4.1 `INIT`,
+        // §4.6's reconnect row).
+        s.painting = PaintingState(base: payload.painting, playing: nil)
+        if samePiece {
+            s.versions = mergeVersions(s.versions, seedVersions(payload))
+            s.title = payload.title ?? s.title
+            s.prompt = payload.prompt ?? s.prompt
+        } else {
+            s.versions = seedVersions(payload)
+            s.title = payload.title
+            s.prompt = payload.prompt
+            s.notebook = seedNotebook(payload, workingVersion: s.workingVersion)
+        }
+    }
+
+    /// Union by version number, the incoming entry winning a tie.
+    static func mergeVersions(_ existing: [PaintingVersionSummary], _ incoming: [PaintingVersionSummary]) -> [PaintingVersionSummary] {
+        var byVersion = Dictionary(existing.map { ($0.version, $0) }, uniquingKeysWith: { _, last in last })
+        for entry in incoming { byVersion[entry.version] = entry }
+        return byVersion.values.sorted { $0.version < $1.version }
+    }
+
+    /// A fresh piece's notebook: its prompt (as the user's entry) and the
+    /// agent's latest monologue, when the payload carries them.
+    private static func seedNotebook(_ payload: InitPayload, workingVersion: Int) -> [AgentMessage] {
+        var seeded: [AgentMessage] = []
+        if let prompt = payload.prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
+            seeded.append(AgentMessage(id: "init-prompt-\(payload.pieceNumber)", type: .userNudge, text: prompt, timestamp: 0))
+        }
+        let monologue = payload.monologue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !monologue.isEmpty {
+            seeded.append(AgentMessage(
+                id: "init-monologue-\(payload.pieceNumber)", type: .thinking, text: monologue, timestamp: 0,
+                version: workingVersion
+            ))
+        }
+        return seeded
+    }
+
+    /// Appends to the notebook log, dropping the oldest messages while it
+    /// holds more than `maxNotebookEntries` entries. A `completed`
+    /// code_execution merges into its `started` line, so it doesn't count.
+    static func notebookPush(_ log: [AgentMessage], _ message: AgentMessage) -> [AgentMessage] {
+        var result = log
+        result.append(message)
+        var entries = result.reduce(0) { $0 + (countsAsEntry($1) ? 1 : 0) }
+        var drop = 0
+        while entries > StudioState.maxNotebookEntries, drop < result.count {
+            if countsAsEntry(result[drop]) { entries -= 1 }
+            drop += 1
+        }
+        // Don't leave a `completed` whose `started` was just dropped.
+        while drop > 0, drop < result.count, !countsAsEntry(result[drop]) { drop += 1 }
+        if drop > 0 { result.removeFirst(drop) }
+        return result
+    }
+
+    private static func countsAsEntry(_ message: AgentMessage) -> Bool {
+        !(message.type == .codeExecution && message.status == .completed)
     }
 
     /// `init`'s version history: the server's list when it sends one, else

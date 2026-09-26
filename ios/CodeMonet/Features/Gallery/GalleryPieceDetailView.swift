@@ -85,7 +85,7 @@ struct GalleryPieceDetailView: View {
                 .accessibilityIdentifier("piece-image")
             if !versions.isEmpty {
                 ReplayScrubber(
-                    versionCount: versions.count,
+                    versionNumbers: versions.map(\.version),
                     selectedIndex: replayIndex,
                     isPlaying: isPlaying,
                     onSelect: { index in

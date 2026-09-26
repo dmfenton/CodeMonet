@@ -44,6 +44,10 @@ final class PaintingRevealController {
 
     @ObservationIgnored private let assetClient: PaintingAssetClient
     @ObservationIgnored private var manifestLoads: Set<String> = []
+    /// `manifests` keys, least recently used first (LRU bound).
+    @ObservationIgnored private var manifestOrder: [String] = []
+    /// Matches the web client's manifest cache size.
+    static let manifestCacheLimit = 24
     /// The last marker handed to `publishRevealing` (possibly not yet applied).
     @ObservationIgnored private var publishedMarker: RevealMarker?
 
@@ -111,13 +115,27 @@ final class PaintingRevealController {
     /// silent: the stage bar just stays hidden for that version.
     func loadManifest(for ref: PaintingVersionRef, apiBaseURL: URL) async {
         let key = ref.assetBase
+        if manifests[key] != nil { touchManifest(key) }
         guard manifests[key] == nil, !manifestLoads.contains(key) else { return }
         manifestLoads.insert(key)
         defer { manifestLoads.remove(key) }
         let url = PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: Self.manifestFile)
         if let manifest = try? await assetClient.manifest(at: url) {
-            manifests[key] = manifest
+            cacheManifest(manifest, for: key)
         }
+    }
+
+    private func cacheManifest(_ manifest: RevealManifest, for key: String) {
+        manifests[key] = manifest
+        touchManifest(key)
+        while manifestOrder.count > Self.manifestCacheLimit {
+            manifests[manifestOrder.removeFirst()] = nil
+        }
+    }
+
+    private func touchManifest(_ key: String) {
+        manifestOrder.removeAll { $0 == key }
+        manifestOrder.append(key)
     }
 
     /// Deferred to the next main-actor turn: `frame()` runs inside a
@@ -199,10 +217,11 @@ final class PaintingRevealController {
             let manifest: RevealManifest
             if let cached = manifests[ref.assetBase] {
                 manifest = cached
+                touchManifest(ref.assetBase)
             } else {
                 let manifestURL = PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: Self.manifestFile)
                 manifest = try await assetClient.manifest(at: manifestURL)
-                manifests[ref.assetBase] = manifest
+                cacheManifest(manifest, for: ref.assetBase)
             }
             let builtPlan = buildRevealPlan(manifest)
 

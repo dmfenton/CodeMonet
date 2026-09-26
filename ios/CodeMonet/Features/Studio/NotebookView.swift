@@ -11,10 +11,8 @@ struct NotebookView: View {
     let entries: [NotebookEntry]
     /// Show version separators (paint mode — plotter has no versions).
     let showsVersions: Bool
-    /// Stroke count for a produced version, when known.
+    /// Stroke count for a produced version, when the server reported it.
     let strokes: (Int) -> Int?
-    /// Asks for a version's manifest so its stroke count can be shown.
-    let requestStrokes: (Int) -> Void
 
     @State private var followsBottom = true
 
@@ -126,9 +124,6 @@ struct NotebookView: View {
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(palette.subtleSurface))
         .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(palette.divider, lineWidth: 1))
-        .task(id: call.producedVersion) {
-            if let version = call.producedVersion, count == nil { requestStrokes(version) }
-        }
     }
 }
 

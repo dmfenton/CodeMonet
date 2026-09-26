@@ -228,6 +228,8 @@ public struct GalleryPieceStrokes: Codable, Equatable, Sendable {
         title = try container.decodeIfPresent(String.self, forKey: .title)
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt)
         strokeCount = try container.decodeIfPresent(Int.self, forKey: .strokeCount)
-        versions = try container.decodeIfPresent([PaintingVersionSummary].self, forKey: .versions) ?? []
+        // Element-wise: one malformed version must not fail the whole detail.
+        versions = (try? container.decodeIfPresent(LossyArray<PaintingVersionSummary>.self, forKey: .versions))?
+            .elements ?? []
     }
 }
