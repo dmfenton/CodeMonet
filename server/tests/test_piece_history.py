@@ -669,6 +669,31 @@ class TestProgramAsset:
         assert client.get(f"{base}/{'b' * 32}/painting.py").status_code == 404
         assert client.get(f"{base}/not-a-token/painting.py").status_code == 404
 
+    def test_refuses_symlinked_assets(
+        self, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        user_id = str(uuid.uuid4())
+        secret = tmp_path / "secret.txt"
+        secret.write_text("TOKEN=hunter2\n")
+        paintings = tmp_path / user_id / "paintings"
+        vdir = paintings / ("a" * 32)
+        vdir.mkdir(parents=True)
+        (vdir / "painting.py").symlink_to(secret)
+        (vdir / "final.png").symlink_to(secret)
+        real = tmp_path / "elsewhere"
+        real.mkdir()
+        (real / "reveal.json").write_text("{}")
+        (paintings / ("b" * 32)).symlink_to(real)
+        monkeypatch.setattr(paintings_routes, "get_user_dir", lambda uid: tmp_path / uid)
+        app = FastAPI()
+        app.include_router(paintings_routes.router)
+        client = TestClient(app)
+        base = f"/painting-assets/{user_id}"
+
+        assert client.get(f"{base}/{'a' * 32}/painting.py").status_code == 404
+        assert client.get(f"{base}/{'a' * 32}/final.png").status_code == 404
+        assert client.get(f"{base}/{'b' * 32}/reveal.json").status_code == 404
+
 
 class TestGalleryRobustness:
     def test_malformed_versions_read_as_final_image(self) -> None:
@@ -755,8 +780,39 @@ class TestPaintRunGuards:
         published = workspace.paintings_dir / result.version.token / "painting.py"
         assert published.read_text() == "cv.ground('#abc')\n"
         [args] = calls
-        assert args[args.index("--program") + 1] == str(published)
+        run_program = FilePath(args[args.index("--program") + 1])
+        assert run_program != published
+        assert not run_program.exists()  # throwaway execution copy is cleaned up
         assert workspace.painting_versions == [result.version]
+
+    @pytest.mark.asyncio
+    async def test_program_rewriting_itself_cannot_change_what_is_published(
+        self, workspace: WorkspaceState, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._program(workspace, "cv.ground('#abc')\n")
+        secret = tmp_path / "secret.txt"
+        secret.write_text("TOKEN=hunter2\n")
+        calls: list[list[str]] = []
+
+        async def tamper() -> None:
+            args = calls[-1]
+            FilePath(args[args.index("--program") + 1]).write_text("SUBSTITUTED\n")
+            out_dir = FilePath(args[args.index("--out") + 1])
+            (out_dir / "painting.py").symlink_to(secret)
+
+        async def create_subprocess_exec(*args: str, **_: object) -> _FakeProc:
+            calls.append(list(args))
+            return _FakeProc(tamper)
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintSuccess), result
+        published = workspace.paintings_dir / result.version.token / "painting.py"
+        assert not published.is_symlink()
+        assert published.read_text() == "cv.ground('#abc')\n"
+        assert secret.read_text() == "TOKEN=hunter2\n"
 
     @pytest.mark.parametrize("reset", ["clear", "new_canvas"])
     @pytest.mark.asyncio

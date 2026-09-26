@@ -20,7 +20,7 @@ random 32-char hex capability id. Files:
 | `final.png` | Final image (identical content to the last keyframe) |
 | `preview.jpg` | Final image downscaled to ≤1200px wide |
 | `reveal.json` | Stage labels and brush footprints (below) |
-| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`). The run executes this published copy, and a symlinked `studio/painting.py` is refused. |
+| `painting.py` | The painting program that rendered this version (served as `text/plain; charset=utf-8`). The server reads `studio/painting.py` (refusing a symlink), runs a throwaway copy, and after the run writes those exact bytes here as a fresh regular file, so a program that rewrites itself cannot change what is published. The asset route serves only regular files and refuses symlinks. |
 
 Served without auth (capability URL, like share tokens):
 

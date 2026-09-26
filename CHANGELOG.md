@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make server unit tests hermetic: they no longer read the repo `.env` or dev SSM parameters, matching CI.
 - Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
-- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, and refuse a symlinked painting program.
+- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, refuse a symlinked painting program, publish the program bytes read before the run (not the executed copy), and refuse symlinked painting assets.
 - Dev server hot-reloads on source changes only, so a paint run writing its program under the data directory no longer restarts it mid-run.
 
 ## [1.39.3] - 2026-08-23
