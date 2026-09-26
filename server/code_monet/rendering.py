@@ -334,8 +334,8 @@ def painting_image_path(state: WorkspaceState) -> str | None:
     painting = state.painting
     if painting is None:
         return None
-    path = state.paintings_dir / painting.token / "final.png"
-    return str(path) if path.exists() else None
+    path = state.painting_asset(painting.token, "final.png")
+    return str(path) if path else None
 
 
 async def render_workspace_async(

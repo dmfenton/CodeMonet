@@ -32,6 +32,7 @@ from code_monet.types import (
     PendingStrokeDict,
     SavedCanvas,
 )
+from code_monet.workspace.assets import version_asset
 from code_monet.workspace.gallery import (
     gallery_version_record,
     load_gallery_piece,
@@ -308,6 +309,10 @@ class WorkspaceState:
     def paintings_dir(self) -> FilePath:
         """Directory holding rendered painting versions, one subdirectory per token."""
         return self._user_dir / "paintings"
+
+    def painting_asset(self, token: str, file: str) -> FilePath | None:
+        """A version asset file, if it is safe to read (see `version_asset`)."""
+        return version_asset(self._user_dir, token, file)
 
     @property
     def studio_program(self) -> FilePath:
@@ -607,8 +612,8 @@ class WorkspaceState:
         token = data.get("image_token")
         if not isinstance(token, str):
             return None
-        path = self.paintings_dir / token / "final.png"
-        return (token, str(path)) if path.exists() else None
+        path = self.painting_asset(token, "final.png")
+        return (token, str(path)) if path else None
 
     async def list_gallery(self) -> list[GalleryEntry]:
         """List gallery pieces by scanning piece files."""
