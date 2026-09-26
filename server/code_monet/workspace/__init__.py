@@ -426,6 +426,7 @@ class WorkspaceState:
 
         Thread-safe: uses stroke lock to prevent race conditions.
         """
+        self._painting_generation += 1  # before any await; see new_canvas
         async with self._stroke_lock:
             self._canvas.strokes = []
             self._reset_painting()
@@ -480,6 +481,9 @@ class WorkspaceState:
         `prompt` is the user's direction for the new piece; it is recorded after
         the previous piece is saved so it never lands on that piece.
         """
+        # Invalidate in-flight paint runs before the first await: a run that
+        # finishes during the gallery save must not join a piece being retired.
+        self._painting_generation += 1
         # First save to gallery
         saved_id = await self.save_to_gallery()
 

@@ -201,6 +201,31 @@ class TestWorkspaceVersionHistory:
         assert state.painting_versions == []
 
     @pytest.mark.asyncio
+    async def test_run_finishing_during_new_canvas_save_is_discarded(
+        self, workspace: WorkspaceState
+    ) -> None:
+        await _record(workspace, ops=5)
+        generation = workspace.painting_generation
+        original_save = workspace.save_to_gallery
+        raced: list[PaintingVersion | None] = []
+
+        async def save_while_run_finishes() -> str | None:
+            raced.append(
+                await workspace.record_painting_version(
+                    "d" * 32, 320, 240, [], ops=2, generation=generation
+                )
+            )
+            return await original_save()
+
+        with patch.object(workspace, "save_to_gallery", save_while_run_finishes):
+            await workspace.new_canvas(prompt="next")
+
+        assert raced == [None]
+        assert workspace.painting_versions == []
+        saved = json.loads((workspace._user_dir / "gallery" / "piece_000000.json").read_text())
+        assert [v["ops"] for v in saved["versions"]] == [5]
+
+    @pytest.mark.asyncio
     async def test_stale_generation_is_not_recorded(self, workspace: WorkspaceState) -> None:
         generation = workspace.painting_generation
         await workspace.clear_canvas()
