@@ -103,14 +103,17 @@ async def handle_new_canvas(
     """Handle new canvas request (save current and start fresh)."""
     canvas_width = _canvas_dimension_from_message(message, "canvas_width", 800)
     canvas_height = _canvas_dimension_from_message(message, "canvas_height", 600)
-    saved_id = await workspace.state.new_canvas(width=canvas_width, height=canvas_height)
+    direction = message.get("direction") if message else None
+    prompt = direction.strip() if isinstance(direction, str) and direction.strip() else None
+    saved_id = await workspace.state.new_canvas(
+        width=canvas_width, height=canvas_height, prompt=prompt
+    )
     workspace.agent.reset_container()
 
-    # If direction provided, add it as an initial nudge for the new piece
-    direction = message.get("direction") if message else None
-    if direction:
-        workspace.agent.add_nudge(direction)
-        logger.info(f"User {workspace.user_id}: new canvas with direction: {direction}")
+    # The prompt is also the new piece's first nudge
+    if prompt:
+        workspace.agent.add_nudge(prompt)
+        logger.info(f"User {workspace.user_id}: new canvas with direction: {prompt}")
 
     # If drawing_style provided, persist it so the agent gets the right prompt
     style_str = message.get("drawing_style") if message else None

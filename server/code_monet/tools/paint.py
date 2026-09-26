@@ -27,9 +27,9 @@ async def handle_paint(_args: dict[str, Any]) -> dict[str, Any]:
                 "content": [{"type": "text", "text": f"{error}\n(ran {seconds:.1f}s)"}],
                 "is_error": True,
             }
-        case PaintSuccess(version=v, preview=preview, ops=ops, seconds=seconds):
+        case PaintSuccess(version=v, preview=preview, seconds=seconds):
             text = (
-                f"Version {v.version} rendered in {seconds:.1f}s — {ops} recorded marks, "
+                f"Version {v.version} rendered in {seconds:.1f}s — {v.ops} recorded marks, "
                 f"stages: {', '.join(v.stages) or '(none)'}. Viewers are watching it paint in now.\n"
                 f"Full resolution ({v.image_width}x{v.image_height}): paintings/{v.token}/final.png "
                 "(use Read on it, or crop it with Bash, to inspect detail).\n"

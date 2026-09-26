@@ -13,12 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Studio stage bar showing the painter's passes filling in, version chips to view earlier versions, and a notebook of the agent's thoughts, tool calls, critiques, and your nudges, on iOS and web.
 - Gallery piece pages with version-by-version replay and a program viewer, on iOS and web (shown when the server provides version history).
 - Web dark mode.
+- Persist every rendered painting version and the user's prompt per piece: the WebSocket `init` carries the current piece's versions, title, and prompt, `painting_version` carries `ops`, and gallery pieces record `prompt` and `versions`; a raster piece's `stroke_count` is its final version's mark count.
+- Owner and public piece detail endpoints return `title`, `prompt`, `stroke_count`, `drawing_style`, and per-version asset references, and version assets include the painting program (`painting.py`, served as `nosniff` plain text).
+- Include `drawing_style` in the public gallery listing.
 
 ### Changed
 
 - Redesign the iOS and web apps on the Fenton paper, ink, and forest palette. Home is a single composer (prompt, Paint or Plotter, canvas size, surprise me) replacing the New Canvas sheet; the web landing page is rebuilt around a real painting program and the stage it produced.
 - Web dev proxy and dev WebSocket follow `API_URL`, so a worktree can run its backend on a non-default port.
-
 - Publish Code Monet's app-owned Fenton Platform tenant manifest only by explicit dispatch from `main`, with exact source verification during activation.
 - Replace custom TestFlight certificate-import and keychain cleanup shell with the pinned maintained Apple Actions importer while retaining explicit signing-identity validation.
 - Adopt the shared platform `FentonIdentityClient` in place of the app's own `CodeMonetIdentityClient`, removing duplicated Fenton Identity PKCE/token-exchange code; app-specific `GET /auth/me` identity mapping stays in `AuthService`. No behavior change. Bumps `fenton-platform.lock`, which also moves the server's `fenton-platform` Python dependency and drops `AuthenticationController`'s now-removed `refreshRotationStore` parameter (upstream replaced the persisted rotation marker with single-flight in-memory refresh coalescing).
@@ -31,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make server unit tests hermetic: they no longer read the repo `.env` or dev SSM parameters, matching CI.
 - Replace PID-based Platform bootstrap locking with kernel-backed locking that safely survives stale files and PID reuse.
 - Serialize shared Platform source fetches across isolated worktrees and run the tenant contract when CodeMonet's shared OAuth constants change.
+- Discard a paint run that finishes after the canvas was reset instead of recording it into the new piece, refuse a symlinked painting program, publish the program bytes read before the run (not the executed copy), and refuse symlinked painting assets.
+- Dev server hot-reloads on source changes only, so a paint run writing its program under the data directory no longer restarts it mid-run.
 
 ## [1.39.3] - 2026-08-23
 

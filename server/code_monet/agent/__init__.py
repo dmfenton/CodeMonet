@@ -599,7 +599,7 @@ class DrawingAgent:
         async def run_paint() -> PaintResult:
             result = await run_painting_program(state)
             if isinstance(result, PaintSuccess):
-                note_drawing(result.ops)
+                note_drawing(result.version.ops)
                 if self._on_painting_version:
                     await self._on_painting_version(result.version)
             return result
