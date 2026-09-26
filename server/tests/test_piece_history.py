@@ -735,17 +735,20 @@ class TestGalleryRobustness:
 
 
 class _FakeProc:
-    """Paint-runner stand-in: runs `during` while "painting", then reports success."""
+    """Paint-runner stand-in: runs `during` while "painting", then exports and succeeds."""
 
     returncode = 0
 
-    def __init__(self, during: object) -> None:
+    def __init__(self, during: object, args: tuple[str, ...]) -> None:
         self._during = during
+        self._out_dir = FilePath(args[args.index("--out") + 1])
 
     async def communicate(self) -> tuple[bytes, bytes]:
         await self._during()  # type: ignore[operator]
-        summary = {"width": 320, "height": 240, "stages": ["ground"], "ops": 3}
-        return json.dumps(summary).encode(), b""
+        keyframes = [{"label": "ground", "image": "kf_00.jpg", "ops": [["a", 0, 0, 1, 1]] * 3}]
+        reveal = {"width": 320, "height": 240, "keyframes": keyframes}
+        (self._out_dir / "reveal.json").write_text(json.dumps(reveal))
+        return b"", b""
 
 
 class TestPaintRunGuards:
@@ -758,7 +761,7 @@ class TestPaintRunGuards:
 
         async def create_subprocess_exec(*args: str, **_: object) -> _FakeProc:
             calls.append(list(args))
-            return _FakeProc(during)
+            return _FakeProc(during, args)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
         return calls
@@ -802,7 +805,7 @@ class TestPaintRunGuards:
 
         async def create_subprocess_exec(*args: str, **_: object) -> _FakeProc:
             calls.append(list(args))
-            return _FakeProc(tamper)
+            return _FakeProc(tamper, args)
 
         monkeypatch.setattr(asyncio, "create_subprocess_exec", create_subprocess_exec)
 

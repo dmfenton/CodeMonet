@@ -19,6 +19,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path as FilePath
 
+from pydantic import BaseModel, ConfigDict, PositiveInt
+
+from code_monet.paintlib.canvas import RevealSummary, reveal_summary
 from code_monet.types import PaintingVersion
 from code_monet.workspace import WorkspaceState
 
@@ -44,6 +47,21 @@ class PaintFailure:
 
 
 PaintResult = PaintSuccess | PaintFailure
+
+
+class _RevealKeyframe(BaseModel):
+    model_config = ConfigDict(strict=True)
+    label: str
+    ops: list[object]
+
+
+class _RevealManifest(BaseModel):
+    """The shape of reveal.json the server derives version metadata from."""
+
+    model_config = ConfigDict(strict=True)
+    width: PositiveInt
+    height: PositiveInt
+    keyframes: list[_RevealKeyframe]
 
 
 async def run_painting_program(state: WorkspaceState) -> PaintResult:
@@ -137,8 +155,13 @@ async def _run_and_record(
             f"Program failed:\n{err}" + (f"\nstdout:\n{out}" if out.strip() else ""), seconds
         )
 
-    lines = stdout.decode(errors="replace").strip().splitlines()
-    summary = json.loads(lines[-1])
+    # The published reveal.json, not stdout (which the program shares), is the
+    # record of what was painted.
+    summary = _read_reveal_summary(out_dir)
+    if isinstance(summary, str):
+        shutil.rmtree(out_dir, ignore_errors=True)
+        out = stdout.decode(errors="replace")[-500:]
+        return PaintFailure(summary + (f"\nstdout:\n{out}" if out.strip() else ""), seconds)
     human_file.unlink(missing_ok=True)
     try:
         _publish_program(out_dir, source)
@@ -147,10 +170,10 @@ async def _run_and_record(
         return PaintFailure(f"Could not publish the program: {e.strerror or e}", seconds)
     version = await state.record_painting_version(
         token,
-        int(summary["width"]),
-        int(summary["height"]),
-        list(summary["stages"]),
-        ops=int(summary["ops"]),
+        summary["width"],
+        summary["height"],
+        summary["stages"],
+        ops=summary["ops"],
         generation=generation,
     )
     if version is None:
@@ -168,6 +191,26 @@ async def _run_and_record(
         final=out_dir / "final.png",
         seconds=seconds,
     )
+
+
+def _read_reveal_summary(out_dir: FilePath) -> RevealSummary | str:
+    """Version metadata from the run's reveal.json, or an error for the agent."""
+    try:
+        raw = json.loads(_read_no_follow(out_dir / "reveal.json"))
+        manifest = _RevealManifest.model_validate(raw)
+    except FileNotFoundError:
+        return (
+            "Program exited without exporting the painting. Let it run to the end; "
+            "do not call sys.exit() or os._exit()."
+        )
+    except OSError as e:
+        return f"Could not read the painting's reveal.json: {e.strerror or e}"
+    except ValueError as e:  # bad JSON or a failed validation
+        return (
+            f"The painting's reveal.json is malformed ({str(e)[:300]}). "
+            "Do not write into the output directory."
+        )
+    return reveal_summary(manifest.model_dump())
 
 
 def _read_no_follow(path: FilePath) -> bytes:

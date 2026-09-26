@@ -93,6 +93,70 @@ class TestRunPaintingProgram:
         assert second.version.version == 2
 
 
+# The program shares the runner's process: it can print after the runner, end
+# the process early, or rewrite the exported files on the way out.
+_OUT_DIR = "sys.argv[sys.argv.index('--out') + 1]"
+_REWRITE_REVEAL = f"""
+import atexit, os, sys
+out = {_OUT_DIR}
+atexit.register(lambda: open(os.path.join(out, "reveal.json"), "w").write(%r))
+"""
+
+
+class TestRunnerOutput:
+    @pytest.mark.asyncio
+    async def test_output_after_the_runner_does_not_matter(self, workspace: WorkspaceState) -> None:
+        _write_program(
+            workspace,
+            "import atexit\nprint('{not json')\natexit.register(print, 'late')\n" + PROGRAM,
+        )
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintSuccess), result
+        assert result.version.stages == ["ground", "sky"]
+
+    @pytest.mark.parametrize("exit_call", ["import sys; sys.exit(0)", "import os; os._exit(0)"])
+    @pytest.mark.asyncio
+    async def test_exit_before_export_fails_and_cleans_up(
+        self, workspace: WorkspaceState, exit_call: str
+    ) -> None:
+        _write_program(workspace, "print('partial', flush=True)\n" + exit_call + "\n" + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert "without exporting" in result.error
+        assert "partial" in result.error
+        assert list(workspace.paintings_dir.iterdir()) == []
+        assert workspace.painting is None
+
+    @pytest.mark.parametrize(
+        "reveal",
+        [
+            "not json",
+            "[]",
+            '{"width": "320", "height": 240, "keyframes": []}',
+            '{"width": 320, "height": 240, "keyframes": [{"label": "sky"}]}',
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_malformed_reveal_fails_and_cleans_up(
+        self, workspace: WorkspaceState, reveal: str
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        first = await run_painting_program(workspace)
+        assert isinstance(first, PaintSuccess)
+        _write_program(workspace, _REWRITE_REVEAL % reveal + PROGRAM)
+
+        result = await run_painting_program(workspace)
+
+        assert isinstance(result, PaintFailure), result
+        assert "reveal.json is malformed" in result.error
+        assert [p.name for p in workspace.paintings_dir.iterdir()] == [first.version.token]
+        assert workspace.painting == first.version
+
+
 class TestRasterGallery:
     @pytest.mark.asyncio
     async def test_new_canvas_saves_raster_piece_and_resets(
