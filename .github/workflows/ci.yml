@@ -189,6 +189,20 @@ jobs:
       - name: Build Docker image
         run: docker build -t code-monet-server:ci -f server/Dockerfile .
 
+      # Production passes relative data paths (compute's codemonet.env); they
+      # must land on the /app/data volume, not in the image's filesystem.
+      - name: Verify data paths resolve to the volume
+        run: |
+          docker run --rm -e CODE_MONET_ENV=ci -e DATABASE_URL=sqlite+aiosqlite:///data/drawing_agent.db \
+            code-monet-server:ci /app/server/.venv/bin/python -c "
+          import os
+          from code_monet.config import settings
+          paths = [settings.database_url.split(':///', 1)[1], settings.workspace_base_dir]
+          resolved = [os.path.realpath(p) for p in paths]
+          print(dict(zip(paths, resolved)))
+          assert all(r.startswith('/app/data/') for r in resolved), resolved
+          "
+
       - name: Scan Docker image
         env:
           TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
