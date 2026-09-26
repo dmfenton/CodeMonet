@@ -1,12 +1,14 @@
 """Tests for orchestrator event-driven wake-up."""
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from code_monet.orchestrator import AgentOrchestrator
-from code_monet.types import Path, PathType, Point
+from code_monet.types import AgentTurnComplete, Path, PathType, Point
+from code_monet.user_handlers import handle_user_message
 
 
 @pytest.fixture
@@ -58,6 +60,71 @@ class TestOrchestratorWake:
         orchestrator.wake()
 
         assert orchestrator._wake_event.is_set()
+
+    @pytest.mark.asyncio
+    async def test_nudge_during_finishing_turn_revises_same_piece(
+        self,
+        orchestrator: AgentOrchestrator,
+        mock_agent: MagicMock,
+        mock_broadcaster: MagicMock,
+    ) -> None:
+        """A nudge queued mid-turn must survive that turn marking the piece done."""
+        mock_agent.paused = False
+        mock_agent.get_state.return_value.piece_number = 1
+        mock_agent.get_state.return_value.new_canvas = AsyncMock()
+        mock_agent.get_state.return_value.save_to_gallery = AsyncMock(return_value="piece_000001")
+        mock_agent.get_state.return_value.list_gallery = AsyncMock(return_value=[])
+        mock_broadcaster.active_connections = [MagicMock()]
+        first_turn_started = asyncio.Event()
+        finish_first_turn = asyncio.Event()
+        second_turn_started = asyncio.Event()
+        finish_second_turn = asyncio.Event()
+        turns = 0
+
+        async def agent_turn(callbacks: object):  # noqa: ARG001
+            nonlocal turns
+            turns += 1
+            if turns == 1:
+                first_turn_started.set()
+                await finish_first_turn.wait()
+            else:
+                assert mock_agent.pending_nudges == ["more rainbow"]
+                assert mock_agent.get_state.return_value.piece_number == 1
+                mock_agent.pending_nudges.clear()
+                second_turn_started.set()
+                await finish_second_turn.wait()
+            yield AgentTurnComplete(thinking="", done=True)
+
+        mock_agent.run_turn = agent_turn
+        mock_agent.add_nudge.side_effect = mock_agent.pending_nudges.append
+        workspace = MagicMock()
+        workspace.user_id = "test-user"
+        workspace.agent = mock_agent
+        workspace.orchestrator = orchestrator
+        workspace.state = mock_agent.get_state.return_value
+        workspace.connections = mock_broadcaster
+        workspace.start_agent_loop = AsyncMock()
+
+        task = asyncio.create_task(orchestrator.run_loop())
+        try:
+            orchestrator.wake()
+            await asyncio.wait_for(first_turn_started.wait(), timeout=1)
+            assert await handle_user_message(workspace, {"type": "nudge", "text": "more rainbow"})
+            assert workspace.connections.broadcast.await_args.args[0].completed is False
+            finish_first_turn.set()
+            await asyncio.wait_for(second_turn_started.wait(), timeout=1)
+            mock_agent.get_state.return_value.new_canvas.assert_not_awaited()
+            piece_states = [
+                call.args[0].completed
+                for call in mock_broadcaster.broadcast.await_args_list
+                if getattr(call.args[0], "type", None) == "piece_state"
+            ]
+            assert piece_states[-2:] == [True, False]
+        finally:
+            finish_second_turn.set()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
 
     @pytest.mark.asyncio
     async def test_run_loop_waits_for_wake(

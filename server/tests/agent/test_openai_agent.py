@@ -52,8 +52,10 @@ class TestOpenAIDrawingAgentPauseResume:
 
     def test_reset_container_sets_abort(self) -> None:
         agent = OpenAIDrawingAgent()
+        agent.add_nudge("change the old canvas")
         agent.reset_container()
         assert agent._abort is True
+        assert agent.pending_nudges == []
 
     def test_get_state_requires_constructor_state(self) -> None:
         agent = OpenAIDrawingAgent()
