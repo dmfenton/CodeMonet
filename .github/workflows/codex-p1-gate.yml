@@ -44,7 +44,7 @@ jobs:
           (contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
             (contains(github.event.comment.body, '@codex review') ||
               contains(github.event.changes.body.from, '@codex review')))))
-    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@fa4f28c6c58875baa140c9a4f5163509e588ddd8
+    uses: dmfenton/codex-review-gate/.github/workflows/codex-review-gate.yml@aeb8ac3e60a205537bbd06d4a6b77a7d4c59b73f
     with:
       pr_number: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || '0' }}
       runner_labels_json: '["self-hosted","codemonet-docker","lilserver"]'
