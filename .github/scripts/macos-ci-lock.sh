@@ -19,12 +19,10 @@
 # treats it as abandoned and reclaims it. A garden-held lock predates
 # this file, so its age falls back to the lock directory's own mtime.
 #
-# Reclaiming is rename-then-remove, not remove-then-mkdir, so two
-# waiters racing to reclaim the same stale lock can't both succeed:
-# `mv` is atomic, so only one of them can rename the directory away.
-# That process then recreates the lock fresh and deletes the old
-# (renamed) copy; the other process's `mv` fails, so it just loops and
-# re-checks the now-fresh lock like any other waiter.
+# Reclaiming is rename-then-verify-then-remove: `mv` is atomic, so only
+# one waiter can rename the directory away, and the renamed copy is only
+# deleted if it is the same generation (inode + owner) that was judged
+# stale; a lock re-acquired in between is moved straight back.
 #
 # Usage:
 #   macos-ci-lock.sh acquire <owner> <wait_seconds> <stale_seconds>
@@ -51,20 +49,32 @@ lock_age_seconds() {
   echo $(( now - dir_mtime ))
 }
 
+# Identity of one lock acquisition: a released-and-reacquired lock is a new
+# directory (new inode) with a new owner line.
+lock_generation() {
+  local dir="$1"
+  printf '%s:%s' "$(stat -f %i "$dir" 2>/dev/null || echo none)" "$(cat "$dir/owner" 2>/dev/null || true)"
+}
+
 reclaim_stale_lock() {
-  local stale_path="$LOCK_DIR.stale.$$"
+  local expected="$1" stale_path="$LOCK_DIR.stale.$$"
   # Atomic: at most one racing process can rename the directory away.
-  # A loser's `mv` fails and falls through to the normal wait/retry loop.
-  if mv "$LOCK_DIR" "$stale_path" 2>/dev/null; then
+  mv "$LOCK_DIR" "$stale_path" 2>/dev/null || return 1
+  # The owner may have released and a new job re-acquired between the age
+  # check and the rename; only delete the generation that was judged stale.
+  if [[ "$(lock_generation "$stale_path")" == "$expected" ]]; then
     rm -rf "$stale_path"
     return 0
+  fi
+  if ! mv "$stale_path" "$LOCK_DIR" 2>/dev/null; then
+    echo "::warning::moved a fresh macOS CI lock during reclaim and could not restore it; left at $stale_path"
   fi
   return 1
 }
 
 acquire() {
   local owner="$1" wait_seconds="$2" stale_seconds="$3"
-  local waited=0 age held_by
+  local waited=0 age held_by generation
 
   while true; do
     if mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -73,12 +83,13 @@ acquire() {
       return 0
     fi
 
+    generation="$(lock_generation "$LOCK_DIR")"
     held_by="$(cat "$LOCK_DIR/owner" 2>/dev/null || echo unknown)"
     age="$(lock_age_seconds)"
 
     if (( age > stale_seconds )); then
       echo "::warning::macOS CI lock held ${age}s (> ${stale_seconds}s stale threshold) by $held_by; reclaiming as abandoned"
-      reclaim_stale_lock || true
+      reclaim_stale_lock "$generation" || true
       # Whether we won the reclaim race or lost it to another waiter,
       # loop back around and retry the mkdir / re-check staleness.
       continue
