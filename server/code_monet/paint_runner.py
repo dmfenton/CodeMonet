@@ -1,12 +1,18 @@
 """Subprocess entry point: execute a painting program and export the version.
 
-    python -m code_monet.paintlib.runner --program P --out DIR --width W --height H --seed S
+    python -I -m code_monet.paint_runner --program P --out DIR --width W --height H --seed S
 
 The program runs with a ready `cv` (paintlib.Canvas) and common modules in
 scope. On success the version is in DIR (reveal.json is its record, which the
 server reads) and a JSON summary with timings goes to stderr for people running
 this by hand; stdout is the program's alone. On failure the traceback goes to
 stderr and the exit code is 1.
+
+On Linux the process confines itself (code_monet.sandbox) before importing
+anything else or running the program: it can read Python and its libraries,
+write only the output and working directories, open no network sockets, start
+no processes, and not signal its parent. Elsewhere (macOS development) it runs
+unconfined.
 """
 
 from __future__ import annotations
@@ -14,16 +20,14 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 import random
 import sys
 import time
 import traceback
 from pathlib import Path
 
-import numpy as np
-from scipy import ndimage
-
-from code_monet.paintlib import Canvas, cellular, fbm, mix, rgb, smoothstep, value_noise
+from code_monet import sandbox
 
 
 def main() -> int:
@@ -37,6 +41,15 @@ def main() -> int:
     args = parser.parse_args()
 
     human = json.loads(Path(args.human).read_text()) if args.human else []
+    source = Path(args.program).read_text()
+    if sandbox.available():
+        sandbox.confine(sandbox.python_policy(args.out, os.getcwd()))
+
+    import numpy as np
+    from scipy import ndimage
+
+    from code_monet.paintlib import Canvas, cellular, fbm, mix, rgb, smoothstep, value_noise
+
     cv = Canvas(args.width, args.height, seed=args.seed)
     scope = {
         "__name__": "__painting__",
@@ -56,7 +69,6 @@ def main() -> int:
         "HUMAN_STROKES": human,
     }
     random.seed(args.seed)
-    source = Path(args.program).read_text()
     t0 = time.monotonic()
     try:
         exec(compile(source, "studio/painting.py", "exec"), scope)

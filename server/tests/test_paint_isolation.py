@@ -68,7 +68,8 @@ class TestPaintEnvironment:
         assert seen["isolated"] == 1
         # Only the paint library: no server config (which loads secrets) or SDK.
         assert all(
-            m == "code_monet" or m.startswith("code_monet.paintlib") for m in seen["modules"]
+            m in {"code_monet", "code_monet.sandbox"} or m.startswith("code_monet.paintlib")
+            for m in seen["modules"]
         )
         run_dir = FilePath(seen["env"]["HOME"])
         assert seen["env"]["TMPDIR"] == str(run_dir)

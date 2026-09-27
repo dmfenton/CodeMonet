@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from PIL import Image
 
+from code_monet.claude_runtime import ClaudeLaunch
 from code_monet.program_painting import PaintFailure, PaintResult
 from code_monet.tools import (
     DRAWING_TOOLS,
@@ -18,6 +19,8 @@ from code_monet.tools import (
 )
 from code_monet.types import Path
 
+LAUNCH = ClaudeLaunch("claude-sandboxed", {}, "/ws")
+
 
 def _bind(ctx: ToolContext, **overrides: Any) -> None:
     bindings: dict[str, Any] = {
@@ -27,6 +30,7 @@ def _bind(ctx: ToolContext, **overrides: Any) -> None:
         "get_canvas": MagicMock(return_value=b"png"),
         "add_strokes": AsyncMock(),
         "draw": AsyncMock(),
+        "claude": LAUNCH,
     }
     ctx.bind_turn(**{**bindings, **overrides})
 
@@ -47,10 +51,12 @@ def test_bind_turn_sets_every_turn_binding() -> None:
         get_canvas=get_canvas,
         add_strokes=add_strokes,
         draw=draw,
+        claude=LAUNCH,
         paint=paint,
     )
 
     assert ctx.workspace_dir == "/custom/workspace"
+    assert ctx.claude is LAUNCH
     assert (ctx.canvas_width, ctx.canvas_height) == (1024, 768)
     assert ctx.get_canvas is get_canvas
     assert ctx.add_strokes is add_strokes

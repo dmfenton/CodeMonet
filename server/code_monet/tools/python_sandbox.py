@@ -1382,6 +1382,8 @@ async def _run_script(
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
         "-I",
+        "-m",
+        "code_monet.confined_python",
         str(script),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
