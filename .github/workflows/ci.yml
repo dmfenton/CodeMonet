@@ -215,6 +215,12 @@ jobs:
           assert all(r.startswith('/app/data/') for r in resolved), resolved
           "
 
+      # musl's default thread stack segfaulted the server on deep JSON.
+      - name: Verify worker threads survive deep recursion
+        run: |
+          docker run --rm -i --entrypoint /app/server/.venv/bin/python \
+            code-monet-server:ci - < server/docker/check_thread_stack.py
+
       - name: Scan Docker image
         env:
           TRIVY_IMAGE: aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f
