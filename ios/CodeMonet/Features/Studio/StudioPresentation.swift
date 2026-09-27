@@ -16,8 +16,9 @@ enum StudioPresentation {
 
     /// The Studio top bar's status: paused / error / thinking / the running
     /// tool (painting, critique, …) / idle.
-    static func statusPill(for state: StudioState) -> StatusPill {
+    static func statusPill(for state: StudioState, receivingUpdates: Bool = true) -> StatusPill {
         if state.viewingPiece != nil { return StatusPill(label: "viewing", isActive: false) }
+        if !receivingUpdates { return StatusPill(label: "reconnecting", isActive: false) }
         switch StudioSelectors.agentStatus(state) {
         case .paused:
             return StatusPill(label: "paused", isActive: false)
