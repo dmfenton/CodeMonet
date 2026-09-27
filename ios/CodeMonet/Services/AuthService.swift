@@ -177,9 +177,7 @@ public final class AuthService {
             return nil
         }
         let replacement = await controller.recoverRejectedBearerToken(rejected)
-        if controller.session == nil {
-            state = .signedOut
-        }
+        reflectEndedPlatformSession()
         return replacement
     }
 
@@ -191,7 +189,24 @@ public final class AuthService {
             return
         }
         await controller.signOut(ifBearerTokenMatches: rejected)
-        if controller.session == nil { state = .signedOut }
+        reflectEndedPlatformSession()
+    }
+
+    /// A stale request may finish while a new authorization code is being
+    /// exchanged. Only an ended Platform session may end the app's current
+    /// signed-in state; an exchange still in progress owns the UI state.
+    private func reflectEndedPlatformSession() {
+        switch controller.state {
+        case .signedOut, .reauthenticationRequired:
+            switch state {
+            case .exchangingCode, .signingIn:
+                return
+            default:
+                state = .signedOut
+            }
+        default:
+            break
+        }
     }
 
     private func syncStateFromController() async {
