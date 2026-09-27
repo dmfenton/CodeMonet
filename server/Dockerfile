@@ -53,8 +53,10 @@ RUN .venv/bin/python -c "import subprocess; from claude_agent_sdk import ClaudeA
 # WORKDIR, so data/ must be the volume, not a directory inside the image.
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
+# bash: the Claude CLI's Bash tool refuses to run without bash or zsh.
 # Remove the unused system package installer, then create the non-root runtime user.
 RUN apk upgrade --no-cache \
+    && apk add --no-cache bash \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \

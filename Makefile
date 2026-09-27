@@ -1,4 +1,4 @@
-.PHONY: install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
+.PHONY: install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk sandbox-e2e test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
 
 # Install all dependencies
 install:
@@ -103,6 +103,13 @@ test-record-fixture:
 # Run web reducer replay tests (fast, no API)
 test-replay:
 	npm run test -w web -- reducer.replay
+
+# Agent sandbox end to end in the server image (mock Anthropic API, no credentials)
+sandbox-e2e:
+	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
+	docker run --rm -i --user 1000 -e DEV_MODE=true -e SECRET_CANARY=must-not-leak \
+		--tmpfs /data:uid=1000 --entrypoint /app/server/.venv/bin/python \
+		code-monet-server:sandbox-e2e - < server/docker/sandbox_e2e.py
 
 # Run all integration/E2E tests (excluding iOS Simulator tests)
 test-e2e: test-e2e-sdk test-replay
