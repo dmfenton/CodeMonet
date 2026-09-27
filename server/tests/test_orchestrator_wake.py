@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -81,7 +82,7 @@ class TestOrchestratorWake:
         finish_second_turn = asyncio.Event()
         turns = 0
 
-        async def agent_turn(callbacks: object):  # noqa: ARG001
+        async def agent_turn(callbacks: object) -> AsyncIterator[AgentTurnComplete]:  # noqa: ARG001
             nonlocal turns
             turns += 1
             if turns == 1:
