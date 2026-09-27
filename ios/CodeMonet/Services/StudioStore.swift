@@ -23,6 +23,9 @@ public final class StudioStore {
     /// equivalent signal, so this mirrors `StudioSocketEvent.connected`/
     /// `.disconnected` directly.
     public private(set) var connected = false
+    /// An init frame, rather than task creation, confirms that this socket
+    /// can deliver the painter's current state and subsequent updates.
+    public var receivingUpdates: Bool { receivedInitialState }
 
     /// Fires on a live `4001`/auth-failure close, or a REST 401/403.
     /// The app shell asks Platform to recover the rejected bearer.
@@ -51,6 +54,11 @@ public final class StudioStore {
     /// `reconnectIfTokenChanged` — see `onAuthenticationFailure`'s doc
     /// comment.
     private var currentToken: String?
+    /// A foreground resume is sent only after the server's init frame proves
+    /// the socket is usable. Keep it pending until the server confirms resume.
+    private var foregroundResumePending = false
+    private var foregroundResumeSending = false
+    private var receivedInitialState = false
     /// Human strokes this device has sent but not yet seen echoed back
     /// (protocol-state spec §7.1). `endStroke()` draws the stroke locally
     /// immediately (no round-trip latency) and records its signature here;
@@ -150,6 +158,8 @@ public final class StudioStore {
         strokesFetchTask = nil
         socketTask?.cancel()
         socketTask = nil
+        receivedInitialState = false
+        foregroundResumePending = false
         Task { await socket.disconnect() }
         Task { await traceBuffer.stopAutoFlush() }
     }
@@ -265,7 +275,16 @@ public final class StudioStore {
     /// truth; its own `paused` broadcast just applies this event again
     /// (idempotent).
     public func setPausedLocally(_ paused: Bool) {
+        if paused { foregroundResumePending = false }
         apply(.setPaused(paused))
+    }
+
+    /// Backgrounding sends Pause even when Home is open. On foreground, wait
+    /// for this socket's init frame before resuming; a WebSocket task being
+    /// created does not mean the server can receive a command yet.
+    public func resumeAfterForeground() async {
+        foregroundResumePending = true
+        await sendForegroundResumeIfReady()
     }
 
     /// Finishes the in-progress human stroke (ux spec §6.2: a tap/no-drag,
@@ -298,11 +317,19 @@ public final class StudioStore {
         switch event {
         case .connected:
             connected = true
+            receivedInitialState = false
             recordSpan(name: "ws.connected")
         case let .message(message):
             await route(message)
+            if case .initial = message {
+                receivedInitialState = true
+                await sendForegroundResumeIfReady()
+            } else if case let .paused(paused) = message, !paused {
+                foregroundResumePending = false
+            }
         case let .disconnected(reason):
             connected = false
+            receivedInitialState = false
             pendingPrompt = nil  // a reconnect's `init` carries the prompt instead
             switch reason {
             case .authenticationFailed:
@@ -315,7 +342,19 @@ public final class StudioStore {
                 recordSpan(name: "ws.disconnect", attributes: code.map { ["close_code": String($0)] } ?? [:])
             }
         case .decodeFailure:
-            break
+            recordSpan(name: "ws.decode_failure")
+        }
+    }
+
+    private func sendForegroundResumeIfReady() async {
+        guard foregroundResumePending, receivedInitialState, !foregroundResumeSending else { return }
+        foregroundResumeSending = true
+        defer { foregroundResumeSending = false }
+        do {
+            try await socket.send(.resume(direction: nil))
+            if receivedInitialState { apply(.setPaused(false)) }
+        } catch {
+            recordSpan(name: "ws.resume_send_failed")
         }
     }
 

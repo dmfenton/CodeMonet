@@ -21,9 +21,9 @@ struct RootView: View {
     /// `AuthService` (owned by the networking+auth package).
     @State private var hasSignedInOnce = false
 
-    /// Ux spec §1.2: only auto-resume on foreground if the agent was
-    /// actually running immediately before backgrounding *and* the user is
-    /// still in Studio. Not persisted — a fresh launch always starts false.
+    /// Resume on foreground only if the agent was running immediately before
+    /// backgrounding. The painter can work while Home is open, so the screen
+    /// must not determine whether a background pause is reversed.
     @State private var returningFromBackground = false
     @State private var wasRunningBeforeBackground = false
 
@@ -102,7 +102,7 @@ struct RootView: View {
 
     private func handleDidEnterBackground() {
         let inStudio = environment.navigation.screen == .studio
-        wasRunningBeforeBackground = inStudio && !environment.studio.state.paused
+        wasRunningBeforeBackground = !environment.studio.state.paused
         if inStudio {
             environment.studio.stopPlayback()
         }
@@ -135,9 +135,8 @@ struct RootView: View {
             // reach a stale/dead task or be silently dropped (see
             // `StudioStore.reconnectWithLatestToken`'s doc comment).
             await environment.studio.handleAppWillEnterForeground()
-            guard environment.navigation.screen == .studio, wasRunningBeforeBackground else { return }
-            environment.studio.setPausedLocally(false)
-            environment.studio.send(.resume(direction: nil))
+            guard wasRunningBeforeBackground else { return }
+            await environment.studio.resumeAfterForeground()
         }
     }
 }
