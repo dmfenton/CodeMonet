@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-09-27
+
+Also rolls up changes tagged v1.41.1–v1.41.4, which had no changelog sections.
+
 ### Added
 
 - `CODE_MONET_ENV=none` skips SSM parameter loading; configuration comes from the environment only. Production can then run with no AWS access in the container, with its parameters rendered into `codemonet.env` on the host.
@@ -1271,7 +1275,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...HEAD
+[1.42.0]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/dmfenton/CodeMonet/compare/v1.40.1...v1.41.0
 [1.40.1]: https://github.com/dmfenton/CodeMonet/compare/v1.39.3...v1.40.1
 [1.38.0]: https://github.com/dmfenton/sketchpad/compare/v1.37.7...v1.38.0
