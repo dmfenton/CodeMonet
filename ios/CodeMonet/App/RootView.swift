@@ -21,11 +21,8 @@ struct RootView: View {
     /// `AuthService` (owned by the networking+auth package).
     @State private var hasSignedInOnce = false
 
-    /// Resume on foreground only if the agent was running immediately before
-    /// backgrounding. The painter can work while Home is open, so the screen
-    /// must not determine whether a background pause is reversed.
     @State private var returningFromBackground = false
-    @State private var wasRunningBeforeBackground = false
+    @State private var resumeIntent = SceneResumeIntent()
 
     var body: some View {
         Group {
@@ -45,7 +42,10 @@ struct RootView: View {
         .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
             if let url = activity.webpageURL { handleIncoming(url) }
         }
-        .onChange(of: environment.auth.state) { _, newState in
+        .onChange(of: environment.auth.state) { oldState, newState in
+            if oldState.isSignedIn, !newState.isSignedIn {
+                resumeIntent = SceneResumeIntent()
+            }
             if case .signedIn = newState {
                 hasSignedInOnce = true
                 // `StudioStore.connect()` (net-auth spec §9) is guarded to
@@ -58,6 +58,9 @@ struct RootView: View {
         }
         .onChange(of: scenePhase) { oldPhase, newPhase in
             handleScenePhaseChange(from: oldPhase, to: newPhase)
+        }
+        .onChange(of: environment.studio.state.paused) { _, paused in
+            if !paused, scenePhase == .active { resumeIntent.confirmedRunning() }
         }
     }
 
@@ -94,7 +97,7 @@ struct RootView: View {
             handleDidEnterBackground()
         case .active where returningFromBackground:
             returningFromBackground = false
-            handleWillEnterForeground()
+            handleWillEnterForeground(generation: resumeIntent.foreground())
         default:
             break
         }
@@ -102,27 +105,31 @@ struct RootView: View {
 
     private func handleDidEnterBackground() {
         let inStudio = environment.navigation.screen == .studio
-        wasRunningBeforeBackground = !environment.studio.state.paused
+        let shouldPause = resumeIntent.background(wasPaused: environment.studio.state.paused)
+        environment.studio.cancelForegroundResume()
         if inStudio {
             environment.studio.stopPlayback()
         }
-        if !environment.studio.state.paused {
-            // Ux spec §1.2: optimistic local update alongside the send, not
-            // only once the server's own `paused` broadcast round-trips
-            // back (see `StudioStore.setPausedLocally`'s doc comment).
-            environment.studio.setPausedLocally(true)
-            environment.studio.send(.pause)
+        if shouldPause {
+            environment.studio.pauseForBackground()
         }
         // Net-auth spec §8.1: flush any buffered trace spans immediately on
         // backgrounding rather than waiting for the next 10s auto-flush tick.
         Task { await environment.studio.handleAppDidEnterBackground() }
     }
 
-    private func handleWillEnterForeground() {
+    private func handleWillEnterForeground(generation: Int) {
         if environment.navigation.screen == .studio {
             environment.studio.startPlayback()
         }
         Task {
+            let sessionEpoch = environment.studio.sessionEpoch
+            let signedInUserID: String?
+            if case let .signedIn(user) = environment.auth.state {
+                signedInUserID = user.id
+            } else {
+                signedInUserID = nil
+            }
             // Net-auth spec §9.2: proactively catch a near-expiry token
             // before it causes a live 401/4001, then open a fresh socket on
             // the (possibly rotated) token — silent thanks to
@@ -135,7 +142,18 @@ struct RootView: View {
             // reach a stale/dead task or be silently dropped (see
             // `StudioStore.reconnectWithLatestToken`'s doc comment).
             await environment.studio.handleAppWillEnterForeground()
-            guard wasRunningBeforeBackground else { return }
+            let sameUser: Bool
+            if case let .signedIn(user) = environment.auth.state {
+                sameUser = user.id == signedInUserID
+            } else {
+                sameUser = false
+            }
+            guard resumeIntent.shouldResume(
+                generation: generation,
+                sceneActive: scenePhase == .active,
+                signedIn: environment.auth.state.isSignedIn,
+                sameSession: environment.studio.sessionEpoch == sessionEpoch && sameUser
+            ) else { return }
             await environment.studio.resumeAfterForeground()
         }
     }
