@@ -59,8 +59,8 @@ struct RootView: View {
         .onChange(of: scenePhase) { oldPhase, newPhase in
             handleScenePhaseChange(from: oldPhase, to: newPhase)
         }
-        .onChange(of: environment.studio.state.paused) { _, paused in
-            if !paused, scenePhase == .active { resumeIntent.confirmedRunning() }
+        .onChange(of: environment.studio.explicitPauseGeneration) { _, _ in
+            resumeIntent.confirmedRunning()
         }
     }
 

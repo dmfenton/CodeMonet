@@ -38,6 +38,8 @@ struct ForegroundResumeTests {
         resume.receivedInit()
         let firstAttempt = resume.beginSend()
         let first = try #require(firstAttempt)
+        resume.willSend(first)
+        resume.sendFailed(first)
         let retryWithoutInit = resume.finishSend(first)
         #expect(!retryWithoutInit) // send failed; retry on a new init
         #expect(resume.pending)
@@ -47,6 +49,7 @@ struct ForegroundResumeTests {
         let secondAttempt = resume.beginSend()
         let second = try #require(secondAttempt)
         #expect(second != first)
+        resume.willSend(second)
         resume.acknowledged()
         let retryAfterAck = resume.finishSend(second)
         #expect(!retryAfterAck)
@@ -61,6 +64,7 @@ struct ForegroundResumeTests {
         resume.request()
         let oldAttempt = resume.beginSend()
         let old = try #require(oldAttempt)
+        resume.willSend(old)
         resume.cancel()
         #expect(!resume.isCurrent(old))
         resume.request()
@@ -71,6 +75,11 @@ struct ForegroundResumeTests {
         let nextAttempt = resume.beginSend()
         let next = try #require(nextAttempt)
         #expect(next != old)
+        resume.willSend(next)
+        resume.acknowledged() // the old Resume's delayed paused:false
+        #expect(resume.pending)
+        resume.acknowledged() // the current Resume's paused:false
+        #expect(!resume.pending)
         resume.cancel() // session teardown also cancels pending work
         resume.disconnected()
         let retryAfterReset = resume.finishSend(next)

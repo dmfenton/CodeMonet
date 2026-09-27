@@ -26,6 +26,7 @@ public final class StudioStore {
     /// An init frame, rather than task creation, confirms that this socket
     /// can deliver the painter's current state and subsequent updates.
     public var receivingUpdates: Bool { foregroundResume.initialized }
+    public private(set) var explicitPauseGeneration = 0
     public private(set) var sessionEpoch = 0
 
     /// Fires on a live `4001`/auth-failure close, or a REST 401/403.
@@ -211,7 +212,16 @@ public final class StudioStore {
     // MARK: - Outbound
 
     public func send(_ message: ClientMessage) {
-        Task { try? await socket.send(message) }
+        switch message {
+        case .pause, .resume:
+            let epoch = sessionEpoch
+            _ = enqueueLifecycleCommand { [weak self] in
+                guard let self, self.sessionEpoch == epoch else { return }
+                try? await self.socket.send(message)
+            }
+        default:
+            Task { try? await socket.send(message) }
+        }
     }
 
     public func startStroke(at point: Point) {
@@ -276,7 +286,10 @@ public final class StudioStore {
     /// truth; its own `paused` broadcast just applies this event again
     /// (idempotent).
     public func setPausedLocally(_ paused: Bool) {
-        if paused { foregroundResume.cancel() }
+        if paused {
+            foregroundResume.cancel()
+            explicitPauseGeneration += 1
+        }
         apply(.setPaused(paused))
     }
 
@@ -369,9 +382,11 @@ public final class StudioStore {
         let task = enqueueLifecycleCommand { [weak self] in
             guard let self, self.sessionEpoch == epoch,
                   self.foregroundResume.isCurrent(attempt) else { return }
+            self.foregroundResume.willSend(attempt)
             do {
                 try await self.socket.send(.resume(direction: nil))
             } catch {
+                self.foregroundResume.sendFailed(attempt)
                 self.recordSpan(name: "ws.resume_send_failed")
             }
         }
