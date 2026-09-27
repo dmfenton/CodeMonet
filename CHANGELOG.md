@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A painting program could crash the whole server on the Alpine image: the server parses the program-written `reveal.json` on a worker thread, and a deeply nested document overflowed musl's small default thread stack (segfault) before Python's recursion limit applied. Server threads now get glibc's 8 MiB stack (set on `code_monet` import), and CI's Docker job checks deep recursion on a worker thread in the built image.
 - A paint run whose program prints after it finishes, exits before exporting, or tampers with its output (removed or linked images, a replaced output directory) now returns a clear error to the agent instead of crashing the paint tool or recording a broken version; version metadata comes from the published `reveal.json`, not the program's stdout.
 - Keep the native iOS session when an access token is rejected but Platform can refresh it; retry
   the rejected read once with the rotated credential, reconnect the studio socket after any
