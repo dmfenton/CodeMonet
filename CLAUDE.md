@@ -253,7 +253,7 @@ cd server && uv run python ../scripts/art-benchmark.py --label my-change --timeo
 ```
 
 Iterate on the paint library itself by writing a painting program and running
-`python -m code_monet.paintlib.runner --program p.py --out DIR --width 1600 --height 1200`
+`python -m code_monet.paint_runner --program p.py --out DIR --width 1600 --height 1200`
 (from `server/`), then look at `DIR/preview.jpg`.
 
 ### Render Studies (`scripts/render-study.py`)
@@ -449,7 +449,7 @@ Web studio (port 5173, `/studio`):
 ## Key Architecture Decisions
 
 1. **WebSocket for real-time**: All drawing updates stream via WebSocket at 60fps
-2. **Claude Agent SDK sandbox**: Agent code executes in isolated sandbox
+2. **Agent sandbox**: the agent's tools and painting programs run confined to the user's workspace (Landlock + seccomp). See [docs/agent-sandbox.md](docs/agent-sandbox.md).
 3. **Paint mode is program painting**: the agent writes a Python painting program
    (`studio/painting.py`) against `code_monet.paintlib` and runs it with the `paint`
    tool; the server renders versions (keyframes + reveal log) and clients reveal them

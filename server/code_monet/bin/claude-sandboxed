@@ -1,0 +1,5 @@
+#!/bin/sh
+# Agent SDK cli_path: run the Claude CLI through code_monet.claude_sandbox with
+# the server's venv (server/.venv, next to the code_monet package).
+here=$(cd "$(dirname "$0")" && pwd)
+exec "$here/../../.venv/bin/python" -I -m code_monet.claude_sandbox "$@"

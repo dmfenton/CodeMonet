@@ -22,6 +22,7 @@ class FakeState:
         self.notes = notes
         self.piece_number = 0
         self.workspace_dir = "/tmp"
+        self.user_id = "user-1"
         self.current_piece_title = None
 
     async def add_strokes(self, paths: list[Any]) -> None:

@@ -9,7 +9,7 @@ from typing import Any
 
 from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
 
-from code_monet.anthropic_wif import anthropic_claude_environment
+from code_monet.claude_runtime import ClaudeLaunch
 from code_monet.config import settings
 
 from .context import ToolContext, ToolSpec
@@ -106,7 +106,11 @@ async def _critique_prompt(
 
 
 async def _run_critique(
-    brief: str, canvas: bytes, reference: bytes | None, history: list[str]
+    launch: ClaudeLaunch,
+    brief: str,
+    canvas: bytes,
+    reference: bytes | None,
+    history: list[str],
 ) -> str:
     options = ClaudeAgentOptions(
         tools=[],
@@ -114,7 +118,9 @@ async def _run_critique(
         disallowed_tools=["Bash", "Edit", "Glob", "Grep", "Read", "WebFetch", "WebSearch", "Write"],
         permission_mode="dontAsk",
         model=settings.agent_model if settings.dev_mode else settings.agent_model_prod,
-        env=anthropic_claude_environment(),
+        cli_path=launch.cli_path,
+        env=launch.env,
+        cwd=launch.cwd,
         extra_args={"strict-mcp-config": None},
         max_turns=1,
         setting_sources=[],
@@ -159,8 +165,13 @@ async def handle_critique_canvas(ctx: ToolContext, args: dict[str, Any]) -> dict
         }
 
     reference_png = ctx.active_reference_png()
+    if ctx.claude is None:
+        return {
+            "content": [{"type": "text", "text": "Error: critique unavailable (no agent turn)"}],
+            "is_error": True,
+        }
     critique = await _run_critique(
-        brief.strip(), png_bytes, reference_png, ctx.gate.critique_history()
+        ctx.claude, brief.strip(), png_bytes, reference_png, ctx.gate.critique_history()
     )
     if not critique:
         critique = "VERDICT: FAIL\nFINDINGS:\n- Critique model returned no text.\nREQUIRED_REVISIONS:\n- Call view_canvas and revise manually."

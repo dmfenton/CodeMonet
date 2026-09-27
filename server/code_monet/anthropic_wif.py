@@ -62,11 +62,9 @@ def anthropic_wif_configuration() -> AnthropicWifConfiguration | None:
     )
 
 
-def anthropic_claude_environment() -> dict[str, str]:
+def anthropic_claude_environment(config_directory: Path) -> dict[str, str]:
+    """CLI environment for workload identity with its Claude config in `config_directory`."""
     configuration = anthropic_wif_configuration()
     if configuration is None:
         return {}
-    return configure_claude_federation_profile(
-        configuration,
-        config_directory=Path(settings.anthropic_config_directory),
-    )
+    return configure_claude_federation_profile(configuration, config_directory=config_directory)

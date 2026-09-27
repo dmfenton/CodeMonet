@@ -215,6 +215,12 @@ jobs:
           assert all(r.startswith('/app/data/') for r in resolved), resolved
           "
 
+      - name: Verify the agent sandbox end to end
+        run: |
+          docker run --rm -i --user 1000 -e DEV_MODE=true -e SECRET_CANARY=must-not-leak \
+            --tmpfs /data:uid=1000 --entrypoint /app/server/.venv/bin/python \
+            code-monet-server:ci - < server/docker/sandbox_e2e.py
+
       # musl's default thread stack segfaulted the server on deep JSON.
       - name: Verify worker threads survive deep recursion
         run: |

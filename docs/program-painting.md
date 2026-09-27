@@ -69,21 +69,21 @@ canvas size). Ops, in paint order:
 directions and nudges, so a program must be treated as arbitrary,
 possibly prompt-injected code. Whatever it can read can end up in its
 outputs, and those outputs (images, reveal log, program) are public for
-pieces in public galleries.
+pieces in public galleries. The sandbox that confines it (and the agent's own
+tools) is described in [agent-sandbox.md](agent-sandbox.md).
 
-What the server enforces:
-
-- **Run.** `python -I -m code_monet.paintlib.runner` in a fresh temporary
+- **Run.** `python -I -m code_monet.paint_runner` in a fresh temporary
   directory (cwd, `HOME` and `TMPDIR`) with an environment of exactly `PATH`,
   `HOME`, `TMPDIR` and `LANG` — nothing inherited from the server
   (`program_painting.paint_env`). `-I` ignores `PYTHON*` variables and keeps
-  cwd and user site-packages off `sys.path`. The runner lives in `paintlib`
-  so the process imports only the paint library, numpy, scipy and PIL, never
-  server config (which loads secrets from SSM at import) or the agent SDK.
-  The run is killed after `PAINT_TIMEOUT_S`.
+  cwd and user site-packages off `sys.path`. Before importing anything else,
+  the runner confines itself (Linux): read-only Python and its libraries,
+  write access only to the version's output directory and its scratch
+  directory, no network sockets, no new processes, no signals to the server.
+  It never imports server config (which loads secrets from SSM at import) or
+  the agent SDK. The run is killed after `PAINT_TIMEOUT_S`.
 - **Publish.** The program bytes are read before the run without following a
-  symlink, and the server itself writes them as the version's `painting.py`
-  (a child process that outlives the run could still overwrite it; see below).
+  symlink, and the server itself writes them as the version's `painting.py`.
 - **Read back.** Every reader that serves or publishes a version file — the
   asset route, gallery raster lookups, public thumbnails/OG images, and the
   workspace render — goes through `workspace.assets.version_asset`: a
@@ -91,35 +91,6 @@ What the server enforces:
   path is exactly `{user_dir}/paintings/{token}/{file}` (the user directory may
   sit behind the server-configured data-volume link). Planted symlinks below
   the user directory, hard links to other files, and path escapes are refused.
-  This stops *live* links that would keep exposing a file's later contents;
-  it cannot stop a program from copying bytes it can read into its output.
-
-What is **not** isolated — the program runs as the server's OS user in the
-server container, so a scrubbed environment removes the easy leak (printing
-`os.environ`) but is not a boundary:
-
-- Filesystem: it can read and write whatever the server can — the auth
-  database, every user's workspace (including other versions' assets), the
-  Anthropic identity token under `/run/secrets/anthropic/`, and on Linux the
-  server's own environment via `/proc/<pid>/environ`. It can copy any of that
-  into its own output.
-- Network: unrestricted, including the instance metadata service; the
-  `drawing-agent` container keeps IMDS access (dmfenton/compute
-  `deploy/harden-imds.sh`), so the instance role's SSM parameters are
-  reachable.
-- Processes and resources: a daemonized child outlives the timeout; there are
-  no memory or CPU limits.
-- The paint agent also has the `Bash` tool in the same container, with the
-  same reach, so isolating `paint` alone does not bound a prompt-injected
-  agent.
-- Plotter mode's `generate_svg` code (`tools/python_sandbox.py`) runs the
-  same way — `python -I` from a throwaway directory with `paint_env` — so it
-  has the same scrubbed environment and the same residual reach.
-
-A real boundary needs OS-level isolation of both the paint run and the
-agent's shell: a separate user with no access to server data or secrets, no
-network, and process/memory limits (for example a sandbox container, or
-Landlock plus seccomp in the child).
 
 ## WebSocket
 

@@ -34,7 +34,7 @@ def test_wif_environment_removes_static_credentials(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "must-not-survive")
     monkeypatch.setenv("CLAUDE_CODE_USE_BEDROCK", "1")
 
-    environment = anthropic_claude_environment()
+    environment = anthropic_claude_environment(tmp_path / "config")
 
     assert environment["ANTHROPIC_CONFIG_DIR"] == str(tmp_path / "config")
     assert environment["CLAUDE_CONFIG_DIR"] == str(tmp_path / "config")

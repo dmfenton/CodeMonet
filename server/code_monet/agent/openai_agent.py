@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent.prompts import build_system_prompt
 from code_monet.agent.renderer import image_to_base64
+from code_monet.claude_runtime import claude_launch
 from code_monet.config import settings
 from code_monet.rendering import options_for_agent_view, render_strokes
 from code_monet.tools import DRAWING_TOOLS, ToolContext, ToolHandler
@@ -428,6 +429,7 @@ class OpenAIDrawingAgent:
 
         self.tool_context.bind_turn(
             workspace_dir=state.workspace_dir,
+            claude=claude_launch(state.user_id, state.workspace_dir),
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
             get_canvas=get_canvas_png,
