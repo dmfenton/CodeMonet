@@ -15,9 +15,49 @@ private actor AuthTestStore: AuthSessionStore {
 }
 
 private actor AuthTestPendingStore: PendingAuthorizationStore {
-    func load() -> PendingAuthorization? { nil }
-    func save(_ authorization: PendingAuthorization) {}
-    func clear() {}
+    private var pending: PendingAuthorization?
+    func load() -> PendingAuthorization? { pending }
+    func save(_ authorization: PendingAuthorization) { pending = authorization }
+    func clear() { pending = nil }
+}
+
+private actor AuthExchangeGate {
+    private var entered = false
+    private var enteredWaiter: CheckedContinuation<Void, Never>?
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func waitUntilEntered() async {
+        if entered { return }
+        await withCheckedContinuation { enteredWaiter = $0 }
+    }
+
+    func block() async {
+        entered = true
+        enteredWaiter?.resume()
+        await withCheckedContinuation { releaseWaiter = $0 }
+    }
+
+    func release() {
+        releaseWaiter?.resume()
+    }
+}
+
+private struct AuthDelayedExchangeClient: MagicLinkAuthenticationClient {
+    let gate: AuthExchangeGate
+
+    func requestMagicLink(email: String, codeChallenge: String) async throws -> MagicLinkRequestResult {
+        MagicLinkRequestResult(accepted: true)
+    }
+    func exchangeAuthorizationCode(code: String, codeVerifier: String) async throws -> AuthSession {
+        await gate.block()
+        throw AuthenticationClientError.invalidAuthorizationCode
+    }
+    func refreshSession(refreshToken: String) async throws -> AuthSession {
+        throw AuthenticationClientError.unauthorized
+    }
+    func fetchIdentity(bearerToken: String) async throws -> HouseholdIdentity {
+        HouseholdIdentity(email: "a@example.com")
+    }
 }
 
 private struct AuthTestIdentityClient: MagicLinkAuthenticationClient {
@@ -65,6 +105,44 @@ struct AuthServiceRecoveryTests {
         #expect(auth.bearerToken == nil)
         #expect(await store.load() == nil)
         #expect(await auth.recoverRejectedToken("expired") == nil)
+    }
+
+    @Test("stale rejections leave an in-progress code exchange visible")
+    @MainActor
+    func staleRejectionDuringNewSignIn() async throws {
+        let store = AuthTestStore(AuthSession(
+            bearerToken: "old-bearer",
+            refreshToken: "old-refresh",
+            expiresAt: Date().addingTimeInterval(600)
+        ))
+        let pending = AuthTestPendingStore()
+        let gate = AuthExchangeGate()
+        let controller = AuthenticationController(
+            client: AuthDelayedExchangeClient(gate: gate),
+            sessionStore: store,
+            pendingAuthorizationStore: pending
+        )
+        await controller.restoreSession()
+        await controller.signOut()
+        await pending.save(PendingAuthorization(email: "a@example.com", codeVerifier: "verifier"))
+
+        let apiURL = try #require(URL(string: "http://localhost:8000"))
+        let socketURL = try #require(URL(string: "ws://localhost:8000"))
+        let auth = AuthService(
+            environment: CodeMonetEnvironment(apiBaseURL: apiURL, wsBaseURL: socketURL),
+            controller: controller
+        )
+        let exchange = Task { try? await auth.consume(code: "code") }
+        await gate.waitUntilEntered()
+        #expect(auth.state == .exchangingCode)
+
+        #expect(await auth.recoverRejectedToken("old-bearer") == nil)
+        #expect(auth.state == .exchangingCode)
+        await auth.rejectCurrentBearer("old-bearer")
+        #expect(auth.state == .exchangingCode)
+
+        await gate.release()
+        await exchange.value
     }
 }
 

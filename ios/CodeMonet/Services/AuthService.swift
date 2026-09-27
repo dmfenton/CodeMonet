@@ -70,11 +70,6 @@ public final class AuthService {
     /// DEBUG-only, never persisted (net-auth spec §4) — never routed through
     /// `AuthenticationController`'s refresh machinery.
     private var debugToken: String?
-    /// The last Platform rotation, scoped to this app sign-in. Late responses
-    /// carrying its predecessor can use the replacement without refreshing a
-    /// second time or borrowing a token from a later sign-in.
-    @ObservationIgnored private var recoveredBearer: (rejected: String, replacement: String)?
-    @ObservationIgnored private var sessionGeneration: UInt64 = 0
 
     public convenience init(environment: CodeMonetEnvironment) {
         let identityAPI = MobileAPIClient(baseURL: CodeMonetEnvironment.identityBaseURL)
@@ -111,8 +106,6 @@ public final class AuthService {
     /// leaves the app signed out — tries the DEBUG dev-token bootstrap
     /// (net-auth spec §4).
     public func start() async {
-        sessionGeneration &+= 1
-        recoveredBearer = nil
         state = .restoring
         await controller.restoreSession()
         await syncStateFromController()
@@ -163,16 +156,12 @@ public final class AuthService {
     /// applying the identity-mapping check from §0.2/§3.4 before ever
     /// reporting `.signedIn`.
     public func consume(code: String) async throws {
-        sessionGeneration &+= 1
-        recoveredBearer = nil
         state = .exchangingCode
         try await controller.exchangeAuthorizationCode(code)
         await verifyIdentityMapping()
     }
 
     public func signOut() async {
-        sessionGeneration &+= 1
-        recoveredBearer = nil
         debugToken = nil
         await controller.signOut()
         state = .signedOut
@@ -182,36 +171,42 @@ public final class AuthService {
     /// A stale failure from a superseded session cannot affect the current one.
     /// Returns the replacement for one replay of a rejected read, if available.
     public func recoverRejectedToken(_ rejected: String) async -> String? {
-        if let recoveredBearer,
-           recoveredBearer.rejected == rejected,
-           bearerToken == recoveredBearer.replacement {
-            return recoveredBearer.replacement
-        }
-        guard bearerToken == rejected else { return nil }
         if debugToken != nil {
+            guard debugToken == rejected else { return nil }
             await signOut()
             return nil
         }
-        let generation = sessionGeneration
-        let survived = await controller.handleUnauthorizedRequest(bearerToken: rejected)
-        guard sessionGeneration == generation else { return nil }
-        guard survived else {
-            recoveredBearer = nil
-            state = .signedOut
-            return nil
-        }
-        guard let replacement = controller.session?.bearerToken else { return nil }
-        if replacement != rejected {
-            recoveredBearer = (rejected, replacement)
-        }
+        let replacement = await controller.recoverRejectedBearerToken(rejected)
+        reflectEndedPlatformSession()
         return replacement
     }
 
     /// Code Monet rejected a freshly replayed bearer. Clear only the session
     /// that sent it; a late response cannot end a newer sign-in or rotation.
     func rejectCurrentBearer(_ rejected: String) async {
-        guard bearerToken == rejected else { return }
-        await signOut()
+        if let debugToken {
+            if debugToken == rejected { await signOut() }
+            return
+        }
+        await controller.signOut(ifBearerTokenMatches: rejected)
+        reflectEndedPlatformSession()
+    }
+
+    /// A stale request may finish while a new authorization code is being
+    /// exchanged. Only an ended Platform session may end the app's current
+    /// signed-in state; an exchange still in progress owns the UI state.
+    private func reflectEndedPlatformSession() {
+        switch controller.state {
+        case .signedOut, .reauthenticationRequired:
+            switch state {
+            case .exchangingCode, .signingIn:
+                return
+            default:
+                state = .signedOut
+            }
+        default:
+            break
+        }
     }
 
     private func syncStateFromController() async {

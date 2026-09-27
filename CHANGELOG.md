@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   feature request rotates it, reuse that rotation for late responses from the same sign-in,
   end the current session if Code Monet rejects the replay, and retry inconclusive socket
   recovery with backoff.
+- Use Platform's shared bearer recovery and one-replay request helper for the native iOS app.
 - Wait for the trace auto-flush task to stop, making timer shutdown and its native test deterministic.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
