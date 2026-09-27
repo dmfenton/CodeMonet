@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `CODE_MONET_ENV=none` skips SSM parameter loading; configuration comes from the environment only. Production can then run with no AWS access in the container, with its parameters rendered into `codemonet.env` on the host.
+
 ### Fixed
 
 - A painting program could crash the whole server on the Alpine image: the server parses the program-written `reveal.json` on a worker thread, and a deeply nested document overflowed musl's small default thread stack (segfault) before Python's recursion limit applied. Server threads now get glibc's 8 MiB stack (set on `code_monet` import), and CI's Docker job checks deep recursion on a worker thread in the built image.

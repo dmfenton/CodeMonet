@@ -19,6 +19,13 @@ An injected agent or program tries to:
   (painting outputs and programs are public for public gallery pieces);
 - damage the server: kill it, chmod/truncate its files.
 
+Server secrets live in the server process either way: in its environment
+(production renders them into `codemonet.env`, `CODE_MONET_ENV=none`) and in
+its memory (`settings`). Both are guarded the same way: `/proc/<pid>/environ`
+and `/proc/<pid>/mem` need ptrace-level access, which Landlock denies to
+everything sandboxed, and sandboxed processes never inherit the server's
+environment. The one unconfined case is macOS development.
+
 ## Mechanism
 
 `code_monet/sandbox.py` confines the current process and everything it later

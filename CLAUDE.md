@@ -480,7 +480,7 @@ E2E tests that require the Anthropic API key fetch it automatically from AWS SSM
 1. AWS credentials configured locally (`~/.aws/credentials` or environment variables)
 2. Access to the `/code-monet/prod/` SSM path
 
-The make targets set `CODE_MONET_ENV=prod` to enable SSM fetching. No local `.env` file needed.
+The make targets set `CODE_MONET_ENV=prod` to enable SSM fetching. No local `.env` file needed. `CODE_MONET_ENV` selects the SSM path (`/code-monet/{env}/`, default `dev`); `none` skips SSM, and production uses it, rendering its parameters into the container's environment on the host so the container needs no AWS access.
 
 ### SDK Integration Tests
 
