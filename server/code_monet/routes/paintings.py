@@ -78,17 +78,30 @@ async def _performance_response(path: Path) -> StreamingResponse:
     f = await asyncio.to_thread(_open_stream, path)
     if f is None:
         raise HTTPException(status_code=404, detail="Not found")
-    ended = (await asyncio.to_thread(scan_stream, f)).ended
-    f.seek(0)
-    if ended:
+    try:
+        scan = await asyncio.to_thread(scan_stream, f)
+        size = os.fstat(f.fileno()).st_size
+        f.seek(0)
+    except BaseException:
+        f.close()
+        raise
+    if scan.final == "end":
+        # Finished: served as it is now (bytes appended later are not part of it).
         return StreamingResponse(
-            _read_all(f),
+            _read_all(f, size),
             media_type=_MEDIA[".bin"],
             headers={
                 "Cache-Control": "public, max-age=31536000, immutable",
-                "Content-Length": str(os.fstat(f.fileno()).st_size),
+                "Content-Length": str(size),
                 "X-Content-Type-Options": "nosniff",
             },
+        )
+    if scan.ended:
+        # Broke off (an error frame or garbage): what there is, not cached.
+        return StreamingResponse(
+            _read_all(f, size),
+            media_type=_MEDIA[".bin"],
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
         )
     return StreamingResponse(
         _follow(f),
@@ -110,9 +123,11 @@ def _open_stream(path: Path) -> BinaryIO | None:
     return os.fdopen(fd, "rb")
 
 
-async def _read_all(f: BinaryIO) -> AsyncIterator[bytes]:
+async def _read_all(f: BinaryIO, size: int) -> AsyncIterator[bytes]:
     with f:
-        while chunk := f.read(_READ):
+        left = size
+        while left > 0 and (chunk := f.read(min(_READ, left))):
+            left -= len(chunk)
             yield chunk
 
 

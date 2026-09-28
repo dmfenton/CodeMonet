@@ -308,6 +308,29 @@ async def _record(
     on_live: OnLive | None,
     on_version: OnVersion | None,
 ) -> PaintResult:
+    """Record a finished run; an unexpected error before the version is recorded
+    still drops the run (its files, the live marker, and viewers' stream)."""
+    try:
+        return await _record_version(state, run, out_dir, ran, live, on_live, on_version)
+    except BaseException:
+        if not any(v.token == run.token for v in state.painting_versions):
+            _discard(out_dir)
+            if on_live:
+                _spawn(on_live(LiveFailed(live.piece_number, run.token)))
+        if state.live_painting is live:
+            state.live_painting = None
+        raise
+
+
+async def _record_version(
+    state: WorkspaceState,
+    run: _Run,
+    out_dir: FilePath,
+    ran: _Ran,
+    live: LiveStarted,
+    on_live: OnLive | None,
+    on_version: OnVersion | None,
+) -> PaintResult:
     """Check, record and announce a finished run's version (never cancelled midway)."""
 
     async def drop(error: str) -> PaintFailure:

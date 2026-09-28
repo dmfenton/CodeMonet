@@ -244,6 +244,31 @@ class TestCancellation:
         assert workspace.live_painting is None
 
     @pytest.mark.asyncio
+    async def test_an_error_while_recording_drops_the_run(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+
+        async def failing_record(*_args: object, **_kwargs: object) -> object:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(workspace, "record_painting_version", failing_record)
+        events: list[PaintLive] = []
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+
+        with pytest.raises(OSError, match="disk full"):
+            await run_painting_program(workspace, on_live=on_live)
+        await asyncio.sleep(0.05)
+
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        assert events[1] == LiveFailed(started.piece_number, started.token)
+        assert not (workspace.paintings_dir / started.token).exists()
+        assert workspace.live_painting is None
+
+    @pytest.mark.asyncio
     async def test_cancel_while_announcing_the_live_run_drops_it(
         self, workspace: WorkspaceState
     ) -> None:

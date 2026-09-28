@@ -194,6 +194,15 @@ class TestPerformanceRoute:
         assert res.headers["cache-control"] == "no-store"
         assert res.content == data
 
+    def test_a_stream_that_broke_off_is_not_cached(
+        self, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        client, vdir, url = self._client(tmp_path, monkeypatch)
+        (vdir / "performance.bin").write_bytes(b"\x03\x00\x00\x00abc" + b"\x00" * 12)
+        res = client.get(url)
+        assert res.status_code == 200
+        assert res.headers["cache-control"] == "no-store"
+
     def test_a_linked_stream_is_not_served(
         self, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
     ) -> None:
