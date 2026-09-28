@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
+from code_monet import sandbox
 from code_monet.paintlib.performance import read_frames
 from code_monet.program_painting import (
     LiveFailed,
@@ -405,6 +406,12 @@ atexit.register(lambda: {tamper})
 
         result = await run_painting_program(workspace)
 
+        if "os.rename(out" in tamper and sandbox.available():
+            # The sandbox refuses renaming the output directory itself (no rights
+            # on its parent), so the version is intact and nothing was moved.
+            assert isinstance(result, PaintSuccess), result
+            assert not any(p.name.endswith(".moved") for p in workspace.paintings_dir.iterdir())
+            return
         assert isinstance(result, PaintFailure), result
         assert message in result.error
         left = list(workspace.paintings_dir.iterdir())

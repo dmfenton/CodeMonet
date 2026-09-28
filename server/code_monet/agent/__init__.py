@@ -29,7 +29,7 @@ from code_monet.agent.processor import (
 from code_monet.agent.processor import process_turn_messages as _process_turn_messages
 from code_monet.agent.prompts import SYSTEM_PROMPT, build_system_prompt
 from code_monet.agent.renderer import image_to_base64
-from code_monet.anthropic_wif import anthropic_claude_environment
+from code_monet.claude_runtime import ClaudeLaunch, claude_launch
 from code_monet.config import settings
 from code_monet.program_painting import (
     RENDER_SCALE,
@@ -221,31 +221,29 @@ class DrawingAgent:
             # Painterly canvas images are large; default 1MB buffer is too small.
             "max_buffer_size": 16 * 1024 * 1024,
             "hooks": {"PostToolUse": [HookMatcher(hooks=[self._post_tool_use_hook])]},
-            "env": anthropic_claude_environment(),
             # Only our drawing MCP server: never inherit MCP servers from the
             # host's Claude config (a local CLI would otherwise load them).
             "extra_args": {"strict-mcp-config": None},
         }
 
     def _build_options(
-        self, style_type: DrawingStyleType, workspace_dir: str | None = None
+        self, style_type: DrawingStyleType, launch: ClaudeLaunch
     ) -> ClaudeAgentOptions:
         """Build agent options with style-specific system prompt.
 
         Args:
             style_type: The drawing style (PLOTTER or PAINT)
-            workspace_dir: Optional workspace directory to scope filesystem tools
+            launch: The user's sandboxed CLI launch (cwd is the user's workspace)
         """
         style_config = get_style_config(style_type)
-        options = {
-            "system_prompt": build_system_prompt(style_config),
-            "allowed_tools": _allowed_tools(style_type),
+        return ClaudeAgentOptions(
+            system_prompt=build_system_prompt(style_config),
+            allowed_tools=_allowed_tools(style_type),
+            cli_path=launch.cli_path,
+            env=launch.env,
+            cwd=launch.cwd,
             **self._base_options,
-        }
-        # Scope filesystem tools to user's workspace
-        if workspace_dir:
-            options["cwd"] = workspace_dir
-        return ClaudeAgentOptions(**options)
+        )
 
     def get_style_config(self) -> DrawingStyleConfig:
         """Get the current drawing style configuration."""
@@ -424,13 +422,9 @@ class DrawingAgent:
             except Exception as e:
                 logger.warning(f"Error disconnecting client: {e}")
 
-    async def _connect_client(
-        self,
-        style_type: DrawingStyleType,
-        workspace_dir: str | None,
-    ) -> None:
+    async def _connect_client(self, style_type: DrawingStyleType, launch: ClaudeLaunch) -> None:
         """Connect a fresh SDK client, retrying once after SDK cleanup failures."""
-        options = self._build_options(style_type, workspace_dir)
+        options = self._build_options(style_type, launch)
         last_error: Exception | None = None
 
         for attempt in range(2):
@@ -623,8 +617,10 @@ class DrawingAgent:
                     await self._on_painting_version(result.version)
             return result
 
+        launch = claude_launch(state.user_id, state.workspace_dir)
         self.tool_context.bind_turn(
             workspace_dir=state.workspace_dir,
+            claude=launch,
             canvas_width=state.canvas.width,
             canvas_height=state.canvas.height,
             get_canvas=get_canvas_png,
@@ -636,7 +632,7 @@ class DrawingAgent:
         try:
             # Connect client if needed
             if self._client is None:
-                await self._connect_client(state.canvas.drawing_style, state.workspace_dir)
+                await self._connect_client(state.canvas.drawing_style, launch)
             client = self._client
             if client is None:
                 raise RuntimeError("Agent client did not connect")

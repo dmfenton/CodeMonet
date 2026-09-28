@@ -25,6 +25,7 @@ from claude_agent_sdk._internal.sdk_mcp_bridge import SdkMcpBridge
 
 from code_monet.agent import DrawingAgent
 from code_monet.agent.openai_agent import OpenAIDrawingAgent
+from code_monet.claude_runtime import ClaudeLaunch
 from code_monet.config import settings
 from code_monet.program_painting import PaintFailure, PaintResult
 from code_monet.types import AgentTurnComplete, DrawingStyleType, Path
@@ -47,6 +48,10 @@ class FakeState:
     workspace_dir: str
     status: Any = None
     added: list[Path] = field(default_factory=list)
+
+    @property
+    def user_id(self) -> str:
+        return self.name
 
     async def save(self) -> None:
         return None
@@ -128,9 +133,13 @@ async def _fake_paint(state: FakeState, on_live: object = None) -> PaintResult: 
     return PaintFailure(error=f"ran program of {state.name}", seconds=0.0)
 
 
-async def _fake_critique(brief: str, canvas: bytes, *_rest: Any) -> str:
+async def _fake_critique(launch: ClaudeLaunch, brief: str, canvas: bytes, *_rest: Any) -> str:
     verdict = "PASS" if brief.startswith("pass") else "FAIL"
-    return f"VERDICT: {verdict}\nFINDINGS:\n- canvas was {canvas.decode()}"
+    return f"VERDICT: {verdict}\nFINDINGS:\n- canvas was {canvas.decode()} in {launch.cwd}"
+
+
+def _fake_launch(user_id: str, workspace_dir: str) -> ClaudeLaunch:
+    return ClaudeLaunch("claude-sandboxed", {"user": user_id}, workspace_dir)
 
 
 async def _fake_process(client: FakeClient, **_kwargs: Any) -> SimpleNamespace:
@@ -185,6 +194,7 @@ async def test_overlapping_turns_keep_tool_calls_on_their_own_agent() -> None:
         patch("code_monet.agent.run_painting_program", _fake_paint),
         patch("code_monet.agent.image_to_jpeg_bytes", lambda img: img),
         patch("code_monet.tools.critique._run_critique", _fake_critique),
+        patch("code_monet.agent.claude_launch", _fake_launch),
     ):
         try:
             event = await anext(agent_a.run_turn())
@@ -206,8 +216,8 @@ async def test_overlapping_turns_keep_tool_calls_on_their_own_agent() -> None:
 
     # view_canvas / critique saw A's canvas
     assert _image(results["view"]) == b"canvas-A"
-    assert "canvas was canvas-A" in _text(results["critique_a"])
-    assert "canvas was canvas-B" in _text(results["critique_b"])
+    assert "canvas was canvas-A in /workspaces/A" in _text(results["critique_a"])
+    assert "canvas was canvas-B in /workspaces/B" in _text(results["critique_b"])
 
     # B's failed critique must not block A's finish gate, nor A's pass open B's
     assert not results["name_a"].get("isError"), _text(results["name_a"])
@@ -227,6 +237,7 @@ async def test_openai_backend_overlapping_turns_keep_tool_calls_on_their_own_age
 ) -> None:
     """The OpenAI backend dispatches handlers directly; they must get its own context."""
     monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    monkeypatch.setattr("code_monet.agent.openai_agent.claude_launch", _fake_launch)
     state_a = FakeState(name="A", canvas=FakeCanvas(800, 600), workspace_dir="/workspaces/A")
     state_b = FakeState(name="B", canvas=FakeCanvas(400, 300), workspace_dir="/workspaces/B")
     agent_a = OpenAIDrawingAgent(state_a)

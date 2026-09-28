@@ -31,6 +31,15 @@ struct StudioPresentationTests {
         #expect(StudioPresentation.statusPill(for: state) == .init(label: "paused", isActive: false))
     }
 
+    @Test("a socket without an init frame never presents stale thinking as live activity")
+    func waitingForUpdates() {
+        var state = StudioState()
+        state.paused = false
+        state.turnActive = true
+        #expect(StudioPresentation.statusPill(for: state, receivingUpdates: false)
+            == .init(label: "reconnecting", isActive: false))
+    }
+
     @Test("an open tool call names the activity: critique, painting, looking")
     func executingPills() {
         var state = StudioState()

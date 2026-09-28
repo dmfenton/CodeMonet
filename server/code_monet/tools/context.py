@@ -21,6 +21,7 @@ from claude_agent_sdk import SdkMcpTool
 from .quality_gate import QualityGateState
 
 if TYPE_CHECKING:
+    from code_monet.claude_runtime import ClaudeLaunch
     from code_monet.program_painting import PaintResult
     from code_monet.types import Path
 
@@ -49,6 +50,7 @@ class ToolContext:
     add_strokes: AddStrokesCallback | None = None
     paint: PaintCallback | None = None
     workspace_dir: str | None = None
+    claude: ClaudeLaunch | None = None  # how this agent's user launches the Claude CLI
     canvas_width: int = 800
     canvas_height: int = 600
 
@@ -65,6 +67,7 @@ class ToolContext:
         get_canvas: GetCanvasCallback,
         add_strokes: AddStrokesCallback,
         draw: DrawCallback,
+        claude: ClaudeLaunch,
         paint: PaintCallback | None = None,
     ) -> None:
         """Connect the tools to this agent's workspace for a turn.
@@ -76,9 +79,11 @@ class ToolContext:
             get_canvas: Current canvas as image bytes (view_canvas, critique)
             add_strokes: Adds strokes to state before the tool returns
             draw: Collects drawn paths for animation (paths, done_flag)
+            claude: Sandboxed Claude CLI launch for this user (critique)
             paint: Runs the painting program and publishes the version (paint mode)
         """
         self.workspace_dir = workspace_dir
+        self.claude = claude
         self.canvas_width = canvas_width
         self.canvas_height = canvas_height
         self.get_canvas = get_canvas

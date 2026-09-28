@@ -132,7 +132,7 @@ def main() -> int:
         run = args.out.parent / f"{args.out.stem}-run"
         run.mkdir(parents=True, exist_ok=True)
         res = subprocess.run(
-            [sys.executable, "-m", "code_monet.paintlib.runner", "--program",
+            [sys.executable, "-m", "code_monet.paint_runner", "--program",
              str(args.program), "--out", str(run), "--width", "1600", "--height", "1200",
              *(["--previous", str(args.previous)] if args.previous else [])],
             capture_output=True, text=True,

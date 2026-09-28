@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.42.0] - 2026-09-27
+
+Also rolls up changes tagged v1.41.1–v1.41.4, which had no changelog sections.
+
+### Added
+
+- `CODE_MONET_ENV=none` skips SSM parameter loading; configuration comes from the environment only. Production can then run with no AWS access in the container, with its parameters rendered into `codemonet.env` on the host.
+
 ### Fixed
 
 - A painting program could crash the whole server on the Alpine image: the server parses the program-written `reveal.json` on a worker thread, and a deeply nested document overflowed musl's small default thread stack (segfault) before Python's recursion limit applied. Server threads now get glibc's 8 MiB stack (set on `code_monet` import), and CI's Docker job checks deep recursion on a worker thread in the built image.
@@ -16,15 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   feature request rotates it, reuse that rotation for late responses from the same sign-in,
   end the current session if Code Monet rejects the replay, and retry inconclusive socket
   recovery with backoff.
+- Use Platform's shared bearer recovery and one-replay request helper for the native iOS app.
 - Wait for the trace auto-flush task to stop, making timer shutdown and its native test deterministic.
 - TestFlight signing names its dedicated CI account (`expected-user: fenton-ci`); the shared signing action refused to run on the dedicated-signing runner without it.
 
 ### Security
 
-- Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paintlib.runner` so the program's process never imports server config or loads SSM secrets.
+- Run painting programs with an explicit minimal environment (`PATH`, `HOME`, `TMPDIR`, `LANG`), in isolated Python mode, from a throwaway working directory; the runner moved to `code_monet.paint_runner` so the program's process never imports server config or loads SSM secrets.
 - Run plotter-mode `generate_svg` code the same way: `python -I` from a throwaway directory with the paint run's minimal environment, instead of inheriting the server's environment.
 - Read painting version files (asset route, gallery raster, public thumbnails, workspace render) only when they are single-link regular files whose real path stays inside `paintings/{token}/`.
-- Document the program-painting threat model and the isolation that remains missing (docs/program-painting.md).
+- Confine everything the agent executes to the user's own workspace (Landlock + seccomp; docs/agent-sandbox.md). The Claude CLI (agent and critique) runs through `code_monet/bin/claude-sandboxed` with an environment built only from its launch spec and a private per-user Claude home (`HOME`, `TMPDIR`, config, sessions). Painting programs and plotter-mode `generate_svg` code confine themselves before running: read-only Python, writes only to their own output or run directory, no network, no subprocesses. Neither can read other users' data, the server's environment or memory, or the auth database, nor signal the server. `make sandbox-e2e` checks it end to end in the server image. The server image now includes bash, which the Claude CLI's Bash tool requires; without it the agent's shell refused to run.
 
 ## [1.41.0] - 2026-09-26
 
@@ -1266,7 +1275,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...HEAD
+[1.42.0]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/dmfenton/CodeMonet/compare/v1.40.1...v1.41.0
 [1.40.1]: https://github.com/dmfenton/CodeMonet/compare/v1.39.3...v1.40.1
 [1.38.0]: https://github.com/dmfenton/sketchpad/compare/v1.37.7...v1.38.0

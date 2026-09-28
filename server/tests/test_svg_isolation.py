@@ -39,9 +39,8 @@ async def test_code_sees_no_server_environment(monkeypatch: pytest.MonkeyPatch) 
     assert set(seen["env"]) == {"PATH", "HOME", "TMPDIR", "LANG"}
     assert seen["env"]["PATH"] == os.defpath
     assert seen["isolated"] == 1
-    # The prelude loads no server code; agent code importing it explicitly is a
-    # documented residual (docs/program-painting.md, "Untrusted programs").
-    assert seen["modules"] == []
+    # Only the sandbox that confines the run; no server config (SSM secrets) or SDK.
+    assert set(seen["modules"]) <= {"code_monet", "code_monet.sandbox"}
     run_dir = FilePath(seen["env"]["HOME"])
     assert seen["env"]["TMPDIR"] == str(run_dir)
     assert FilePath(seen["cwd"]).resolve() == run_dir.resolve()

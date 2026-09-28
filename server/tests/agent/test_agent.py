@@ -10,6 +10,7 @@ import pytest
 from PIL import Image
 
 from code_monet.agent import DrawingAgent
+from code_monet.claude_runtime import ClaudeLaunch
 from code_monet.types import AgentTurnComplete, DrawingStyleType, Path, PathType, Point
 
 
@@ -100,7 +101,7 @@ class TestDrawingAgentRunTurn:
         assert events[0].done is False
 
     @pytest.mark.asyncio
-    async def test_stop_turn_ends_running_turn(self) -> None:
+    async def test_stop_turn_ends_running_turn(self, tmp_path: Any) -> None:
         """stop_turn mid-turn ends it at the next message and drops the session."""
         from claude_agent_sdk.types import StreamEvent
 
@@ -108,6 +109,8 @@ class TestDrawingAgentRunTurn:
         await agent.resume()
         state = MagicMock()
         state.save = AsyncMock()
+        state.user_id = "user-1"
+        state.workspace_dir = str(tmp_path)
         agent._state = state
 
         def delta(text: str) -> StreamEvent:
@@ -426,33 +429,24 @@ class TestClaudeAgentSDKCompatibility:
     that our option construction is valid.
     """
 
-    def test_build_options_without_workspace(self) -> None:
-        """Verify ClaudeAgentOptions accepts our base parameters."""
+    def test_build_options_route_the_cli_through_the_sandbox(self) -> None:
+        """Verify ClaudeAgentOptions accepts our base parameters and the launch."""
         agent = DrawingAgent()
+        launch = ClaudeLaunch("/x/claude-sandboxed", {"CODE_MONET_SANDBOX": "{}"}, "/tmp/ws")
         # This will raise TypeError if SDK parameters changed
-        options = agent._build_options(DrawingStyleType.PLOTTER)
-        assert options is not None
+        options = agent._build_options(DrawingStyleType.PLOTTER, launch)
+        assert options.cli_path == "/x/claude-sandboxed"
+        assert options.env == {"CODE_MONET_SANDBOX": "{}"}
+        assert str(options.cwd) == "/tmp/ws"
 
     def test_claude_agent_sdk_has_streaming_writer_fix(self) -> None:
         """Pin the SDK above the subprocess streaming writer regression."""
         sdk_version = tuple(int(part) for part in version("claude-agent-sdk").split("."))
         assert sdk_version >= (0, 2, 87)
 
-    def test_build_options_with_workspace_directory(self) -> None:
-        """Verify ClaudeAgentOptions accepts cwd parameter.
-
-        Regression test: SDK renamed 'working_directory' to 'cwd' in v1.x.
-        This test would have caught that breaking change immediately.
-        """
-        agent = DrawingAgent()
-        # This will raise TypeError if 'cwd' parameter is renamed/removed
-        options = agent._build_options(
-            DrawingStyleType.PLOTTER, workspace_dir="/tmp/test-workspace"
-        )
-        assert options is not None
-
     def test_build_options_paint_style(self) -> None:
         """Verify options work with PAINT drawing style."""
         agent = DrawingAgent()
-        options = agent._build_options(DrawingStyleType.PAINT)
+        launch = ClaudeLaunch("/x/claude-sandboxed", {}, "/tmp/ws")
+        options = agent._build_options(DrawingStyleType.PAINT, launch)
         assert options is not None

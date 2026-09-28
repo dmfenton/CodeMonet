@@ -253,7 +253,7 @@ cd server && uv run python ../scripts/art-benchmark.py --label my-change --timeo
 ```
 
 Iterate on the paint library itself by writing a painting program and running
-`python -m code_monet.paintlib.runner --program p.py --out DIR --width 1600 --height 1200`
+`python -m code_monet.paint_runner --program p.py --out DIR --width 1600 --height 1200`
 (from `server/`), then look at `DIR/preview.jpg`.
 
 ### Render Studies (`scripts/render-study.py`)
@@ -449,7 +449,7 @@ Web studio (port 5173, `/studio`):
 ## Key Architecture Decisions
 
 1. **WebSocket for real-time**: All drawing updates stream via WebSocket at 60fps
-2. **Claude Agent SDK sandbox**: Agent code executes in isolated sandbox
+2. **Agent sandbox**: the agent's tools and painting programs run confined to the user's workspace (Landlock + seccomp). See [docs/agent-sandbox.md](docs/agent-sandbox.md).
 3. **Paint mode is program painting**: the agent writes a Python painting program
    (`studio/painting.py`) against `code_monet.paintlib` and runs it with the `paint`
    tool; the server renders versions (keyframes + reveal log) and clients reveal them
@@ -480,7 +480,7 @@ E2E tests that require the Anthropic API key fetch it automatically from AWS SSM
 1. AWS credentials configured locally (`~/.aws/credentials` or environment variables)
 2. Access to the `/code-monet/prod/` SSM path
 
-The make targets set `CODE_MONET_ENV=prod` to enable SSM fetching. No local `.env` file needed.
+The make targets set `CODE_MONET_ENV=prod` to enable SSM fetching. No local `.env` file needed. `CODE_MONET_ENV` selects the SSM path (`/code-monet/{env}/`, default `dev`); `none` skips SSM, and production uses it, rendering its parameters into the container's environment on the host so the container needs no AWS access.
 
 ### SDK Integration Tests
 

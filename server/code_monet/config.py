@@ -14,8 +14,12 @@ def _get_ssm_params() -> dict[str, str]:
     """Fetch all params from SSM for current environment.
 
     Returns empty dict if SSM is unavailable (e.g., missing credentials).
+    CODE_MONET_ENV=none skips SSM entirely: production renders its parameters
+    into the environment on the host, and the container has no AWS access.
     """
     env = os.getenv("CODE_MONET_ENV", "dev")
+    if env == "none":
+        return {}
     region = os.getenv("AWS_REGION", "us-east-1")
     path = f"/code-monet/{env}/"
 

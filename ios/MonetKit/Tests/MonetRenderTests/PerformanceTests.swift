@@ -122,7 +122,7 @@ struct PerformanceStreamTests {
 // MARK: - Real streams
 
 /// Real streams written by the server's paint library. Regenerate with (from
-/// `server/`): `uv run python -m code_monet.paintlib.runner --program
+/// `server/`): `uv run python -m code_monet.paint_runner --program
 /// ../ios/MonetKit/Tests/Fixtures/performance/v1/painting.py --out <dir>
 /// --width 320 --height 240` (v2: its own program, `--previous <v1 dir>`),
 /// then copy `performance.bin` and `final.png`. `v1/pasted.png` is every

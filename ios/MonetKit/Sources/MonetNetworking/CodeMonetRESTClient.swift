@@ -78,22 +78,16 @@ public struct CodeMonetRESTClient: Sendable {
 
     private func authenticatedData(path: String) async throws -> Data {
         let token = await tokenProvider.currentToken()
-        do {
-            return try await api.data(path: path, bearerToken: token)
-        } catch MobileAPIError.unauthorized {
-            guard let token,
-                  let replacement = await onUnauthorized?(token),
-                  replacement != token
-            else { throw MobileAPIError.unauthorized }
-            // The Platform controller owns refresh and rotation. Replay only this
-            // read, once, with the credential it returned for the same session.
-            do {
-                return try await api.data(path: path, bearerToken: replacement)
-            } catch MobileAPIError.unauthorized {
-                await onRecoveredTokenRejected?(replacement)
-                throw MobileAPIError.unauthorized
-            }
-        }
+        return try await AuthenticatedRequestRecovery.perform(
+            bearerToken: token,
+            isUnauthorized: { error in
+                if case MobileAPIError.unauthorized = error { return true }
+                return false
+            },
+            recover: { rejected in await onUnauthorized?(rejected) },
+            onRejectedReplacement: { rejected in await onRecoveredTokenRejected?(rejected) },
+            operation: { bearer in try await api.data(path: path, bearerToken: bearer) }
+        )
     }
 }
 

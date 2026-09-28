@@ -40,7 +40,7 @@ struct StudioView: View {
         VStack(spacing: 0) {
             StudioTopBar(
                 title: title,
-                pill: StudioPresentation.statusPill(for: state),
+                pill: StudioPresentation.statusPill(for: state, receivingUpdates: environment.studio.receivingUpdates),
                 menu: StudioMenuState(
                     paused: state.paused,
                     viewOnly: isViewOnly,

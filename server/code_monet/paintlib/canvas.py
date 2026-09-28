@@ -1647,7 +1647,7 @@ class Canvas:
             varnish=np.asarray(self.varnish, np.float32),
         )
 
-    def load_state(self, path: str | Path) -> None:
+    def load_state(self, path: str | Path | BinaryIO) -> None:
         """Continue a previous version's canvas: this program paints over it."""
         with np.load(path, allow_pickle=False) as z:
             rgb_, height, tooth = z["rgb"], z["height"], z["tooth"]

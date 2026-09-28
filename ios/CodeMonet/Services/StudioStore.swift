@@ -23,6 +23,11 @@ public final class StudioStore {
     /// equivalent signal, so this mirrors `StudioSocketEvent.connected`/
     /// `.disconnected` directly.
     public private(set) var connected = false
+    /// An init frame, rather than task creation, confirms that this socket
+    /// can deliver the painter's current state and subsequent updates.
+    public var receivingUpdates: Bool { foregroundResume.initialized }
+    public private(set) var explicitPauseGeneration = 0
+    public private(set) var sessionEpoch = 0
 
     /// Fires on a live `4001`/auth-failure close, or a REST 401/403.
     /// The app shell asks Platform to recover the rejected bearer.
@@ -51,6 +56,10 @@ public final class StudioStore {
     /// `reconnectIfTokenChanged` — see `onAuthenticationFailure`'s doc
     /// comment.
     private var currentToken: String?
+    /// A foreground resume is sent only after the server's init frame proves
+    /// the socket is usable. Keep it pending until the server confirms resume.
+    private var foregroundResume = ForegroundResumeState()
+    private var lifecycleCommandTask: Task<Void, Never>?
     /// Human strokes this device has sent but not yet seen echoed back
     /// (protocol-state spec §7.1). `endStroke()` draws the stroke locally
     /// immediately (no round-trip latency) and records its signature here;
@@ -139,6 +148,7 @@ public final class StudioStore {
     /// Session ended: drop the socket, pending work, and every piece of the
     /// previous user's studio state so a new sign-in never sees it.
     public func resetForSessionEnd() {
+        sessionEpoch += 1
         disconnect()
         stopPlayback()
         performer = PerformerEngine()
@@ -150,6 +160,8 @@ public final class StudioStore {
         strokesFetchTask = nil
         socketTask?.cancel()
         socketTask = nil
+        foregroundResume.cancel()
+        foregroundResume.disconnected()
         Task { await socket.disconnect() }
         Task { await traceBuffer.stopAutoFlush() }
     }
@@ -200,7 +212,16 @@ public final class StudioStore {
     // MARK: - Outbound
 
     public func send(_ message: ClientMessage) {
-        Task { try? await socket.send(message) }
+        switch message {
+        case .pause, .resume:
+            let epoch = sessionEpoch
+            _ = enqueueLifecycleCommand { [weak self] in
+                guard let self, self.sessionEpoch == epoch else { return }
+                try? await self.socket.send(message)
+            }
+        default:
+            Task { try? await socket.send(message) }
+        }
     }
 
     public func startStroke(at point: Point) {
@@ -271,7 +292,35 @@ public final class StudioStore {
     /// truth; its own `paused` broadcast just applies this event again
     /// (idempotent).
     public func setPausedLocally(_ paused: Bool) {
+        if paused {
+            foregroundResume.cancel()
+            explicitPauseGeneration += 1
+        }
         apply(.setPaused(paused))
+    }
+
+    public func cancelForegroundResume() {
+        foregroundResume.cancel()
+    }
+
+    /// Serialize the background Pause behind any foreground Resume already
+    /// being sent, so the last command received while backgrounded is Pause.
+    public func pauseForBackground() {
+        foregroundResume.cancel()
+        apply(.setPaused(true))
+        let epoch = sessionEpoch
+        _ = enqueueLifecycleCommand { [weak self] in
+            guard let self, self.sessionEpoch == epoch else { return }
+            try? await self.socket.send(.pause)
+        }
+    }
+
+    /// Backgrounding sends Pause even when Home is open. On foreground, wait
+    /// for this socket's init frame before resuming; a WebSocket task being
+    /// created does not mean the server can receive a command yet.
+    public func resumeAfterForeground() async {
+        foregroundResume.request()
+        await sendForegroundResumeIfReady()
     }
 
     /// Finishes the in-progress human stroke (ux spec §6.2: a tap/no-drag,
@@ -304,11 +353,19 @@ public final class StudioStore {
         switch event {
         case .connected:
             connected = true
+            foregroundResume.connected()
             recordSpan(name: "ws.connected")
         case let .message(message):
             await route(message)
+            if case .initial = message {
+                foregroundResume.receivedInit()
+                await sendForegroundResumeIfReady()
+            } else if case let .paused(paused) = message, !paused {
+                foregroundResume.acknowledged()
+            }
         case let .disconnected(reason):
             connected = false
+            foregroundResume.disconnected()
             pendingPrompt = nil  // a reconnect's `init` carries the prompt instead
             switch reason {
             case .authenticationFailed:
@@ -321,8 +378,36 @@ public final class StudioStore {
                 recordSpan(name: "ws.disconnect", attributes: code.map { ["close_code": String($0)] } ?? [:])
             }
         case .decodeFailure:
-            break
+            recordSpan(name: "ws.decode_failure")
         }
+    }
+
+    private func sendForegroundResumeIfReady() async {
+        guard let attempt = foregroundResume.beginSend() else { return }
+        let epoch = sessionEpoch
+        let task = enqueueLifecycleCommand { [weak self] in
+            guard let self, self.sessionEpoch == epoch,
+                  self.foregroundResume.isCurrent(attempt) else { return }
+            self.foregroundResume.willSend(attempt)
+            do {
+                try await self.socket.send(.resume(direction: nil))
+            } catch {
+                self.foregroundResume.sendFailed(attempt)
+                self.recordSpan(name: "ws.resume_send_failed")
+            }
+        }
+        await task.value
+        if foregroundResume.finishSend(attempt) { await sendForegroundResumeIfReady() }
+    }
+
+    private func enqueueLifecycleCommand(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let previous = lifecycleCommandTask
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        lifecycleCommandTask = task
+        return task
     }
 
     private func route(_ message: ServerMessage) async {

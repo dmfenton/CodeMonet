@@ -40,6 +40,7 @@
 		8ABFBB052D39D873F97A9E41 /* FentonMobileCore in Frameworks */ = {isa = PBXBuildFile; productRef = D0CF2840DBD3FCF3EE28236E /* FentonMobileCore */; };
 		8BC739BA8A0E4815C77CE3F0 /* MonetProtocol in Frameworks */ = {isa = PBXBuildFile; productRef = 4F53B2E921E6A703DA2CDF4C /* MonetProtocol */; };
 		8E2107E1BB01E760F59CE15E /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E266E95B648C934E866D73 /* AppDelegate.swift */; };
+		9DF6BD6CFDE04F1FDFF9DE0A /* SceneResumeIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20AD2487AFDAF81DC2222BE6 /* SceneResumeIntent.swift */; };
 		9EDFA094FC48599B85E91FF6 /* MonetRender in Frameworks */ = {isa = PBXBuildFile; productRef = E379AD9D8DC88148531D636A /* MonetRender */; };
 		A2AEE046BE330A9F7A743002 /* ReplayScrubber.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8372F9F4537B913A1B9B88AF /* ReplayScrubber.swift */; };
 		A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94A1ADB343BFCBF9580CFFA /* RootView.swift */; };
@@ -47,9 +48,11 @@
 		B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54494DA646E353267BCAFDC /* StudioUITests.swift */; };
 		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 025FFC0A720D0DFF2D799F0D /* GalleryPieceDetailView.swift */; };
+		B9D3906A86DE3DA7D00512E9 /* ForegroundResumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3FAB9E03BE033F4083BA4BF /* ForegroundResumeTests.swift */; };
 		C520059C42E5757249C12957 /* StudioStore+Pieces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */; };
 		C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */; };
 		D475CD72024DE203E494C3D7 /* NotebookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA72C40B3080CB217A5D7F5 /* NotebookView.swift */; };
+		DD977D7CFB23D941EF92C514 /* ForegroundResumeState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7931B5E0018519C605F1031D /* ForegroundResumeState.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E390F869B80708F616F8F9E0 /* StudioChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A73D5FE5D3CD7E1E5A2CFE /* StudioChrome.swift */; };
 		E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C12336794874A19B003081A3 /* CodeMonetApp.swift */; };
@@ -82,6 +85,7 @@
 		186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StudioStore+Pieces.swift"; sourceTree = "<group>"; };
 		1DFBA460C8BDEADA2CA5EC44 /* StudioPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioPresentation.swift; sourceTree = "<group>"; };
 		1F335A83678298111142386B /* CodeMonetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetTests.swift; sourceTree = "<group>"; };
+		20AD2487AFDAF81DC2222BE6 /* SceneResumeIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneResumeIntent.swift; sourceTree = "<group>"; };
 		2279D8BC1717425C6A89565F /* IdleParticlesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleParticlesView.swift; sourceTree = "<group>"; };
 		2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectorsTests.swift; sourceTree = "<group>"; };
 		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
@@ -100,6 +104,7 @@
 		70ECE70CB197172E05C8E22B /* StudioPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioPresentationTests.swift; sourceTree = "<group>"; };
 		742F14BA4DE4303242B3F0F9 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		7734D18A173A15DE0904EB0E /* StudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioView.swift; sourceTree = "<group>"; };
+		7931B5E0018519C605F1031D /* ForegroundResumeState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundResumeState.swift; sourceTree = "<group>"; };
 		80AA7293B1AC8B23B70DE4F7 /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetDesignSystem.swift; sourceTree = "<group>"; };
 		8372F9F4537B913A1B9B88AF /* ReplayScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayScrubber.swift; sourceTree = "<group>"; };
@@ -117,6 +122,7 @@
 		C4A73D5FE5D3CD7E1E5A2CFE /* StudioChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioChrome.swift; sourceTree = "<group>"; };
 		C4AC184270F76BB400398C13 /* Navigation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Navigation.swift; sourceTree = "<group>"; };
 		CF72546FBFC9133172136F1B /* StudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioStore.swift; sourceTree = "<group>"; };
+		D3FAB9E03BE033F4083BA4BF /* ForegroundResumeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForegroundResumeTests.swift; sourceTree = "<group>"; };
 		D54494DA646E353267BCAFDC /* StudioUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioUITests.swift; sourceTree = "<group>"; };
 		D69ECA128215DE3C5212546F /* WipPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WipPreview.swift; sourceTree = "<group>"; };
 		D810FB72EA0A50E2B1123CCB /* CodeMonet.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = CodeMonet.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -152,6 +158,7 @@
 			isa = PBXGroup;
 			children = (
 				E22EBD765435D2E439AA9DE0 /* AuthService.swift */,
+				7931B5E0018519C605F1031D /* ForegroundResumeState.swift */,
 				CF72546FBFC9133172136F1B /* StudioStore.swift */,
 				186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */,
 			);
@@ -167,6 +174,7 @@
 				C12336794874A19B003081A3 /* CodeMonetApp.swift */,
 				C4AC184270F76BB400398C13 /* Navigation.swift */,
 				E94A1ADB343BFCBF9580CFFA /* RootView.swift */,
+				20AD2487AFDAF81DC2222BE6 /* SceneResumeIntent.swift */,
 				742F14BA4DE4303242B3F0F9 /* SplashView.swift */,
 			);
 			path = App;
@@ -207,6 +215,7 @@
 			children = (
 				1F335A83678298111142386B /* CodeMonetTests.swift */,
 				758DC3DD05175653BED85E86 /* Features */,
+				AABF0BEDF15C50E2E0DF9070 /* Services */,
 			);
 			path = CodeMonetTests;
 			sourceTree = "<group>";
@@ -318,6 +327,14 @@
 				373D5E81A5A3E2F361A6A797 /* ThumbnailCache.swift */,
 			);
 			path = Gallery;
+			sourceTree = "<group>";
+		};
+		AABF0BEDF15C50E2E0DF9070 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				D3FAB9E03BE033F4083BA4BF /* ForegroundResumeTests.swift */,
+			);
+			path = Services;
 			sourceTree = "<group>";
 		};
 		BCD9F2FAF99C4E3FE88CDEC5 /* Studio */ = {
@@ -537,6 +554,7 @@
 			files = (
 				4D26EB01C70138A8AB043C26 /* CanvasSizeProfileTests.swift in Sources */,
 				5CAB7C9FA43579647CFEEE3D /* CodeMonetTests.swift in Sources */,
+				B9D3906A86DE3DA7D00512E9 /* ForegroundResumeTests.swift in Sources */,
 				217A53C54D9CF3D198DC48A4 /* GalleryFormattingTests.swift in Sources */,
 				35BECCA1FA2E0615268B7023 /* HomeSelectorsTests.swift in Sources */,
 				32B8180A0AFBFDA89E185907 /* StudioPresentationTests.swift in Sources */,
@@ -559,6 +577,7 @@
 				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
 				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
+				DD977D7CFB23D941EF92C514 /* ForegroundResumeState.swift in Sources */,
 				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
 				B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */,
 				FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */,
@@ -573,6 +592,7 @@
 				C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */,
 				A2AEE046BE330A9F7A743002 /* ReplayScrubber.swift in Sources */,
 				A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */,
+				9DF6BD6CFDE04F1FDFF9DE0A /* SceneResumeIntent.swift in Sources */,
 				71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */,
 				6FBFD9CCC80CA2F3DD888249 /* StageBarView.swift in Sources */,
 				E390F869B80708F616F8F9E0 /* StudioChrome.swift in Sources */,
