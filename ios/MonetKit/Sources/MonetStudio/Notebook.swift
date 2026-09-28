@@ -82,7 +82,8 @@ public enum Notebook {
             messages: state.notebook,
             liveThinking: state.thinking,
             versions: state.versions,
-            workingVersion: state.workingVersion
+            workingVersion: state.workingVersion,
+            turnActive: state.turnActive
         )
     }
 
@@ -90,7 +91,8 @@ public enum Notebook {
         messages: [AgentMessage],
         liveThinking: String,
         versions: [PaintingVersionSummary],
-        workingVersion: Int
+        workingVersion: Int,
+        turnActive: Bool = true
     ) -> [NotebookEntry] {
         var builder = Builder(knownVersions: Set(versions.map(\.version)))
         for message in messages {
@@ -102,16 +104,19 @@ public enum Notebook {
                 id: liveThoughtID, version: workingVersion, kind: .thought(live), isLive: true
             ))
         }
-        return settleSupersededCalls(builder.entries)
+        return settleSupersededCalls(builder.entries, turnActive: turnActive)
     }
 
     /// The server broadcasts `completed` only for its own drawing tools, so
-    /// other tools (SDK built-ins like `Bash`) never close. A call counts as
-    /// running only while it's the notebook's last entry — anything after it
-    /// (a thought, another call) means the agent has moved on.
-    private static func settleSupersededCalls(_ entries: [NotebookEntry]) -> [NotebookEntry] {
+    /// other tools (SDK built-ins like `Bash`) never close, and a paused turn
+    /// ends without closing the call it interrupted. A call counts as running
+    /// only while it's the notebook's last entry — anything after it (a
+    /// thought, another call) means the agent has moved on — and only while
+    /// its turn is still running.
+    private static func settleSupersededCalls(_ entries: [NotebookEntry], turnActive: Bool) -> [NotebookEntry] {
         entries.enumerated().map { index, entry in
-            guard index < entries.count - 1, case var .tool(call) = entry.kind, call.inProgress else { return entry }
+            let superseded = index < entries.count - 1 || !turnActive
+            guard superseded, case var .tool(call) = entry.kind, call.inProgress else { return entry }
             call.inProgress = false
             var settled = entry
             settled.kind = .tool(call)
