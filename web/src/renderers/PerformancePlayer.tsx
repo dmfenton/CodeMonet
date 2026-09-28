@@ -49,7 +49,19 @@ interface Chunk {
   colorW: number;
   order: Uint8ClampedArray;
   orderW: number;
+  /** Decoded pixels held (color + order); released once every patch has played. */
+  pixels: number;
+  /** Patches of this chunk not yet played in full. */
+  unplayed: number;
 }
+
+/**
+ * Decoded-but-unplayed pixels the player holds before it stops reading ahead.
+ * A big painting decodes to hundreds of megapixels; playback needs only what
+ * is about to play.
+ */
+const DECODE_AHEAD_PIXELS = 24_000_000;
+const EMPTY = new Uint8ClampedArray(0);
 
 interface Entry {
   patch: PerformancePatch;
@@ -146,6 +158,25 @@ export function PerformancePlayer({
       return last ? last.patch.t + last.patch.dur : 0;
     };
     let revision = false;
+    // Backpressure: ingest waits while too many decoded pixels are unplayed.
+    let heldPixels = 0;
+    let wakeIngest: (() => void) | null = null;
+    const played = (e: Entry): void => {
+      const c = e.chunk;
+      c.unplayed -= 1;
+      if (c.unplayed > 0) return;
+      heldPixels -= c.pixels;
+      c.color = EMPTY;
+      c.order = EMPTY;
+      c.pixels = 0;
+      wakeIngest?.();
+    };
+    const room = async (): Promise<void> => {
+      while (heldPixels > DECODE_AHEAD_PIXELS && !cancelled) {
+        await new Promise<void>((resolve) => (wakeIngest = resolve));
+        wakeIngest = null;
+      }
+    };
     let pic: ImageData | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
 
@@ -183,6 +214,8 @@ export function PerformancePlayer({
               revision = f.meta.base === 'previous';
               await start(f.meta.width, f.meta.height);
             } else if (f.meta.kind === 'chunk') {
+              await room();
+              if (cancelled) return;
               const [color, order] = await Promise.all([
                 decodePixels(f.color),
                 decodePixels(f.order),
@@ -193,13 +226,19 @@ export function PerformancePlayer({
                 colorW: color.w,
                 order: order.data,
                 orderW: order.w,
+                pixels: color.w * color.h + order.w * order.h,
+                unplayed: 0,
               };
               const picture = { width: pic?.width ?? 0, height: pic?.height ?? 0 };
               const colorSize = { width: color.w, height: color.h };
               const orderSize = { width: order.w, height: order.h };
               for (const patch of decodePatchIndex(f.index)) {
-                if (patchFits(patch, picture, colorSize, orderSize)) entries.push({ patch, chunk });
+                if (patchFits(patch, picture, colorSize, orderSize)) {
+                  entries.push({ patch, chunk });
+                  chunk.unplayed += 1;
+                }
               }
+              if (chunk.unplayed > 0) heldPixels += chunk.pixels;
             } else if (f.meta.kind === 'end') endMs = f.meta.ms;
             else endMs = lastPatchEnd(); // error frame: the run failed, stop here
           }
@@ -239,7 +278,7 @@ export function PerformancePlayer({
           y0 = Math.min(y0, e.patch.y);
           x1 = Math.max(x1, e.patch.x + e.patch.w);
           y1 = Math.max(y1, e.patch.y + e.patch.h);
-          if (thr >= 256 && i === cursor) cursor++;
+          if (thr >= 256 && i === cursor) played(entries[cursor++]!);
         }
         const ended = endMs !== null && now >= endMs;
         if (ended) {
@@ -248,6 +287,7 @@ export function PerformancePlayer({
           for (; cursor < entries.length; cursor++) {
             const e = entries[cursor]!;
             paste(pic, e, 256);
+            played(e);
             x0 = Math.min(x0, e.patch.x);
             y0 = Math.min(y0, e.patch.y);
             x1 = Math.max(x1, e.patch.x + e.patch.w);
@@ -284,6 +324,7 @@ export function PerformancePlayer({
     raf = requestAnimationFrame(frame);
     return (): void => {
       cancelled = true;
+      wakeIngest?.();
       abort.abort();
       cancelAnimationFrame(raf);
     };

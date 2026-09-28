@@ -150,16 +150,15 @@ class TestLivePerformance:
         assert workspace.live_painting is None
 
     @pytest.mark.asyncio
-    async def test_cancelled_run_stops_and_tells_viewers(
-        self, workspace: WorkspaceState, tmp_path: FilePath
-    ) -> None:
+    async def test_cancelled_run_stops_and_tells_viewers(self, workspace: WorkspaceState) -> None:
         """A turn interrupted mid-paint kills the runner and drops the live stream."""
         import os
 
-        pid_file = tmp_path / "runner.pid"
+        # The program may write only its own output directory (sandboxed on Linux).
         _write_program(
             workspace,
-            f"import os, time\nopen({str(pid_file)!r}, 'w').write(str(os.getpid()))\n"
+            "import os, sys, time\n"
+            f"open(os.path.join({_OUT_DIR}, 'runner.pid'), 'w').write(str(os.getpid()))\n"
             "time.sleep(60)",
         )
         events: list[PaintLive] = []
@@ -168,6 +167,14 @@ class TestLivePerformance:
             events.append(event)
 
         run = asyncio.create_task(run_painting_program(workspace, on_live=on_live))
+        for _ in range(200):
+            if events:
+                break
+            await asyncio.sleep(0.05)
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        out_dir = workspace.paintings_dir / started.token
+        pid_file = out_dir / "runner.pid"
         for _ in range(200):
             if pid_file.exists() and pid_file.read_text():
                 break
@@ -178,9 +185,6 @@ class TestLivePerformance:
         with pytest.raises(asyncio.CancelledError):
             await run
 
-        started = events[0]
-        assert isinstance(started, LiveStarted)
-        out_dir = workspace.paintings_dir / started.token
         for _ in range(100):
             if len(events) == 2 and not out_dir.exists():
                 break

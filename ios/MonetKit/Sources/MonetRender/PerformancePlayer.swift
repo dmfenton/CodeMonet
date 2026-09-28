@@ -111,15 +111,16 @@ public final class PerformancePlayer {
     /// `nil` for a header whose picture size is empty or larger than
     /// `RGBAPixels.maxPixelCount` (untrusted program output).
     /// - Parameter base: the picture before the performance (the previous
-    ///   version's final), drawn to fill; `nil` = blank (white).
+    ///   version's final), drawn to fill under a revision's stream; a stream
+    ///   painted from blank starts white whatever is passed.
     public init?(header: PerformanceMeta, base: CGImage?) {
         guard case let .header(width, height, _, base: streamBase) = header,
-              width > 0, height > 0, width * height <= RGBAPixels.maxPixelCount
+              withinPixelBudget(width, height)
         else { return nil }
         size = PixelSize(width: width, height: height)
         isRevision = streamBase == .previous
         picture = RGBAPixels(width: width, height: height)
-        if let base { picture.draw(base) }
+        if isRevision, let base { picture.draw(base) }
     }
 
     // MARK: - Ingest
@@ -149,9 +150,12 @@ public final class PerformancePlayer {
 
     private func ingestChunk(stage: String, atlasWidth: Int, atlasHeight: Int, frame: PerformanceFrame) {
         let k = performanceOrderScale
+        // Sizes come from the program's output: checked before any arithmetic on them.
+        let plausible = withinPixelBudget(atlasWidth, atlasHeight)
         let claimedColor = PixelSize(width: atlasWidth, height: atlasHeight)
-        let claimedOrder = PixelSize(width: (atlasWidth + k - 1) / k, height: (atlasHeight + k - 1) / k)
-        let plausible = atlasWidth > 0 && atlasHeight > 0 && atlasWidth * atlasHeight <= RGBAPixels.maxPixelCount
+        let claimedOrder = plausible
+            ? PixelSize(width: (atlasWidth + k - 1) / k, height: (atlasHeight + k - 1) / k)
+            : PixelSize(width: 0, height: 0)
         let index = chunks.count
         let first = entries.count
         var handMs = 0.0
@@ -366,4 +370,10 @@ public final class PerformancePlayer {
             return count
         }
     }
+}
+
+/// Positive and at most `RGBAPixels.maxPixelCount` pixels, without overflowing
+/// on untrusted (possibly huge) dimensions.
+func withinPixelBudget(_ width: Int, _ height: Int) -> Bool {
+    width > 0 && height > 0 && width <= RGBAPixels.maxPixelCount / height
 }

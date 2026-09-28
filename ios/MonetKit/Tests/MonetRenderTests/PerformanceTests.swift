@@ -341,6 +341,31 @@ struct PerformancePlayerTests {
         #expect(PerformancePlayer(header: .header(width: 100_000, height: 100_000, format: 1, base: .blank), base: nil) == nil)
         #expect(PerformancePlayer(header: .header(width: 0, height: 10, format: 1, base: .blank), base: nil) == nil)
         #expect(PerformancePlayer(header: .end(ms: 0), base: nil) == nil)
+        // Dimensions whose product overflows Int: refused, not a trap.
+        #expect(PerformancePlayer(header: .header(width: Int.max, height: 2, format: 1, base: .blank), base: nil) == nil)
+    }
+
+    @Test("an atlas size that would overflow is skipped, not a trap")
+    func skipsOverflowingAtlas() throws {
+        let frames = try Fixture.frames("v1")
+        let player = try #require(PerformancePlayer(header: frames[0].meta, base: nil))
+        let huge = PerformanceFrame(
+            meta: .chunk(stage: "x", atlasWidth: Int.max, atlasHeight: Int.max, patches: 1),
+            index: frames[2].index, color: frames[2].color, order: frames[2].order
+        )
+        player.ingest(huge)
+        frames.dropFirst().forEach(player.ingest)
+        _ = playToEnd(player)
+        #expect(player.isFinished)
+    }
+
+    @Test("a stream painted from blank starts white even when given a picture")
+    func blankStreamIgnoresBase() throws {
+        let frames = try Fixture.frames("v1")
+        let base = try PaintingImageDecoder.decode(try Fixture.data("v1/final.png"))
+        let player = try #require(PerformancePlayer(header: frames[0].meta, base: base))
+        #expect(!player.isRevision)
+        #expect(player.pixels == RGBAPixels(width: 320, height: 240))
     }
 }
 

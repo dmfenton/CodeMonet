@@ -478,6 +478,10 @@ class OpenAIDrawingAgent:
 
             tool_outputs = []
             for call in _response_function_calls(response):
+                # A pause during the request (or an earlier tool) acts before the next tool.
+                if self._abort:
+                    yield AgentTurnComplete(thinking=thinking_text, done=False)
+                    return
                 args = _decode_tool_args(call.get("arguments"))
                 result = await self._run_tool(call["name"], args, cb)
                 tool_outputs.append(

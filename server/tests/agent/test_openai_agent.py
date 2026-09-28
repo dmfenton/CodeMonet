@@ -228,3 +228,31 @@ async def test_run_turn_executes_openai_tool_call(monkeypatch: pytest.MonkeyPatc
     assert create.await_args_list[1].kwargs["previous_response_id"] == "resp_1"
     on_iteration_start.assert_any_await(1, settings.max_agent_iterations)
     on_thinking.assert_awaited_once_with("looks good", 2)
+
+
+@pytest.mark.asyncio
+async def test_pause_during_the_request_runs_none_of_its_tool_calls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    agent = OpenAIDrawingAgent(FakeState())
+    call = SimpleNamespace(
+        type="function_call",
+        call_id="call_1",
+        name="draw_paths",
+        arguments='{"paths":[{"type":"line","points":[{"x":0,"y":0},{"x":10,"y":10}]}]}',
+    )
+
+    async def create(**_: Any) -> Any:
+        await agent.stop_turn()  # the user pauses while the model is answering
+        return SimpleNamespace(id="resp_1", output_text="", output=[call])
+
+    monkeypatch.setattr(settings, "openai_api_key", "test-key")
+    agent._client = cast(Any, SimpleNamespace(responses=SimpleNamespace(create=create)))
+    await agent.resume()
+
+    events = [event async for event in agent.run_turn()]
+
+    assert len(events) == 1
+    assert isinstance(events[0], AgentTurnComplete)
+    assert events[0].done is False
+    assert agent.get_state().canvas.strokes == [], "no tool ran after the pause"
