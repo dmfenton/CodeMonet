@@ -691,7 +691,10 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
             action.paintingLive &&
             action.paintingLive.piece_number === action.pieceNumber &&
             action.paintingLive.asset_base !== action.painting?.asset_base
-              ? { ref: action.paintingLive, confirmed: null, played: false }
+              ? // A reconnect mid-run keeps the run it is already playing.
+                state.painting.live?.ref.asset_base === action.paintingLive.asset_base
+                ? state.painting.live
+                : { ref: action.paintingLive, confirmed: null, played: false }
               : null,
         },
         versionHistory: seedVersionHistory(
@@ -763,6 +766,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       const ref = action.live;
       if (state.viewingPiece !== null) return state;
       if (ref.piece_number < state.pieceNumber) return state;
+      if (state.painting.live?.ref.asset_base === ref.asset_base) return state; // already playing
       // A new run replaces whatever is still playing (settled to its final).
       const current = settlePainting(state.painting).base;
       const samePiece = current !== null && current.piece_number === ref.piece_number;

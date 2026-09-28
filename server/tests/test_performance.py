@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import struct
 import threading
 import time
 import uuid
@@ -124,6 +125,30 @@ class TestFrameScanner:
         scanner.feed(b"\x03\x00\x00\x00abc")
         scanner.feed(b"\x00\x00\x00\x00" * 3)
         assert scanner.ended
+        assert scanner.final is None, "garbage is not a proper end"
+
+    def test_records_how_the_stream_ended(self, tmp_path: FilePath) -> None:
+        _streamed(tmp_path)
+        scanner = FrameScanner()
+        scanner.feed((tmp_path / "performance.bin").read_bytes())
+        assert scanner.final == "end"
+
+    def test_a_huge_claimed_length_is_skipped_in_linear_time(self) -> None:
+        # The program writes the stream: a part may claim ~2 GB and never arrive.
+        head = b'{"kind":"chunk"}'
+        scanner = FrameScanner()
+        scanner.feed(struct.pack("<I", len(head)) + head + b"\xff\xff\xff\x7f")
+        junk = b"x" * (1 << 16)
+        t0 = time.perf_counter()
+        for _ in range(1024):  # 64 MB
+            scanner.feed(junk)
+        assert time.perf_counter() - t0 < 2.0
+        assert not scanner.ended
+
+    def test_an_oversized_head_ends_the_stream(self) -> None:
+        scanner = FrameScanner()
+        scanner.feed(b"\xff\xff\xff\x7f")
+        assert scanner.ended and scanner.final is None
 
 
 class TestPerformanceRoute:
@@ -168,6 +193,19 @@ class TestPerformanceRoute:
         res = client.get(url)
         assert res.headers["cache-control"] == "no-store"
         assert res.content == data
+
+    def test_a_linked_stream_is_not_served(
+        self, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A running program can write its output directory; it must not swap the
+        # stream for a link to something else.
+        client, vdir, url = self._client(tmp_path, monkeypatch)
+        _streamed(tmp_path)
+        (vdir / "performance.bin").symlink_to(tmp_path / "performance.bin")
+        assert client.get(url).status_code == 404
+        (vdir / "performance.bin").unlink()
+        (vdir / "performance.bin").hardlink_to(tmp_path / "performance.bin")
+        assert client.get(url).status_code == 404
 
     def test_live_stream_stops_when_the_run_is_discarded(
         self, tmp_path: FilePath, monkeypatch: pytest.MonkeyPatch

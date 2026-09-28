@@ -50,6 +50,8 @@ export {
   PAINTING_FINAL_FILE,
   PERFORMANCE_FILE,
   PERFORMANCE_MAX_BEHIND_MS,
+  PERFORMANCE_MAX_FRAME_BYTES,
+  PERFORMANCE_MAX_PIXELS,
   PERFORMANCE_ORDER_SCALE,
   PerformanceParser,
   decodePatchIndex,
@@ -57,4 +59,5 @@ export {
   patchFits,
   patchOrderThreshold,
   playbackRate,
+  webpSize,
 } from './performance';

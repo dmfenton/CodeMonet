@@ -35,7 +35,6 @@ from code_monet.program_painting import (
     RENDER_SCALE,
     OnLive,
     PaintResult,
-    PaintSuccess,
     run_painting_program,
 )
 from code_monet.rendering import (
@@ -609,13 +608,17 @@ class DrawingAgent:
             img = self._get_canvas_image(highlight_human=True)
             return image_to_jpeg_bytes(img)
 
+        async def on_version(version: PaintingVersion) -> None:
+            self.tool_context.gate.note_drawing(version.ops)
+            if self._on_painting_version:
+                await self._on_painting_version(version)
+
         async def run_paint() -> PaintResult:
-            result = await run_painting_program(state, on_live=self._on_painting_live)
-            if isinstance(result, PaintSuccess):
-                self.tool_context.gate.note_drawing(result.version.ops)
-                if self._on_painting_version:
-                    await self._on_painting_version(result.version)
-            return result
+            # The version is announced by the run itself: a pause landing while
+            # it is being recorded must not leave it recorded but unannounced.
+            return await run_painting_program(
+                state, on_live=self._on_painting_live, on_version=on_version
+            )
 
         launch = claude_launch(state.user_id, state.workspace_dir)
         self.tool_context.bind_turn(
@@ -667,7 +670,7 @@ class DrawingAgent:
             # next turn's receive_response, so the aborted session is dropped
             # (each turn rebuilds its full context anyway).
             if result.aborted:
-                await self._disconnect_client()
+                await self._disconnect_client(client)
                 yield AgentTurnComplete(thinking=result.thinking, done=False)
                 return
 

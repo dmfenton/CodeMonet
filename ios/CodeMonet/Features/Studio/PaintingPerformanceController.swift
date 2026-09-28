@@ -244,7 +244,7 @@ final class PaintingPerformanceController {
         do {
             for try await bytes in assetClient.byteStream(at: url) {
                 guard !session.cancelled else { return }
-                for frame in parser.push(bytes) {
+                for frame in try parser.push(bytes) {
                     if let player = session.player {
                         player.ingest(frame)
                     } else if let player = PerformancePlayer(header: frame.meta, base: baseImage) {

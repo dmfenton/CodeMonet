@@ -10,6 +10,7 @@ import {
   patchFits,
   patchOrderThreshold,
   playbackRate,
+  webpSize,
 } from '@code-monet/shared';
 
 const part = (bytes: Uint8Array): Uint8Array => {
@@ -63,6 +64,63 @@ describe('PerformanceParser', () => {
     const parser = new PerformanceParser();
     expect(parser.push(stream.subarray(0, 10))).toEqual([]);
   });
+
+  it('refuses a frame claiming more than the limit instead of waiting for it', () => {
+    // The stream is written by the painting program: a part may claim ~2 GB.
+    const huge = new Uint8Array([0xff, 0xff, 0xff, 0x7f]);
+    expect(() => new PerformanceParser().push(huge)).toThrow(/too large/);
+  });
+
+  it('parses a stream split into many small pieces', () => {
+    const parser = new PerformanceParser();
+    let frames = 0;
+    for (let i = 0; i < stream.length; i += 2)
+      frames += parser.push(stream.subarray(i, i + 2)).length;
+    expect(frames).toBe(3);
+  });
+});
+
+describe('webpSize', () => {
+  const riff = (chunk: string, body: number[]): Uint8Array => {
+    const b = new Uint8Array(30);
+    b.set(
+      [...'RIFF'].map((c) => c.charCodeAt(0)),
+      0
+    );
+    b.set(
+      [...'WEBP'].map((c) => c.charCodeAt(0)),
+      8
+    );
+    b.set(
+      [...chunk].map((c) => c.charCodeAt(0)),
+      12
+    );
+    b.set(body, 20);
+    return b;
+  };
+
+  it('reads lossy, lossless and extended headers', () => {
+    // VP8: frame tag (3) + start code (3), then 14-bit width/height at 26/28
+    const lossy = riff('VP8 ', [0, 0, 0, 0x9d, 0x01, 0x2a, 0x40, 0x06, 0xb0, 0x04]);
+    expect(webpSize(lossy)).toEqual({ width: 1600, height: 1200 });
+    // VP8L: signature 0x2f, then (w-1) | (h-1) << 14
+    const bits = (1599 | (1199 << 14)) >>> 0;
+    const lossless = riff('VP8L', [
+      0x2f,
+      bits & 255,
+      (bits >> 8) & 255,
+      (bits >> 16) & 255,
+      bits >>> 24,
+    ]);
+    expect(webpSize(lossless)).toEqual({ width: 1600, height: 1200 });
+    // VP8X: flags (4), then 24-bit (w-1), (h-1)
+    const ext = riff('VP8X', [0, 0, 0, 0, 0x3f, 0x06, 0, 0xaf, 0x04, 0]);
+    expect(webpSize(ext)).toEqual({ width: 1600, height: 1200 });
+  });
+
+  it('rejects bytes that are not a WebP', () => {
+    expect(webpSize(new Uint8Array(40))).toBeNull();
+  });
 });
 
 describe('patch scheduling', () => {
@@ -103,5 +161,27 @@ describe('playbackRate', () => {
   it('speeds up so a big backlog plays within a minute', () => {
     expect(playbackRate(1, 600_000)).toBeCloseTo(10);
     expect(playbackRate(3, 600_000, 60_000)).toBeCloseTo(10);
+  });
+});
+
+describe('a recorded stream (ios/MonetKit/Tests/Fixtures/performance/v1)', () => {
+  it('parses to its end, and every atlas header matches its declared size', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { resolve } = await import('node:path');
+    // Tests run from web/ (npm -w web).
+    const path = resolve(
+      process.cwd(),
+      '../ios/MonetKit/Tests/Fixtures/performance/v1/performance.bin'
+    );
+    const frames = new PerformanceParser().push(new Uint8Array(readFileSync(path)));
+    expect(frames.at(-1)?.meta.kind).toBe('end');
+    const chunks = frames.filter((f) => f.meta.kind === 'chunk');
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const f of chunks) {
+      if (f.meta.kind !== 'chunk') continue;
+      const [w, h] = f.meta.atlas;
+      expect(webpSize(f.color)).toEqual({ width: w, height: h });
+      expect(webpSize(f.order)).toEqual({ width: w / 4, height: h / 4 });
+    }
   });
 });

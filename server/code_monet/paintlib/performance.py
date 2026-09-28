@@ -80,6 +80,9 @@ _RGB_EPS = 1.5 / 255
 _HEIGHT_EPS = 0.01
 # Strokes affect a little beyond their footprint (pickup, streaks, taper).
 _STROKE_PAD = 4
+# Bounds on a stream (it is written by the untrusted program's process).
+MAX_STREAM_BYTES = 256 * 1024 * 1024
+MAX_HEAD_BYTES = 64 * 1024
 # Relief changes re-light neighbours this far away.
 _LIGHT_HALO = 2
 
@@ -416,36 +419,79 @@ class Frame(NamedTuple):
 
 
 class FrameScanner:
-    """Follows a growing stream's framing without decoding it: has it ended?"""
+    """Follows a growing stream's framing without decoding it: has it ended?
+
+    Linear in the bytes fed: payloads are skipped, only length prefixes and a
+    frame's (capped) JSON head are buffered. The stream is written by the
+    untrusted program's process, so a frame may claim any length.
+    """
 
     def __init__(self) -> None:
-        self._pending = b""
+        self._len = b""  # a length prefix split across feeds
+        self._left: int | None = None  # bytes of the current part still to pass
         self._part = 0
-        self._head = b""
+        self._head = bytearray()
         self.ended = False
+        # How it ended: "end", "error", or None (garbage, or still open).
+        self.final: str | None = None
 
     def feed(self, data: bytes) -> None:
-        buf = self._pending + data
-        i = 0
-        while not self.ended and i + 4 <= len(buf):
-            (n,) = struct.unpack_from("<I", buf, i)
-            if i + 4 + n > len(buf):
-                break
+        view = memoryview(data)
+        i, n = 0, len(view)
+        while not self.ended and (i < n or self._left == 0):
+            if self._left is None:
+                prefix = view[i : i + 4 - len(self._len)]
+                self._len += bytes(prefix)
+                i += len(prefix)
+                if len(self._len) < 4:
+                    return
+                (size,) = struct.unpack("<I", self._len)
+                self._len = b""
+                self._left = size
+                if self._part == 0:
+                    self._head = bytearray()
+                    if size > MAX_HEAD_BYTES:
+                        self.ended = True  # garbage: treat the stream as over
+                        return
+            take = min(self._left, n - i)
             if self._part == 0:
-                self._head = buf[i + 4 : i + 4 + n]
-            i += 4 + n
+                self._head += view[i : i + take]
+            i += take
+            self._left -= take
+            if self._left:
+                return
+            self._left = None
             self._part = (self._part + 1) % 4
-            if self._part == 0 and _terminal(self._head):
-                self.ended = True
-        self._pending = buf[i:]
+            if self._part == 0:
+                kind = _terminal_kind(bytes(self._head))
+                if kind != "":
+                    self.ended, self.final = True, kind
 
 
-def _terminal(head: bytes) -> bool:
+def _terminal_kind(head: bytes) -> str | None:
+    """How a frame ends the stream: "end" or "error"; None for garbage (also over);
+    the empty string for a frame the stream continues after."""
     try:
         meta = json.loads(head)
     except ValueError:
-        return True  # garbage: treat the stream as over
-    return not isinstance(meta, dict) or meta.get("kind") in ("end", "error")
+        return None  # garbage: treat the stream as over
+    if not isinstance(meta, dict):
+        return None
+    kind = meta.get("kind")
+    return kind if kind in ("end", "error") else ""
+
+
+def scan_stream(f: BinaryIO, max_bytes: int = MAX_STREAM_BYTES) -> FrameScanner:
+    """Scan a stream file from its current position to its end (at most max_bytes)."""
+    scanner = FrameScanner()
+    read = 0
+    while read <= max_bytes and not scanner.ended:
+        chunk = f.read(1 << 16)
+        if not chunk:
+            break
+        read += len(chunk)
+        scanner.feed(chunk)
+    return scanner
 
 
 def read_frames(data: bytes) -> list[Frame]:

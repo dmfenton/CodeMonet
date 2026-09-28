@@ -36,14 +36,14 @@ private let stream = frame(#"{"kind":"header","width":160,"height":120,"format":
 @Suite("Performance stream")
 struct PerformanceStreamTests {
     @Test("parses frames however the bytes are split")
-    func parsesAnySplit() {
+    func parsesAnySplit() throws {
         for size in [1, 3, 17, stream.count] {
             var parser = PerformanceParser()
             var frames: [PerformanceFrame] = []
             var offset = 0
             while offset < stream.count {
                 let end = min(offset + size, stream.count)
-                frames += parser.push(stream.subdata(in: offset ..< end))
+                frames += try parser.push(stream.subdata(in: offset ..< end))
                 offset = end
             }
             #expect(frames.map(\.meta) == [
@@ -57,15 +57,24 @@ struct PerformanceStreamTests {
     }
 
     @Test("holds back an incomplete frame")
-    func holdsIncompleteFrame() {
+    func holdsIncompleteFrame() throws {
         var parser = PerformanceParser()
-        #expect(parser.push(stream.prefix(10)).isEmpty)
+        #expect(try parser.push(stream.prefix(10)).isEmpty)
+    }
+
+    @Test("refuses a frame claiming more than the limit instead of buffering for it")
+    func refusesHugeFrame() {
+        // The stream is written by the painting program: a part may claim ~2 GB.
+        var parser = PerformanceParser()
+        #expect(throws: PerformanceParser.StreamError.self) {
+            _ = try parser.push(Data([0xFF, 0xFF, 0xFF, 0x7F]))
+        }
     }
 
     @Test("reads a revision header, an error frame, unknown kinds and garbage")
-    func metaKinds() {
+    func metaKinds() throws {
         var parser = PerformanceParser()
-        let frames = parser.push(
+        let frames = try parser.push(
             frame(#"{"kind":"header","width":8,"height":4,"format":1,"base":"previous"}"#)
                 + frame(#"{"kind":"future"}"#) + frame(#"{"kind":"error"}"#) + frame("not json")
         )
@@ -140,7 +149,7 @@ private enum Fixture {
 
     static func frames(_ version: String) throws -> [PerformanceFrame] {
         var parser = PerformanceParser()
-        return parser.push(try data("\(version)/performance.bin"))
+        return try parser.push(try data("\(version)/performance.bin"))
     }
 
     static func pixels(_ path: String) throws -> RGBAPixels {
@@ -308,7 +317,7 @@ struct PerformancePlayerTests {
     @Test("an undecodable chunk is skipped, not stalled on")
     func skipsUndecodableChunk() throws {
         var parser = PerformanceParser()
-        let frames = parser.push(stream)
+        let frames = try parser.push(stream)
         let player = try #require(PerformancePlayer(header: frames[0].meta, base: nil))
         frames.dropFirst().forEach(player.ingest)
         _ = playToEnd(player)

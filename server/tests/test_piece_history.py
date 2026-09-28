@@ -749,9 +749,19 @@ class _FakeProc:
         keyframes = [{"label": "ground", "image": "kf_00.jpg", "ops": [["a", 0, 0, 1, 1]] * 3}]
         reveal = {"width": self._size[0], "height": self._size[1], "keyframes": keyframes}
         (self._out_dir / "reveal.json").write_text(json.dumps(reveal))
-        for name in ("kf_00.jpg", "final.png", "preview.jpg", "performance.bin"):
+        for name in ("kf_00.jpg", "final.png", "preview.jpg"):
             (self._out_dir / name).write_bytes(b"\xff\xd8")
+        (self._out_dir / "performance.bin").write_bytes(_stream({"kind": "end", "ms": 0}))
         return b"", b""
+
+
+def _stream(*metas: dict[str, object]) -> bytes:
+    """A performance stream of meta-only frames (four length-prefixed parts each)."""
+    out = b""
+    for meta in metas:
+        for part in (json.dumps(meta).encode(), b"", b"", b""):
+            out += len(part).to_bytes(4, "little") + part
+    return out
 
 
 class TestPaintRunGuards:

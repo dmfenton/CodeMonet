@@ -8,6 +8,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { PerformancePatch } from '@code-monet/shared';
 import {
+  PERFORMANCE_MAX_PIXELS,
   PERFORMANCE_ORDER_SCALE,
   PerformanceParser,
   decodePatchIndex,
@@ -15,6 +16,7 @@ import {
   PERFORMANCE_MAX_BEHIND_MS,
   patchOrderThreshold,
   playbackRate,
+  webpSize,
 } from '@code-monet/shared';
 
 export interface PerformanceProgress {
@@ -54,9 +56,19 @@ interface Entry {
   chunk: Chunk;
 }
 
+/** The stream's images come from the painting program: size them before decoding. */
+function checkSize(width: number, height: number): void {
+  if (!(width > 0 && height > 0 && width * height <= PERFORMANCE_MAX_PIXELS)) {
+    throw new Error(`performance image ${width}x${height} is too large`);
+  }
+}
+
 async function decodePixels(
   bytes: Uint8Array
 ): Promise<{ data: Uint8ClampedArray; w: number; h: number }> {
+  const size = webpSize(bytes);
+  if (!size) throw new Error('performance atlas is not a WebP image');
+  checkSize(size.width, size.height);
   const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/webp' }));
   const c = document.createElement('canvas');
   c.width = bmp.width;
@@ -124,6 +136,8 @@ export function PerformancePlayer({
     const canvas = canvasRef.current;
     if (!canvas) return;
     let cancelled = false;
+    // Aborting ends the download too (not just its reading) when we unmount.
+    const abort = new AbortController();
     let raf = 0;
     const entries: Entry[] = [];
     let endMs: number | null = null;
@@ -136,13 +150,15 @@ export function PerformancePlayer({
     let ctx: CanvasRenderingContext2D | null = null;
 
     const start = async (width: number, height: number): Promise<void> => {
+      checkSize(width, height);
       canvas.width = width;
       canvas.height = height;
       ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
-      if (baseSrc) {
+      // Only a revision paints over the previous picture; a first version starts blank.
+      if (baseSrc && revision) {
         try {
           ctx.drawImage(await loadImage(baseSrc), 0, 0, width, height);
         } catch (error) {
@@ -154,7 +170,7 @@ export function PerformancePlayer({
 
     // Stream in: frames are decoded strictly in order.
     const ingest = async (): Promise<void> => {
-      const res = await fetch(src);
+      const res = await fetch(src, { signal: abort.signal });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} for ${src}`);
       const reader = res.body.getReader();
       const parser = new PerformanceParser();
@@ -256,10 +272,10 @@ export function PerformancePlayer({
     };
 
     ingest().catch((error: unknown) => {
+      if (cancelled) return; // unmounted: the abort is ours
       // No stream (a version from before performances) or it broke off: end
       // here, so the caller settles on the version's final picture.
       console.warn('[PerformancePlayer] stream failed:', error);
-      if (cancelled) return;
       cancelled = true;
       cancelAnimationFrame(raf);
       cbRef.current.onProgress?.({ stage: '', handMs: now, totalMs: null, playing: false });
@@ -268,6 +284,7 @@ export function PerformancePlayer({
     raf = requestAnimationFrame(frame);
     return (): void => {
       cancelled = true;
+      abort.abort();
       cancelAnimationFrame(raf);
     };
   }, [src, baseSrc]);

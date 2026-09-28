@@ -1668,7 +1668,8 @@ class Canvas:
         """Continue a previous version's canvas: this program paints over it."""
         with np.load(path, allow_pickle=False) as z:
             rgb_, height, tooth = z["rgb"], z["height"], z["tooth"]
-            if rgb_.shape != (self.H, self.W, 3) or height.shape != tooth.shape != (self.H, self.W):
+            plane = (self.H, self.W)
+            if rgb_.shape != (*plane, 3) or height.shape != plane or tooth.shape != plane:
                 raise ValueError(f"canvas state {rgb_.shape} does not fit {self.W}x{self.H}")
             self.rgb = rgb_.astype(np.float32)
             self.height = height.astype(np.float32)

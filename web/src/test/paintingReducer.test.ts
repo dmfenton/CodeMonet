@@ -241,6 +241,31 @@ describe('live painting', () => {
     expect(s.painting).toEqual({ base: ref(3, 1), live: null });
   });
 
+  it('a reconnect mid-run keeps the run it is already playing', () => {
+    const played = reduce(
+      withBase,
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) },
+      { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 2).asset_base }
+    );
+    const again = reduce(
+      played,
+      {
+        type: 'INIT',
+        strokes: [],
+        gallery: [],
+        pieceNumber: 3,
+        paused: false,
+        painting: ref(3, 1),
+        paintingLive: liveRef(3, 2),
+      },
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) }
+    );
+    expect(again.painting.live).toEqual(played.painting.live);
+    // So its confirmation still settles it (playback already finished).
+    const settled = reduce(again, { type: 'PAINTING_VERSION', version: ref(3, 2) });
+    expect(settled.painting).toEqual({ base: ref(3, 2), live: null });
+  });
+
   it('a new run replaces an unconfirmed one', () => {
     const s = reduce(
       withBase,

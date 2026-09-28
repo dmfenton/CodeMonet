@@ -60,38 +60,120 @@ export function paintingAssetUrl(
 export const PERFORMANCE_ORDER_SCALE = 4;
 const INDEX_BYTES = 20;
 
+/** Largest picture or atlas a client decodes (as on iOS: RGBAPixels.maxPixelCount). */
+export const PERFORMANCE_MAX_PIXELS = 4096 * 4096;
+
+/**
+ * A WebP image's size, read from its header without decoding it (null if the
+ * bytes are not a WebP). The stream's images come from the painting program's
+ * process, so their size is checked before anything is allocated for them.
+ */
+export function webpSize(bytes: Uint8Array): { width: number; height: number } | null {
+  const tag = (o: number): string => String.fromCharCode(...bytes.subarray(o, o + 4));
+  if (bytes.length < 30 || tag(0) !== 'RIFF' || tag(8) !== 'WEBP') return null;
+  const u16 = (o: number): number => bytes[o]! | (bytes[o + 1]! << 8);
+  const u24 = (o: number): number => u16(o) | (bytes[o + 2]! << 16);
+  switch (tag(12)) {
+    case 'VP8 ': // lossy: key frame header, then 14-bit width and height
+      return { width: u16(26) & 0x3fff, height: u16(28) & 0x3fff };
+    case 'VP8L': {
+      // lossless: signature byte, then 14 bits each of width - 1 and height - 1
+      const bits = bytes[21]! | (bytes[22]! << 8) | (bytes[23]! << 16) | (bytes[24]! << 24);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+    }
+    case 'VP8X': // extended: 24-bit canvas width - 1 and height - 1
+      return { width: u24(24) + 1, height: u24(27) + 1 };
+    default:
+      return null;
+  }
+}
+
+/**
+ * Largest frame a stream may carry. The stream is written by the painting
+ * program's process, so a frame may claim any length; one this large is an
+ * error, not something to wait for.
+ */
+export const PERFORMANCE_MAX_FRAME_BYTES = 64 * 1024 * 1024;
+
 /**
  * Incremental frame parser: push bytes as they arrive, take complete frames.
+ * Arriving bytes are kept as chunks and joined only once a whole frame is
+ * there, so work stays linear in the stream however it is split.
  */
 export class PerformanceParser {
-  private buf = new Uint8Array(0);
+  private chunks: Uint8Array[] = [];
+  private length = 0;
 
   push(bytes: Uint8Array): PerformanceFrame[] {
-    const merged = new Uint8Array(this.buf.length + bytes.length);
-    merged.set(this.buf);
-    merged.set(bytes, this.buf.length);
-    this.buf = merged;
-    const frames: PerformanceFrame[] = [];
-    const view = new DataView(merged.buffer, merged.byteOffset, merged.byteLength);
-    let i = 0;
-    for (;;) {
-      const parts: Uint8Array[] = [];
-      let j = i;
-      for (let k = 0; k < 4; k++) {
-        if (j + 4 > merged.length) break;
-        const n = view.getUint32(j, true);
-        if (j + 4 + n > merged.length) break;
-        parts.push(merged.subarray(j + 4, j + 4 + n));
-        j += 4 + n;
-      }
-      if (parts.length < 4) break;
-      const meta = JSON.parse(new TextDecoder().decode(parts[0])) as PerformanceMeta;
-      frames.push({ meta, index: parts[1]!, color: parts[2]!, order: parts[3]! });
-      i = j;
+    if (bytes.length > 0) {
+      this.chunks.push(bytes);
+      this.length += bytes.length;
     }
-    this.buf = merged.slice(i);
+    const frames: PerformanceFrame[] = [];
+    for (;;) {
+      const size = this.frameSize();
+      if (size === null || this.length < size) break;
+      frames.push(parseFrame(this.take(size)));
+    }
     return frames;
   }
+
+  /** Bytes in the next frame, once its four part lengths have arrived. */
+  private frameSize(): number | null {
+    let offset = 0;
+    for (let k = 0; k < 4; k++) {
+      if (this.length < offset + 4) return null;
+      const n = this.u32(offset);
+      offset += 4 + n;
+      if (offset > PERFORMANCE_MAX_FRAME_BYTES) {
+        throw new Error(`performance frame too large (${offset} bytes)`);
+      }
+    }
+    return offset;
+  }
+
+  private u32(offset: number): number {
+    const b = new Uint8Array(4);
+    let i = 0;
+    let base = 0;
+    for (const chunk of this.chunks) {
+      while (i < 4 && offset + i < base + chunk.length) {
+        b[i] = chunk[offset + i - base]!;
+        i++;
+      }
+      if (i === 4) break;
+      base += chunk.length;
+    }
+    return new DataView(b.buffer).getUint32(0, true);
+  }
+
+  private take(size: number): Uint8Array {
+    const out = new Uint8Array(size);
+    let filled = 0;
+    while (filled < size) {
+      const chunk = this.chunks[0]!;
+      const n = Math.min(chunk.length, size - filled);
+      out.set(chunk.subarray(0, n), filled);
+      filled += n;
+      if (n === chunk.length) this.chunks.shift();
+      else this.chunks[0] = chunk.subarray(n);
+    }
+    this.length -= size;
+    return out;
+  }
+}
+
+function parseFrame(frame: Uint8Array): PerformanceFrame {
+  const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+  const parts: Uint8Array[] = [];
+  let j = 0;
+  for (let k = 0; k < 4; k++) {
+    const n = view.getUint32(j, true);
+    parts.push(frame.subarray(j + 4, j + 4 + n));
+    j += 4 + n;
+  }
+  const meta = JSON.parse(new TextDecoder().decode(parts[0])) as PerformanceMeta;
+  return { meta, index: parts[1]!, color: parts[2]!, order: parts[3]! };
 }
 
 export function decodePatchIndex(index: Uint8Array): PerformancePatch[] {

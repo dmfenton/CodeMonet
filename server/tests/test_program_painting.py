@@ -187,9 +187,88 @@ class TestLivePerformance:
             await asyncio.sleep(0.05)
         assert events[1] == LiveFailed(started.piece_number, started.token)
         assert not out_dir.exists()
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
+        for _ in range(100):  # killed at once, reaped by a background task
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail("the runner is still alive")
         assert workspace.live_painting is None
+
+
+class TestCancellation:
+    """A version is recorded and announced whole, or the run is dropped whole."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_while_recording_still_records_and_announces(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        saving = asyncio.Event()
+        release = asyncio.Event()
+        record = workspace.record_painting_version
+
+        async def slow_record(*args: object, **kwargs: object) -> object:
+            saving.set()
+            await release.wait()
+            return await record(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(workspace, "record_painting_version", slow_record)
+        live: list[PaintLive] = []
+        announced: list[object] = []
+
+        async def on_live(event: PaintLive) -> None:
+            live.append(event)
+
+        async def on_version(version: object) -> None:
+            announced.append(version)
+
+        run = asyncio.create_task(
+            run_painting_program(workspace, on_live=on_live, on_version=on_version)
+        )
+        await asyncio.wait_for(saving.wait(), 60)
+        run.cancel()  # a pause lands while the version is being saved
+        with pytest.raises(asyncio.CancelledError):
+            await run
+        release.set()
+        for _ in range(200):
+            if announced:
+                break
+            await asyncio.sleep(0.05)
+
+        assert announced == [workspace.painting], "recorded and announced"
+        assert not any(isinstance(e, LiveFailed) for e in live)
+        assert workspace.studio_program.read_text().startswith("# Version 2 paints over")
+        assert workspace.live_painting is None
+
+    @pytest.mark.asyncio
+    async def test_cancel_while_announcing_the_live_run_drops_it(
+        self, workspace: WorkspaceState
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        events: list[PaintLive] = []
+        stuck = asyncio.Event()
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+            if isinstance(event, LiveStarted):
+                stuck.set()
+                await asyncio.sleep(60)
+
+        run = asyncio.create_task(run_painting_program(workspace, on_live=on_live))
+        await asyncio.wait_for(stuck.wait(), 10)
+        run.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await run
+        await asyncio.sleep(0.1)
+
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        assert events[1] == LiveFailed(started.piece_number, started.token)
+        assert not (workspace.paintings_dir / started.token).exists()
+        assert workspace.painting is None and workspace.live_painting is None
 
 
 class TestRevisions:
@@ -386,6 +465,16 @@ atexit.register(lambda: (os.unlink(p), os.mkdir(p)))
                 "final.png is missing or not a regular file",
             ),
             ("os.unlink(j(out, 'kf_00.jpg'))", "kf_00.jpg is missing or not a regular file"),
+            (
+                # A stream viewers would follow forever: no end frame.
+                "open(j(out, 'performance.bin'), 'wb').write(b'\\x02\\x00\\x00\\x00{}')",
+                "performance.bin does not end properly",
+            ),
+            (
+                # A frame claiming 2 GB, as a program could write to stall readers.
+                "open(j(out, 'performance.bin'), 'wb').write(b'\\xff\\xff\\xff\\x7f' + b'x' * 99)",
+                "performance.bin does not end properly",
+            ),
             (
                 "(os.rename(out, out + '.moved'), os.symlink(out + '.moved', out))",
                 "output directory was moved or replaced",

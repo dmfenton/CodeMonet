@@ -126,16 +126,23 @@ public struct PerformancePatch: Equatable, Sendable {
 
 /// Incremental frame parser: push bytes as they arrive, take complete frames.
 public struct PerformanceParser: Sendable {
+    /// Largest frame a stream may carry. The stream is written by the painting
+    /// program's process, so a frame may claim any length; one this large is
+    /// an error, not something to buffer while waiting for it.
+    public static let maxFrameBytes = 64 * 1024 * 1024
+
+    public enum StreamError: Error, Equatable { case frameTooLarge(Int) }
+
     private var buffer: [UInt8] = []
     /// Start of the first unparsed frame in `buffer`.
     private var start = 0
 
     public init() {}
 
-    public mutating func push(_ bytes: Data) -> [PerformanceFrame] {
+    public mutating func push(_ bytes: Data) throws -> [PerformanceFrame] {
         buffer.append(contentsOf: bytes)
         var frames: [PerformanceFrame] = []
-        while let (frame, next) = frame(at: start) {
+        while let (frame, next) = try frame(at: start) {
             frames.append(frame)
             start = next
         }
@@ -147,12 +154,14 @@ public struct PerformanceParser: Sendable {
         return frames
     }
 
-    private func frame(at offset: Int) -> (PerformanceFrame, Int)? {
+    private func frame(at offset: Int) throws -> (PerformanceFrame, Int)? {
         var parts: [Data] = []
         var cursor = offset
         for _ in 0 ..< 4 {
             guard cursor + 4 <= buffer.count else { return nil }
             let length = Int(readUInt32LE(buffer, cursor))
+            let size = cursor + 4 + length - offset
+            guard size <= Self.maxFrameBytes else { throw StreamError.frameTooLarge(size) }
             guard length <= buffer.count - cursor - 4 else { return nil }
             parts.append(Data(buffer[(cursor + 4) ..< (cursor + 4 + length)]))
             cursor += 4 + length
