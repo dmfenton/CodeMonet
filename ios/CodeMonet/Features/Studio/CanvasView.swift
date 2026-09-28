@@ -25,14 +25,14 @@ struct CanvasView: View {
     /// `StudioView` owns it as view state and passes it straight through
     /// rather than reading `environment.studio.state.drawingEnabled`.
     let drawingEnabled: Bool
-    /// Drives the raster layer for paint-mode pieces (program-painting spec
-    /// §4) — a piece with a live/base `painting_version` has no vector
+    /// Drives the raster layer for paint-mode pieces — a piece with a
+    /// program painting (base, playing version, or live run) has no vector
     /// `Path` strokes to draw, so `frame(state:canvasSize:)` renders this
     /// layer instead of `canvasCache`'s whenever `hasPainting` is true.
-    /// Owned by `StudioView` so the stage bar can read its reveal progress.
-    let paintingController: PaintingRevealController
+    /// Owned by `StudioView` so the stage bar can read its progress.
+    let paintingController: PaintingPerformanceController
     /// An older version's `final.png` shown over the live canvas (a version
-    /// chip was tapped). The live reveal keeps running underneath.
+    /// chip was tapped). The live performance keeps playing underneath.
     var pinnedImageURL: String?
 
     @Environment(AppEnvironment.self) private var environment
@@ -101,6 +101,13 @@ struct CanvasView: View {
         .background(CodeMonetDesignSystem.Extra.canvasBackground)
         .accessibilityIdentifier("canvas-view")
         .accessibilityLabel(accessibilityLabel(state: state))
+        .onDisappear { paintingController.idle() }
+    }
+
+    /// The strokes layer is showing: no painting stream should stay open.
+    private func idlePainting(_ image: CGImage?) -> CGImage? {
+        paintingController.idle()
+        return image
     }
 
     // MARK: - Rendering
@@ -109,12 +116,16 @@ struct CanvasView: View {
     private func frame(state: StudioState, canvasSize: CGSize, now: Date) -> some View {
         if MonetStudio.hasPainting(state.painting) {
             if let image = paintingController.frame(
-                base: state.painting.base,
-                playing: state.painting.playing,
+                painting: state.painting,
                 apiBaseURL: environment.config.apiBaseURL,
                 now: now,
-                onPlaybackDone: { assetBase in
-                    environment.studio.paintingPlaybackDone(assetBase: assetBase)
+                onDone: { completion in
+                    switch completion {
+                    case let .version(assetBase):
+                        environment.studio.paintingPlaybackDone(assetBase: assetBase)
+                    case let .live(assetBase):
+                        environment.studio.paintingLiveDone(assetBase: assetBase)
+                    }
                 }
             ) {
                 Image(decorative: image, scale: 1)
@@ -123,7 +134,7 @@ struct CanvasView: View {
             } else {
                 CodeMonetDesignSystem.Extra.canvasBackground
             }
-        } else if let image = canvasCache.frame(state: state, canvasSize: canvasSize) {
+        } else if let image = idlePainting(canvasCache.frame(state: state, canvasSize: canvasSize)) {
             Image(decorative: image, scale: 1)
                 .resizable()
                 .accessibilityHidden(true)
@@ -151,7 +162,7 @@ struct CanvasView: View {
 
     private func isAnimating(_ state: StudioState) -> Bool {
         state.performance.onStage != nil || !state.currentStroke.isEmpty || !state.performance.buffer.isEmpty
-            || state.painting.playing != nil
+            || MonetStudio.isPaintingPerforming(state.painting)
     }
 
     // MARK: - Pen indicator (performer-render spec §9.1)

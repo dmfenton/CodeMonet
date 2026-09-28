@@ -41,6 +41,10 @@ public struct InitPayload: Codable, Equatable, Sendable {
     /// `init.turn_active`: whether an agent turn is running at connect time.
     /// Absent (older server) decodes as `false`.
     public var turnActive: Bool
+    /// `init.painting_live`: a paint run streaming at connect time, so a
+    /// joining viewer can follow it. Additive; absent, `null` or malformed
+    /// reads as `nil`.
+    public var paintingLive: PaintingLiveRef?
 
     enum CodingKeys: String, CodingKey {
         case strokes, gallery, status, paused
@@ -53,6 +57,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         case painting
         case title, prompt
         case turnActive = "turn_active"
+        case paintingLive = "painting_live"
     }
 
     /// The additive keys `init.painting` may carry beside the ref fields.
@@ -88,7 +93,8 @@ public struct InitPayload: Codable, Equatable, Sendable {
         title: String? = nil,
         paintingVersions: [PaintingVersionSummary] = [],
         prompt: String? = nil,
-        turnActive: Bool = false
+        turnActive: Bool = false,
+        paintingLive: PaintingLiveRef? = nil
     ) {
         self.strokes = strokes
         self.gallery = gallery
@@ -105,6 +111,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         self.paintingVersions = paintingVersions
         self.prompt = prompt
         self.turnActive = turnActive
+        self.paintingLive = paintingLive
     }
 
     /// Custom decode: `canvas_width`/`canvas_height` are documented as always
@@ -132,6 +139,7 @@ public struct InitPayload: Codable, Equatable, Sendable {
         paintingVersions = extras?.versions ?? []
         prompt = try container.decodeIfPresent(String.self, forKey: .prompt) ?? extras?.prompt
         turnActive = (try? container.decodeIfPresent(Bool.self, forKey: .turnActive)) ?? false
+        paintingLive = try? container.decodeIfPresent(PaintingLiveRef.self, forKey: .paintingLive)
     }
 }
 
@@ -287,9 +295,15 @@ public enum ServerMessage: Equatable, Sendable {
     /// the deduplicated (consecutive-only), in-order list of `cv.stage(...)`
     /// labels used so far in this program run — display-only (spec §4.2);
     /// the reducer keeps it only in the version history for the Studio's
-    /// version list. `ops` is the render's total reveal-op count, an
+    /// version list. `ops` is the render's total paint-op count, an
     /// additive server field (`nil` from a server that doesn't send it).
     case paintingVersion(PaintingVersionRef, stages: [String], ops: Int? = nil)
+    /// A paint run started (before the program runs): play its
+    /// `performance.bin` as it is painted. A successful run is announced
+    /// next as `painting_version` with the same `asset_base`.
+    case paintingLive(PaintingLiveRef)
+    /// The live run failed: drop its stream and show the previous picture.
+    case paintingLiveFailed(pieceNumber: Int, assetBase: String)
     /// An agent turn started (`true`) or ended (`false`, also after a
     /// failed turn). The painter counts as working while a turn is active,
     /// even when nothing is streaming.
@@ -357,6 +371,11 @@ extension ServerMessage: Decodable {
         case "painting_version":
             let envelope = try PaintingVersionEnvelope(from: decoder)
             self = .paintingVersion(envelope.ref, stages: envelope.stages, ops: envelope.ops)
+        case "painting_live":
+            self = .paintingLive(try PaintingLiveRef(from: decoder))
+        case "painting_live_failed":
+            let envelope = try PaintingLiveFailedEnvelope(from: decoder)
+            self = .paintingLiveFailed(pieceNumber: envelope.pieceNumber, assetBase: envelope.assetBase)
         default:
             self = .unknown(type: type)
         }
@@ -399,6 +418,14 @@ private struct PieceTitleEnvelope: Decodable {
     enum CodingKeys: String, CodingKey {
         case pieceNumber = "piece_number"
         case title
+    }
+}
+private struct PaintingLiveFailedEnvelope: Decodable {
+    let pieceNumber: Int
+    let assetBase: String
+    enum CodingKeys: String, CodingKey {
+        case pieceNumber = "piece_number"
+        case assetBase = "asset_base"
     }
 }
 private struct PaintingVersionEnvelope: Decodable {

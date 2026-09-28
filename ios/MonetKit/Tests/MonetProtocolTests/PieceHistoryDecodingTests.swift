@@ -133,20 +133,6 @@ struct PieceHistoryDecodingTests {
         #expect(summary.createdAt == nil)
         #expect(summary.ref(pieceNumber: 3).pieceNumber == 3)
     }
-
-    @Test("strokeOpCount counts only stroke ops")
-    func strokeOpCount() {
-        let manifest = RevealManifest(width: 10, height: 10, keyframes: [
-            RevealKeyframe(label: "ground", image: "kf_00.jpg", ops: [
-                .area(x0: 0, y0: 0, x1: 10, y1: 10),
-                .stroke(width: 2, points: [Point(x: 1, y: 1)]),
-            ]),
-            RevealKeyframe(label: "sky", image: "kf_01.jpg", ops: [
-                .stroke(width: 2, points: [Point(x: 1, y: 1), Point(x: 2, y: 2)]),
-            ]),
-        ])
-        #expect(manifest.strokeOpCount == 2)
-    }
 }
 
 @Suite("Lossy version decoding")

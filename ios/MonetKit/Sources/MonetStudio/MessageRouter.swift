@@ -137,6 +137,10 @@ public enum MessageRouter {
             // `stages`/`ops` are display-only (program-painting spec §4.2):
             // they ride along into the version history, never playback.
             return [.paintingVersion(ref, stages: stages, ops: ops)]
+        case let .paintingLive(ref):
+            return [.paintingLive(ref)]
+        case let .paintingLiveFailed(_, assetBase):
+            return [.paintingLiveFailed(assetBase: assetBase)]
         case let .turnState(active):
             return [.setTurnActive(active)]
         case let .pieceTitle(pieceNumber, title):

@@ -55,7 +55,7 @@ the vendored `FentonPlatform` package.
 | `MonetProtocol` | Codable wire types: `ServerMessage`/`ClientMessage` discriminated unions, `Path`, `DrawingStyleConfig`, `GalleryEntry`, `AgentMessage`, etc. | — |
 | `MonetStudio` | Pure `StudioState` + `StudioReducer.reduce(state, event) -> state`, `MessageRouter` (impure translation layer, server message -> events), `StudioSelectors` (derived `AgentStatus` etc.) | `MonetProtocol` |
 | `MonetPerformer` | `PerformerEngine`: stroke/text/pen playback pacing, driven by an injected `PerformerClock` | `MonetProtocol`, `MonetStudio` |
-| `MonetRender` | `Mulberry32` PRNG, `StampDynamics`/`BrushPreset` data tables, `PathSampling`, `CanvasRenderer` (CoreGraphics), `RenderStudyDocument`, `PNGWriter` | `MonetProtocol` |
+| `MonetRender` | `Mulberry32` PRNG, `StampDynamics`/`BrushPreset` data tables, `PathSampling`, `CanvasRenderer` (CoreGraphics), `RenderStudyDocument`, `PNGWriter`, program-painting performance playback (`PerformanceParser`/`PerformancePlayer`, §7) | `MonetProtocol` |
 | `MonetNetworking` | `CodeMonetEnvironment`, `CodeMonetRESTClient` (wraps `FentonMobileCore.MobileAPIClient`), `StudioWebSocketClient`, `TraceSpanBuffer` | `MonetProtocol`, `FentonMobileCore` |
 | `monet-render` (executable) | CLI: `RenderStudyDocument` JSON -> PNG, the Swift parity lane for `scripts/render-study.py` | `MonetRender`, `MonetProtocol` |
 | `CodeMonet` (app) | SwiftUI app: `App/`, `Features/*`, `DesignSystem/`, `Services/` | all of the above + `FentonDesignSystem` |
@@ -233,127 +233,80 @@ code — they contain exact constants/formulas this document doesn't repeat.
   - `cd ios && make test-app`
   - `cd ios/MonetKit && swift build && swift test` (unaffected by your changes, but must still pass — you own `Package.swift`... no, you don't; if you ever touch it, flag it)
 
-## 7. Program painting (protocol/state/reveal-math/drawing/networking/UI landed)
+## 7. Program painting (live performances)
 
-Program-painting support (`docs/program-painting.md`,
-`scratchpad/specs/program-painting.md` — the client contract for PR #313)
-has landed end to end: `MonetKit`'s protocol/state/reveal-math layer, the
-CoreGraphics reveal compositor and painting-asset networking, and their
-wiring into the Studio canvas and gallery viewing (see "Wired since the
-above was written" below the work-package table). No `Package.swift`/
-`project.yml` change was needed — every addition is new files or additive
-fields under
-already-listed `sources` paths.
+Program painting (`docs/program-painting.md`) renders on the server; clients
+play each version's **performance** (`{asset_base}performance.bin`): the exact
+pixels each paint op changed, in paint order, with one-hand timing. The iOS
+keyframe reveal (`reveal.json` + `kf_NN.jpg` along brush footprints —
+`RevealPlan`, `RasterRevealSink`, `RevealManifest`/`RevealOp`) is gone; the
+app reads neither file. No `Package.swift`/`project.yml` change was needed.
 
-**Landed:**
-
-- `MonetProtocol` (`PaintingVersion.swift`): `PaintingVersionRef`,
-  `RevealOp`/`RevealKeyframe`/`RevealManifest` (custom `Codable` for the
-  heterogeneous `["s"|"a", ...]` wire arrays, including the single-point
-  "dot" stroke case). `ServerMessage` gained `.paintingVersion(ref,
-  stages:)`; `InitPayload` gained an optional `painting` field. `Gallery.swift`
-  gained `GalleryPieceFormat` (`GalleryEntry.format`,
-  `GalleryPieceStrokes.format`/`.imageURL` for `GET /gallery/{n}/strokes`).
-- `MonetStudio`: `PaintingState` (`base`/`playing`, `settlePainting`,
-  `hasPainting`) on `StudioState` and `SavedCanvas`. `StudioEvent` gained
-  `.paintingVersion`/`.paintingPlaybackDone`. `StudioReducer` implements the
-  full guard chain (gallery guard, stale-piece guard, duplicate/older-version
-  guard, settle-on-supersede) in `applyPaintingVersion`, plus painting resets
-  on `.clear`/`new_canvas`, `.initialize` (base only, never `playing` — no
-  reconnect replay), and settle-on-enter/restore-verbatim-on-exit for
-  `.loadCanvas`/`.clearViewing`. `MessageRouter` routes `painting_version`
-  (dropping `stages`) and adds `paint` to `ToolLabels`'
-  started/completed copy. `StudioSelectors.agentStatus`/
-  `shouldShowIdleAnimation` account for `painting.playing`/`hasPainting`.
-  Tests: `PaintingStateReducerTests.swift` mirrors every case in
-  `web/src/test/paintingReducer.test.ts`.
-- `MonetRender` (`RevealPlan.swift`): a from-scratch Swift port of
-  `shared/src/renderer/reveal.ts` + `app/src/renderers/revealPlan.ts` —
-  `RevealPacing`/`buildRevealSchedule`/`revealProgressAt` (the stateless
-  timing model) and `RevealPlan`/`RevealCursor`/`RevealSink`/
-  `advanceRevealPlan` (the flattened, stateful per-frame cursor), plus
-  `PaintingAssetURL.apiAssetUrl`/`paintingAssetUrl`/`galleryRasterImageUrl`.
-  Pure value types and free functions — no CoreGraphics/UIKit dependency, so
-  this is testable exactly like the TS original. `RevealPlanTests.swift`
-  reimplements every one of `revealPlan.test.ts`'s 11 assertions
-  (`buildRevealPlan`, `advanceRevealPlan`, gallery raster URLs) verbatim
-  against the same fixture manifest shape.
-
-**Wired since the above was written:**
-
-- **`IncrementalCanvasRenderer` wiring.** `CodeMonet/Features/Studio/CanvasView.swift`
-  now drives `MonetRender.IncrementalCanvasRenderer` through a private
-  `IncrementalCanvasCache` held as `@State`: committed strokes are baked
-  once (only the newly-appended tail of `state.strokes` each frame, not a
-  full replay), and only the two in-progress strokes (human drag + agent
-  stroke) are redrawn on top per `TimelineView` tick — no longer
-  `CanvasRenderer.renderCommitted` over the full stroke history every
-  frame. The cache fully rebakes on a canvas-size change, a
-  `(pieceNumber, viewingPiece)` change (new/loaded/gallery canvas), or
-  whenever `state.strokes` is shorter than what's already baked (a
-  generic reset fallback, e.g. `.clear`).
-- **`TOOL_ICONS`.** `StudioPresentation.KnownTool` now has a `.paint` case
-  (`paintpalette.fill`/`paintpalette`), so a `paint` code-execution message
-  gets a real icon instead of falling through to the generic
-  "Running code" presentation.
-- **Drawing — live paint-mode reveal.** `MonetRender.RasterRevealSink`
-  (`RasterRevealSink.swift`) is a real `RevealSink` conformer: a
-  `CoreGraphics`-backed compositor over a `plan.width x plan.height`
-  bitmap context, one to one with `RevealOp` coordinates. CoreGraphics has
-  no image-shader-fill primitive (Skia's `makeShaderOptions`), so each op
-  is clip-then-draw instead: the op's shape (an ellipse/stroked polyline
-  for a stroke op, a rect for an area op) becomes the clip path, then the
-  keyframe image is drawn across the whole canvas rect. Bitmap contexts in
-  this package are bottom-left-origin, un-flipped; empirically verified
-  (not just documentation-derived — see the type's doc comment) that
-  `CGContext.draw(_:in:)` needs **no** flip transform here, while clip
-  geometry built from manifest (top-left-origin, y-down) coordinates does,
-  via the same `CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty:
-  height)` every other renderer in this package already uses.
-  `PaintingImageDecoder` decodes a keyframe/`final.png`'s raw bytes to a
-  `CGImage` via `ImageIO`. Tests: `RasterRevealSinkTests.swift` — pixel-level
-  (reads `context.data` directly, never redraws through a second context,
-  which would silently reintroduce an orientation ambiguity of its own).
-- **Networking — painting assets.** `MonetNetworking.PaintingAssetClient`
-  fetches `reveal.json` and keyframe/`final.png` images directly from
-  their resolved `PaintingAssetURL`-joined URLs — no bearer auth (the
-  server's own doc comment: these load "like share links"), via the same
-  `HTTPTransport` protocol `CodeMonetRESTClient` uses, so it's equally
-  fakeable in tests.
-- **Studio canvas compositing.** `CodeMonet/Features/Studio/
-  PaintingRevealController.swift` (app target, not unit-tested itself —
-  glue over the two tested pieces above) drives the whole live pipeline:
-  fetches `base`'s `final.png` and, when `playing` is set, `reveal.json` +
-  every keyframe + `final.png`, builds a `RevealPlan`, and advances it one
-  `TimelineView` tick at a time (mirrors `app/src/renderers/
-  RasterRevealLayer.tsx`'s generation-counter cancellation model: a
-  version superseded mid-fetch or mid-reveal never clobbers a newer one,
-  and an interrupted reveal is jumped to its own fully-revealed state
-  rather than left frozen, matching `MonetStudio.settlePainting`'s
-  contract). `CanvasView.frame(state:canvasSize:now:)` renders this layer
-  instead of the strokes layer whenever `MonetStudio.hasPainting` is true,
-  and calls `StudioStore.paintingPlaybackDone(assetBase:)` once a reveal
-  finishes. Known simplification vs. the RN reference: no cross-version
-  `NSCache` for decoded images (RN's `IMAGE_CACHE_LIMIT`) — each version's
-  assets are fetched fresh; acceptable for now (a version's assets are
-  small and fetched once), flagged as a follow-up if it shows up as a
-  real cost.
-- **Gallery raster viewing.** A `.raster` gallery piece (no vector
-  strokes — a saved program-painting piece) now actually renders:
-  `LoadCanvasPayload` grew `format`/`imageURL` fields (defaulted so an
-  older/partial payload still decodes), `StudioState.viewingImageURL` is
-  set by `StudioReducer`'s `.loadCanvas` case when `format == .raster` and
-  cleared alongside `viewingPiece` everywhere else, and
-  `StudioStore.applyLoadedGalleryPiece` (the REST `GET /gallery/{n}
-  /strokes` path `GalleryView.select()` actually uses) threads
-  `GalleryPieceStrokes.format`/`.imageURL` through. `CanvasView` renders a
-  small dedicated `GalleryRasterImageView` (fetch + decode + display, no
-  animation — a saved piece has nothing to reveal) instead of the
-  strokes/painting layers whenever `viewingImageURL` is set. The live WS
-  `load_canvas` broadcast still never sends `format`/`image_url` (server
-  only ever pushes `.strokes` pieces over it) — harmless, since the app's
-  actual gallery-open flow is the REST round-trip above, not that
-  message; flagged as a gap if a future flow needs the WS path too.
+- **`MonetProtocol`**: `PaintingVersionRef` (`init.painting`,
+  `painting_version`), `PaintingLiveRef` (`painting_live`,
+  `init.painting_live`), `PaintingVersionSummary`. `ServerMessage` has
+  `.paintingVersion(ref, stages:, ops:)`, `.paintingLive(ref)`,
+  `.paintingLiveFailed(pieceNumber:, assetBase:)`; `InitPayload.paintingLive`
+  (absent/null/malformed → `nil`).
+- **`MonetStudio`** (mirrors `shared/src/canvas/reducer.ts` and
+  `web/src/test/paintingReducer.test.ts`): `PaintingState` is `base` (shown),
+  `playing` (a recorded version performing over `base` — one this client did
+  not watch live, e.g. after a reconnect) and `live: LivePainting?` (`ref`,
+  `confirmed`, `played`). Events `.paintingLive`, `.paintingLiveFailed`,
+  `.paintingLiveDone`, `.paintingVersion`, `.paintingPlaybackDone`. A
+  `painting_version` whose `asset_base` matches the live run confirms it
+  without replaying (settles to `base` if its stream already played);
+  `settlePainting` makes a confirmed run or a playing version the base and
+  drops an unconfirmed run. `.initialize` seeds `live` from
+  `init.painting_live` for the current piece when it isn't the current
+  version. `isPaintingPerforming` (a playing version, or a live run not yet
+  played) drives `agentStatus == .drawing`. `StageBar.segments(stages:
+  active:)` takes `StageSpec`s (label + weight). Tests:
+  `PaintingStateReducerTests`, `LivePaintingReducerTests`, `StageBarTests`.
+- **`MonetRender`** (port of `shared/src/renderer/performance.ts`):
+  `Performance.swift` — `PerformanceParser` (incremental frames),
+  `decodePerformancePatches` (20-byte LE records), `performancePatchFits`
+  (bounds checks: the stream is untrusted program output),
+  `performanceOrderThreshold`, `performancePlaybackRate` (+
+  `performanceMaxBehindMs` = 60 s). `PerformancePlayer` — the picture buffer
+  (`RGBAPixels`, base drawn in, white when blank) and the paste loop:
+  in-flight patches paste pixels whose 4x4 block order (0 → 255) ≤
+  `1 + progress·254`, finished patches paste whole; never plays past what has
+  arrived or into a chunk whose atlases aren't decoded. Atlases
+  (`PerformanceAtlas.decode`, ImageIO WebP → RGBA; order = red channel) are
+  decoded lazily — the playing chunk + `decodeLookahead` — and released once
+  played, so a long complete stream never holds every decoded atlas. Headers
+  and atlases over `RGBAPixels.maxPixelCount` (4096²) are refused.
+  `PaintingAssetURL` (asset URL joining) and `PaintingImageDecoder` live
+  here too. Tests: `PerformanceTests.swift` — the TS stream tests plus real
+  streams generated by the server's paint library
+  (`Tests/Fixtures/performance/`: v1 over blank, v2 a revision; playback
+  matches a PIL-decoded paste and `final.png`).
+- **`MonetNetworking`**: `PaintingAssetClient.byteStream(at:)` streams a
+  (possibly growing) asset's bytes as they arrive (delegate `URLSession`,
+  idle timeout above the server's 270 s follow bound); non-2xx →
+  `FetchError.http`. Plus `imageData`/`text` for `final.png`/`painting.py`.
+- **App** (`CodeMonet/Features/Studio/PaintingPerformanceController.swift`,
+  glue, not unit-tested): maps `PaintingState` to a target — blank, a still
+  version (`final.png`), a performance (live run or playing version over
+  `base`), or holding a played live run until the server confirms/fails it
+  — and per `TimelineView` tick advances the player (studio rates: 3× for a
+  first version, 1× for a revision; gallery replay 4×), decodes atlases off
+  the main thread, and reports `.paintingPlaybackDone` / `.paintingLiveDone`.
+  A version without a stream (recorded before performances) shows its
+  `final.png` and reports done; a live run whose stream can't be read
+  reports done and holds the picture. A superseded performance's stream is
+  cancelled; `idle()` stops streams when the canvas leaves paint mode or
+  disappears. Final pictures are cached (4, LRU) so settling never flashes.
+  `StudioView`'s stage bar shows the streamed stages (sized by hand time,
+  current = the playing chunk's) while performing, else the version's
+  `stages` labels. `GalleryPieceDetailView`'s replay plays each version's
+  `performance.bin` (v1 over blank, each later version over the previous
+  version's `final.png`), or its `final.png` when it has none.
+- **Gallery raster viewing**: a `.raster` gallery piece opened in the studio
+  shows its `final.png` via `GalleryRasterImageView` (`StudioState
+  .viewingImageURL`, set by `.loadCanvas` from the REST `GET /gallery/{n}
+  /strokes` payload's `format`/`image_url`).
 
 ## 8. Redesign (Fenton palette, notebook, versions)
 
@@ -368,15 +321,16 @@ drawn from `brand/mark.svg`, and system serif/monospaced type roles
   New Canvas sheet (deleted, with `ActiveModal`), and a recent row.
 - **Studio** (`Features/Studio`): top bar (back, title, status pill, menu with
   New piece / Gallery / Draw on canvas / Pause), canvas in a paper mat, stage
-  bar (`MonetStudio.StageBar` over the displayed version's `reveal.json`) and
+  bar (`MonetStudio.StageBar`: streamed stages while performing, else the
+  version's `stages`) and
   version chips (tap an older version to pin its `final.png` over the live
   canvas), the notebook (`MonetStudio.Notebook`) and an always-visible nudge
   bar with pause/resume. The action bar, LiveStatus, message stream and nudge
-  sheet are gone. `StudioView` owns the `PaintingRevealController`, which now
-  also publishes the revealing keyframe and caches manifests by `asset_base`.
+  sheet are gone. `StudioView` owns the `PaintingPerformanceController` (§7),
+  which publishes the performing stages for the stage bar.
 - **Gallery** (`Features/Gallery`): filters, featured latest piece, grid, and
   `GalleryPieceDetailView` (meta, prompt, version replay through a second
-  `PaintingRevealController`, `painting.py` sheet, "Open in studio").
+  `PaintingPerformanceController`, `painting.py` sheet, "Open in studio").
 
 Contract changes (all additive on the wire; flagged per §4 rule 1):
 

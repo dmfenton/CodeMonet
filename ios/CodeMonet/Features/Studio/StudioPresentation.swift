@@ -33,7 +33,7 @@ enum StudioPresentation {
             if let running = Notebook.runningTool(Notebook.entries(state)) {
                 return StatusPill(label: activityLabel(forTool: running.toolName), isActive: true)
             }
-            if state.painting.playing != nil || hasStrokesPending(state) {
+            if isPaintingPerforming(state.painting) || hasStrokesPending(state) {
                 return StatusPill(label: state.drawingStyle == .paint ? "painting" : "drawing", isActive: true)
             }
             // Same rule as `StudioSelectors.agentStatus`: a turn the server

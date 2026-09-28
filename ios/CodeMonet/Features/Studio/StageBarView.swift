@@ -4,9 +4,10 @@ import MonetStudio
 import SwiftUI
 import UIKit
 
-/// The painter's passes for one version, filling in as they reveal:
-/// finished stages in the accent, the stage being revealed in emphasis,
-/// pending stages in the divider color. Widths follow each stage's op count.
+/// The painter's passes for one version, filling in as they paint:
+/// finished stages in the accent, the stage being painted in emphasis,
+/// pending stages in the divider color. Widths follow each stage's weight
+/// (hand time while performing; equal for a version's labels).
 /// Each segment carries its label only when every label fits in full
 /// (`StageBar.labelsFit`); otherwise one caption sits under the bar
 /// (`StageBar.caption`: "stage 4 of 8 · harbor" / "8 stages · final touches").

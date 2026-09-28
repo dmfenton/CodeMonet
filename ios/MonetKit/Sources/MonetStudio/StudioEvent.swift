@@ -71,9 +71,18 @@ public enum StudioEvent: Equatable, Sendable {
     /// playback (spec §4.2); they're kept only on the accepted version's
     /// `StudioState.versions` entry for display.
     case paintingVersion(PaintingVersionRef, stages: [String] = [], ops: Int? = nil)
-    /// The reveal layer finished animating `playing` and drew its final
-    /// image. `assetBase` is the version that just finished, so a stale
+    /// The player finished playing `playing`'s performance (or showed its
+    /// final image when it has none). `assetBase` is the version that just finished, so a stale
     /// completion (a newer version already superseded it) can be detected
     /// and ignored (spec §4.1).
     case paintingPlaybackDone(assetBase: String)
+    /// `painting_live`: a paint run started streaming its performance.
+    case paintingLive(PaintingLiveRef)
+    /// `painting_live_failed`: the live run failed; drop it (matched by
+    /// `asset_base`, so a stale failure for a superseded run is ignored).
+    case paintingLiveFailed(assetBase: String)
+    /// The player reached the end of a live run's stream (matched by
+    /// `asset_base`). Settles to the recorded version if the server already
+    /// confirmed it; otherwise waits for confirmation.
+    case paintingLiveDone(assetBase: String)
 }

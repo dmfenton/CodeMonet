@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		0577A6BAE0256D55C48BB321 /* WipPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69ECA128215DE3C5212546F /* WipPreview.swift */; };
-		09121B6ECCC7A28A982589DF /* PaintingRevealController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 614E72772745666FD5C96705 /* PaintingRevealController.swift */; };
 		0B282C422D4AA72C5DB1E7FF /* ThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */; };
 		12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */; };
 		1981E79F549C22B21554CC5B /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 488E8004DCBEBAB3333BB48C /* HomeView.swift */; };
@@ -49,6 +48,7 @@
 		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 025FFC0A720D0DFF2D799F0D /* GalleryPieceDetailView.swift */; };
 		C520059C42E5757249C12957 /* StudioStore+Pieces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */; };
+		C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */; };
 		D475CD72024DE203E494C3D7 /* NotebookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDA72C40B3080CB217A5D7F5 /* NotebookView.swift */; };
 		DF1982794FCEDD1CB3F5C112 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6995E17497D3051AA88805D7 /* AppConfig.swift */; };
 		E390F869B80708F616F8F9E0 /* StudioChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A73D5FE5D3CD7E1E5A2CFE /* StudioChrome.swift */; };
@@ -92,7 +92,6 @@
 		454497465AB8A03F73EB2F61 /* BrandMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrandMark.swift; sourceTree = "<group>"; };
 		488E8004DCBEBAB3333BB48C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		4E5BE0E77B05628D4B9AFE7B /* GalleryFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryFormatting.swift; sourceTree = "<group>"; };
-		614E72772745666FD5C96705 /* PaintingRevealController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingRevealController.swift; sourceTree = "<group>"; };
 		62F2C12B270F41F86610957E /* CodeMonetUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CodeMonetUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		669B99ED0E92CCD268014A1B /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		679612E25876041328C74819 /* MonetKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonetKit; path = MonetKit; sourceTree = SOURCE_ROOT; };
@@ -105,6 +104,7 @@
 		81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeMonetDesignSystem.swift; sourceTree = "<group>"; };
 		8372F9F4537B913A1B9B88AF /* ReplayScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayScrubber.swift; sourceTree = "<group>"; };
 		901C6365C3450B9C1BFB320B /* HomeSelectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectors.swift; sourceTree = "<group>"; };
+		917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingPerformanceController.swift; sourceTree = "<group>"; };
 		95E266E95B648C934E866D73 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -327,7 +327,7 @@
 				EA2978DE221F6E5A1AB4C9D7 /* GalleryRasterImageView.swift */,
 				2279D8BC1717425C6A89565F /* IdleParticlesView.swift */,
 				DDA72C40B3080CB217A5D7F5 /* NotebookView.swift */,
-				614E72772745666FD5C96705 /* PaintingRevealController.swift */,
+				917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */,
 				C366EC9BBE75BB54837A9AF0 /* StageBarView.swift */,
 				C4A73D5FE5D3CD7E1E5A2CFE /* StudioChrome.swift */,
 				1DFBA460C8BDEADA2CA5EC44 /* StudioPresentation.swift */,
@@ -570,7 +570,7 @@
 				2EF538512AEC39B1AD3C17EF /* MonetStyle.swift in Sources */,
 				587FB805A51C21177B1132A4 /* Navigation.swift in Sources */,
 				D475CD72024DE203E494C3D7 /* NotebookView.swift in Sources */,
-				09121B6ECCC7A28A982589DF /* PaintingRevealController.swift in Sources */,
+				C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */,
 				A2AEE046BE330A9F7A743002 /* ReplayScrubber.swift in Sources */,
 				A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */,
 				71E9AAB8C2EFD8087E8E95A8 /* SplashView.swift in Sources */,

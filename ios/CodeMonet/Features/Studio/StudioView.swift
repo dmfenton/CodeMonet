@@ -25,7 +25,7 @@ struct StudioView: View {
 
     /// View-local "Draw on canvas" toggle — see `CanvasView.drawingEnabled`.
     @State private var drawingEnabled = false
-    @State private var painting = PaintingRevealController()
+    @State private var painting = PaintingPerformanceController()
     /// An older version chosen from the version chips, shown over the live canvas.
     @State private var pinnedVersion: Int?
     @State private var pieceCompleteHapticTrigger = false
@@ -121,10 +121,6 @@ struct StudioView: View {
         }
         .padding(.top, 4)
         .padding(.bottom, 6)
-        .task(id: displayedRef?.assetBase) {
-            guard let ref = displayedRef else { return }
-            await painting.loadManifest(for: ref, apiBaseURL: apiBaseURL)
-        }
     }
 
     private static let matPadding: CGFloat = 8
@@ -146,9 +142,10 @@ struct StudioView: View {
         !isViewOnly && !state.versions.isEmpty
     }
 
-    /// The version currently on the canvas, live (revealing or settled).
+    /// The latest version on the canvas (playing, settled, or a live run's
+    /// once confirmed); a live run not yet recorded paints over `base`.
     private var liveRef: PaintingVersionRef? {
-        state.painting.playing ?? state.painting.base
+        state.painting.live?.confirmed ?? state.painting.playing ?? state.painting.base
     }
 
     private var validPinnedVersion: Int? {
@@ -170,17 +167,27 @@ struct StudioView: View {
         return PaintingAssetURL.paintingAssetUrl(apiBase: apiBaseURL.absoluteString, ref: ref, file: "final.png")
     }
 
+    /// While a performance plays on the live canvas: the stages that have
+    /// streamed so far, sized by their hand time, with the one painting now.
+    /// Otherwise the shown version's stage labels, all done.
     private var stageSegments: [StageSegment]? {
-        guard let ref = displayedRef, let manifest = painting.manifests[ref.assetBase], !manifest.keyframes.isEmpty else {
-            return nil
+        if validPinnedVersion == nil, let performing = performingAssetBase {
+            guard let progress = painting.progress, progress.assetBase == performing, !progress.stages.isEmpty else {
+                return nil
+            }
+            let stages = progress.stages.map { StageSpec(label: $0.label, weight: $0.handMs) }
+            return StageBar.segments(stages: stages, active: progress.active)
         }
-        // Only a playing (not yet settled) live version has stages still to come.
-        var revealing: Int?
-        if validPinnedVersion == nil, state.painting.playing?.assetBase == ref.assetBase {
-            let marker = painting.revealing
-            revealing = marker?.assetBase == ref.assetBase ? marker?.keyframe : 0
-        }
-        return StageBar.segments(manifest: manifest, revealingKeyframe: revealing)
+        guard let ref = displayedRef,
+              let labels = state.versions.first(where: { $0.version == ref.version })?.stages, !labels.isEmpty
+        else { return nil }
+        return StageBar.segments(stages: StageSpec.labels(labels), active: nil)
+    }
+
+    /// The performance playing on the live canvas, if any.
+    private var performingAssetBase: String? {
+        guard MonetStudio.isPaintingPerforming(state.painting) else { return nil }
+        return state.painting.live?.ref.assetBase ?? state.painting.playing?.assetBase
     }
 
     // MARK: - Notebook + nudge bar
@@ -189,8 +196,7 @@ struct StudioView: View {
         NotebookView(
             entries: Notebook.entries(state),
             showsVersions: state.drawingStyle == .paint || !state.versions.isEmpty,
-            // Only the server's `ops` count: never fetch a whole reveal.json
-            // just to count strokes — the count is hidden when `ops` is absent.
+            // Only the server's `ops` count — hidden when `ops` is absent.
             strokes: { version in state.versions.first { $0.version == version }?.ops }
         )
         .frame(maxHeight: .infinity)

@@ -25,16 +25,16 @@ public enum StudioSelectors {
         if hasWordsPending(state) { return .thinking }
         if hasEventOnStage(state) || hasInProgressEvents(state) { return .executing }
         if hasStrokesPending(state) { return .drawing }
-        // A program-painting reveal in progress also counts as "drawing"
-        // (program-painting spec §4.1 `deriveAgentStatus`).
-        if state.painting.playing != nil { return .drawing }
+        // A program-painting performance in progress (a version playing, or
+        // a live run not yet played to its end) also counts as "drawing".
+        if isPaintingPerforming(state.painting) { return .drawing }
         return state.turnActive ? .thinking : .idle
     }
 
     /// Shown only while nothing at all has been drawn yet (protocol-state
     /// spec §11.7) — hidden the instant the agent's pen starts moving.
-    /// Additionally hidden whenever any program painting is present, base
-    /// or playing (program-painting spec §4.1 `shouldShowIdleAnimation`).
+    /// Additionally hidden whenever any program painting is present (base,
+    /// playing, or live).
     public static func shouldShowIdleAnimation(_ state: StudioState) -> Bool {
         state.strokes.isEmpty
             && state.currentStroke.isEmpty
