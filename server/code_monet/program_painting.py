@@ -19,13 +19,16 @@ import stat
 import sys
 import tempfile
 import time
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path as FilePath
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PositiveInt
 
 from code_monet.paintlib.canvas import RevealSummary, reveal_summary
+from code_monet.paintlib.performance import MAX_STREAM_BYTES, scan_stream
 from code_monet.types import PaintingVersion
 from code_monet.workspace import WorkspaceState
 
@@ -53,11 +56,35 @@ PaintResult = PaintSuccess | PaintFailure
 
 
 @dataclass(frozen=True)
+class LiveStarted:
+    """A paint run began streaming its performance into this version's directory."""
+
+    piece_number: int
+    token: str
+    image_width: int
+    image_height: int
+
+
+@dataclass(frozen=True)
+class LiveFailed:
+    """The run streaming into `token` failed; its version was discarded."""
+
+    piece_number: int
+    token: str
+
+
+PaintLive = LiveStarted | LiveFailed
+OnLive = Callable[[PaintLive], Awaitable[None]]
+OnVersion = Callable[[PaintingVersion], Awaitable[None]]
+
+
+@dataclass(frozen=True)
 class _Exported:
     """A run's checked output: what the version records and what the agent sees."""
 
     summary: RevealSummary
     preview_jpeg: bytes
+    continues: bool
 
 
 def _check_reveal_op(op: list[object]) -> list[object]:
@@ -95,11 +122,24 @@ class _RevealManifest(BaseModel):
     model_config = ConfigDict(strict=True)
     width: PositiveInt
     height: PositiveInt
+    # The run painted over the previous version's canvas (it did not start over).
+    continues: bool = False
     keyframes: list[_RevealKeyframe]
 
 
-async def run_painting_program(state: WorkspaceState) -> PaintResult:
-    """Execute studio/painting.py in a subprocess; on success record a new version."""
+async def run_painting_program(
+    state: WorkspaceState, on_live: OnLive | None = None, on_version: OnVersion | None = None
+) -> PaintResult:
+    """Execute studio/painting.py in a subprocess; on success record a new version.
+
+    While it runs, the program's performance streams into the version's
+    directory; `on_live` hears when that stream starts and, if the run fails,
+    that it was discarded; `on_version` hears the recorded version.
+
+    A version is recorded and announced whole, or dropped whole: cancelling
+    this call (a pause) while the program runs kills it and drops the run; once
+    the program has finished, recording and announcing its version completes.
+    """
     started = time.monotonic()
     program = state.studio_program
     program_name = program.relative_to(state.workspace_dir)
@@ -116,24 +156,56 @@ async def run_painting_program(state: WorkspaceState) -> PaintResult:
     except OSError as e:
         return PaintFailure(f"Could not read {program_name}: {e.strerror or e}", 0.0)
 
-    # A run that finishes after new_canvas/clear belongs to no current piece.
-    generation = state.painting_generation
-    token = secrets.token_hex(16)
-    out_dir = state.paintings_dir / token
+    run = _Run(
+        # A run that finishes after new_canvas/clear belongs to no current piece.
+        generation=state.painting_generation,
+        token=secrets.token_hex(16),
+        width=state.canvas.width * RENDER_SCALE,
+        height=state.canvas.height * RENDER_SCALE,
+        base=state.painting,  # the version this run paints over (if it continues it)
+        source=source,
+        started=started,
+    )
+    out_dir = state.paintings_dir / run.token
     out_dir.mkdir(parents=True)
-    width = state.canvas.width * RENDER_SCALE
-    height = state.canvas.height * RENDER_SCALE
-    human_file = out_dir / "human.json"
-    human_file.write_text(json.dumps(_human_strokes(state)))
+    (out_dir / "human.json").write_text(json.dumps(_human_strokes(state)))
 
-    # The program runs from a throwaway copy it may freely rewrite; what gets
-    # published is `source`, the bytes read before the run.
-    with tempfile.TemporaryDirectory(prefix="paint-run-", ignore_cleanup_errors=True) as run_dir:
-        run_program = FilePath(run_dir) / "painting.py"
-        run_program.write_bytes(source)
-        return await _run_and_record(
-            state, source, run_program, out_dir, token, generation, width, height, started
-        )
+    # The stream exists before it is announced, so viewers can follow it at once
+    # (the runner then writes it from the start).
+    (out_dir / "performance.bin").touch(exist_ok=False)
+    live = LiveStarted(state.piece_number, run.token, run.width, run.height)
+    state.live_painting = live
+    recording: asyncio.Future[PaintResult] | None = None
+    try:
+        if on_live:
+            await on_live(live)
+        # The program runs from a throwaway copy it may freely rewrite; what gets
+        # published is `source`, the bytes read before the run.
+        with tempfile.TemporaryDirectory(
+            prefix="paint-run-", ignore_cleanup_errors=True
+        ) as run_dir:
+            run_program = FilePath(run_dir) / "painting.py"
+            run_program.write_bytes(source)
+            ran = await _execute(state, run, run_program, out_dir)
+        if isinstance(ran, PaintFailure):
+            failure = ran
+        else:
+            recording = _spawn(_record(state, run, out_dir, ran, live, on_live, on_version))
+            return await asyncio.shield(recording)
+    except asyncio.CancelledError:
+        if recording is None:
+            # Interrupted while the program ran: the run is dropped. Viewers are
+            # told from a task, since awaiting here would be cancelled too.
+            _discard(out_dir)
+            if on_live:
+                _spawn(on_live(LiveFailed(live.piece_number, run.token)))
+        raise
+    finally:
+        if recording is None and state.live_painting is live:
+            state.live_painting = None
+    if on_live:
+        await on_live(LiveFailed(live.piece_number, run.token))
+    return failure
 
 
 def paint_env(run_dir: FilePath) -> dict[str, str]:
@@ -151,18 +223,28 @@ def paint_env(run_dir: FilePath) -> dict[str, str]:
     }
 
 
-async def _run_and_record(
-    state: WorkspaceState,
-    source: bytes,
-    run_program: FilePath,
-    out_dir: FilePath,
-    token: str,
-    generation: int,
-    width: int,
-    height: int,
-    started: float,
-) -> PaintResult:
-    human_file = out_dir / "human.json"
+@dataclass(frozen=True)
+class _Run:
+    generation: int
+    token: str
+    width: int
+    height: int
+    base: PaintingVersion | None
+    source: bytes
+    started: float
+
+
+@dataclass(frozen=True)
+class _Ran:
+    """The program exited cleanly; its output awaits checking."""
+
+    stdout: bytes
+    seconds: float
+
+
+async def _execute(
+    state: WorkspaceState, run: _Run, run_program: FilePath, out_dir: FilePath
+) -> _Ran | PaintFailure:
     run_dir = run_program.parent
     proc = await asyncio.create_subprocess_exec(
         sys.executable,
@@ -174,13 +256,14 @@ async def _run_and_record(
         "--out",
         str(out_dir),
         "--width",
-        str(width),
+        str(run.width),
         "--height",
-        str(height),
+        str(run.height),
         "--seed",
-        str(state.piece_number),
+        str(state.piece_number * 1000 + _next_version(state)),
         "--human",
-        str(human_file),
+        str(out_dir / "human.json"),
+        *_previous_args(state),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=run_dir,
@@ -188,17 +271,24 @@ async def _run_and_record(
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=PAINT_TIMEOUT_S)
+    except asyncio.CancelledError:
+        # The turn was interrupted. Stop the run and clean up from another task:
+        # under the SDK's anyio cancel scope every further await here is cancelled.
+        with suppress(ProcessLookupError):
+            proc.kill()
+        _spawn(_reap(proc, out_dir))
+        raise
     except TimeoutError:
-        proc.kill()
+        with suppress(ProcessLookupError):
+            proc.kill()
         await proc.wait()
         _discard(out_dir)
         return PaintFailure(
             f"Program exceeded {PAINT_TIMEOUT_S}s and was stopped. Reduce mark counts or "
             "per-pixel work (vectorize, work on smaller regions).",
-            time.monotonic() - started,
+            time.monotonic() - run.started,
         )
-
-    seconds = time.monotonic() - started
+    seconds = time.monotonic() - run.started
     if proc.returncode != 0:
         _discard(out_dir)
         err = stderr.decode(errors="replace")[-_ERROR_TAIL_CHARS:]
@@ -206,39 +296,139 @@ async def _run_and_record(
         return PaintFailure(
             f"Program failed:\n{err}" + (f"\nstdout:\n{out}" if out.strip() else ""), seconds
         )
+    return _Ran(stdout=stdout, seconds=seconds)
+
+
+async def _record(
+    state: WorkspaceState,
+    run: _Run,
+    out_dir: FilePath,
+    ran: _Ran,
+    live: LiveStarted,
+    on_live: OnLive | None,
+    on_version: OnVersion | None,
+) -> PaintResult:
+    """Record a finished run; an unexpected error before the version is recorded
+    still drops the run (its files, the live marker, and viewers' stream)."""
+    try:
+        return await _record_version(state, run, out_dir, ran, live, on_live, on_version)
+    except BaseException:
+        if not any(v.token == run.token for v in state.painting_versions):
+            _discard(out_dir)
+            if on_live:
+                _spawn(on_live(LiveFailed(live.piece_number, run.token)))
+        if state.live_painting is live:
+            state.live_painting = None
+        raise
+
+
+async def _record_version(
+    state: WorkspaceState,
+    run: _Run,
+    out_dir: FilePath,
+    ran: _Ran,
+    live: LiveStarted,
+    on_live: OnLive | None,
+    on_version: OnVersion | None,
+) -> PaintResult:
+    """Check, record and announce a finished run's version (never cancelled midway)."""
+
+    async def drop(error: str) -> PaintFailure:
+        _discard(out_dir)
+        if state.live_painting is live:
+            state.live_painting = None
+        if on_live:
+            await on_live(LiveFailed(live.piece_number, run.token))
+        return PaintFailure(error, ran.seconds)
 
     # The exported files, not stdout (which the program shares), are the record
     # of what was painted; the program may also have altered them on its way out.
-    exported = await asyncio.to_thread(_collect_export, out_dir, width, height)
+    exported = await asyncio.to_thread(_collect_export, out_dir, run.width, run.height)
     if isinstance(exported, str):
-        _discard(out_dir)
-        out = stdout.decode(errors="replace")[-500:]
-        return PaintFailure(exported + (f"\nstdout:\n{out}" if out.strip() else ""), seconds)
+        out = ran.stdout.decode(errors="replace")[-500:]
+        return await drop(exported + (f"\nstdout:\n{out}" if out.strip() else ""))
     try:
-        human_file.unlink(missing_ok=True)
-        _publish_program(out_dir, source)
+        (out_dir / "human.json").unlink(missing_ok=True)
+        _publish_program(out_dir, run.source)
     except OSError as e:
-        _discard(out_dir)
-        return PaintFailure(f"Could not publish the program: {e.strerror or e}", seconds)
+        return await drop(f"Could not publish the program: {e.strerror or e}")
     summary = exported.summary
+    # A revision adds its marks to the picture's.
+    prior_ops = run.base.ops if (exported.continues and run.base is not None) else 0
     version = await state.record_painting_version(
-        token,
+        run.token,
         summary["width"],
         summary["height"],
         summary["stages"],
-        ops=summary["ops"],
-        generation=generation,
+        ops=prior_ops + summary["ops"],
+        generation=run.generation,
     )
     if version is None:
-        _discard(out_dir)
-        return PaintFailure(
-            "The canvas was reset while this program ran; its result was discarded.", seconds
-        )
+        return await drop("The canvas was reset while this program ran; its result was discarded.")
+    _start_next_revision(state, run.source, version.version)
+    if run.base is not None:
+        # Only the latest version's canvas is ever continued.
+        discard_canvas_state(state, run.base.token)
+    if state.live_painting is live:
+        state.live_painting = None
+    if on_version:
+        await on_version(version)
     logger.info(
-        f"User {state.user_id}: painting v{version.version} rendered in {seconds:.1f}s "
+        f"User {state.user_id}: painting v{version.version} rendered in {ran.seconds:.1f}s "
         f"({version.ops} ops, {len(version.stages)} stages)"
     )
-    return PaintSuccess(version=version, preview_jpeg=exported.preview_jpeg, seconds=seconds)
+    return PaintSuccess(version=version, preview_jpeg=exported.preview_jpeg, seconds=ran.seconds)
+
+
+REVISION_STUB = """\
+# Version {next} paints over the current canvas (version {current}).
+# Write only what this revision adds or changes. No erasing: paint new forms
+# directly over old ones. Earlier programs: studio/versions/.
+"""
+
+
+def _start_next_revision(state: WorkspaceState, source: bytes, version: int) -> None:
+    """Archive the program that made `version`; the working program starts empty.
+
+    The next run paints over this version's canvas, so re-running the same program
+    would paint it all again on top.
+    """
+    program = state.studio_program
+    archive = program.parent / "versions" / f"v{version}.py"
+    try:
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive.write_bytes(source)
+        if program.is_symlink():
+            program.unlink()
+        program.write_text(REVISION_STUB.format(next=version + 1, current=version))
+    except OSError as e:
+        logger.warning(f"User {state.user_id}: could not start revision file: {e}")
+
+
+def discard_canvas_state(state: WorkspaceState, token: str) -> None:
+    """Delete a version's saved canvas (canvas.npz) once nothing will continue it."""
+    path = state.painting_asset(token, "canvas.npz")
+    if path is not None:
+        path.unlink(missing_ok=True)
+
+
+def _next_version(state: WorkspaceState) -> int:
+    latest = state.painting
+    return latest.version + 1 if latest else 1
+
+
+def _previous_args(state: WorkspaceState) -> list[str]:
+    """`--previous DIR` when this run revises the current version (paints over its canvas).
+
+    Versions from before canvas states were saved have none: the run starts fresh.
+    """
+    latest = state.painting
+    if latest is None:
+        return []
+    canvas = state.painting_asset(latest.token, "canvas.npz")
+    if canvas is None or state.painting_asset(latest.token, "final.png") is None:
+        return []
+    return ["--previous", str(canvas.parent)]
 
 
 def _collect_export(out_dir: FilePath, width: int, height: int) -> _Exported | str:
@@ -267,15 +457,37 @@ def _collect_export(out_dir: FilePath, width: int, height: int) -> _Exported | s
         return malformed.format(
             f"size {manifest.width}x{manifest.height}, expected {width}x{height}"
         )
-    assets = ["final.png", *(kf.image for kf in manifest.keyframes)]
+    assets = ["final.png", "performance.bin", *(kf.image for kf in manifest.keyframes)]
     for name in assets:
         if not stat.S_ISREG(_lstat_mode(out_dir / name)):
             return f"The painting's {name} is missing or not a regular file. " + tampered
+    problem = _stream_problem(out_dir / "performance.bin")
+    if problem:
+        return f"The painting's performance.bin {problem}. " + tampered
     try:
         preview_jpeg = _read_no_follow(out_dir / "preview.jpg")
     except OSError as e:
         return f"Could not read the painting's preview.jpg: {e.strerror or e}. " + tampered
-    return _Exported(summary=reveal_summary(raw), preview_jpeg=preview_jpeg)
+    return _Exported(
+        summary=reveal_summary(raw), preview_jpeg=preview_jpeg, continues=manifest.continues
+    )
+
+
+def _stream_problem(path: FilePath) -> str | None:
+    """Why a finished run's performance stream can't be published, if it can't.
+
+    Viewers and the asset route read it to its end frame, so a published stream
+    must be bounded, well framed, and end properly.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as e:
+        return f"could not be read ({e.strerror or e})"
+    with os.fdopen(fd, "rb") as f:
+        if os.fstat(f.fileno()).st_size > MAX_STREAM_BYTES:
+            return f"is larger than {MAX_STREAM_BYTES // (1024 * 1024)} MB"
+        scanner = scan_stream(f)
+    return None if scanner.final == "end" else "does not end properly"
 
 
 def _lstat_mode(path: FilePath) -> int:
@@ -292,6 +504,23 @@ def _discard(out_dir: FilePath) -> None:
         out_dir.unlink(missing_ok=True)
     else:
         shutil.rmtree(out_dir, ignore_errors=True)
+
+
+# Work outliving a cancelled call; held so the loop doesn't drop the tasks.
+_background: set[asyncio.Future[Any]] = set()
+
+
+def _spawn[T](work: Awaitable[T]) -> asyncio.Future[T]:
+    task = asyncio.ensure_future(work)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+    return task
+
+
+async def _reap(proc: asyncio.subprocess.Process, out_dir: FilePath) -> None:
+    """Wait out a killed run, then remove what it wrote."""
+    await proc.wait()
+    _discard(out_dir)
 
 
 def _read_no_follow(path: FilePath) -> bytes:

@@ -245,14 +245,20 @@ public final class StudioStore {
         apply(.clearViewing)
     }
 
-    /// A program-painting reveal this device was animating has fully
-    /// drawn its final image (program-painting spec §4.1) — dispatched by
-    /// `CanvasView`'s `PaintingRevealController` once its playback loop
-    /// finishes. Mirrors `clearViewing()`'s pattern of exposing a
-    /// client-local `StudioEvent` publicly; the reducer itself guards
-    /// against a stale/superseded `assetBase`.
+    /// A recorded version's performance this device was playing has
+    /// finished (or showed its final image, having no stream) — dispatched
+    /// by `CanvasView`'s `PaintingPerformanceController`. Mirrors
+    /// `clearViewing()`'s pattern of exposing a client-local `StudioEvent`
+    /// publicly; the reducer itself guards against a stale/superseded
+    /// `assetBase`.
     public func paintingPlaybackDone(assetBase: String) {
         apply(.paintingPlaybackDone(assetBase: assetBase))
+    }
+
+    /// A live run's stream played to its end (or could not be played). The
+    /// reducer settles it once the server confirms the version.
+    public func paintingLiveDone(assetBase: String) {
+        apply(.paintingLiveDone(assetBase: assetBase))
     }
 
     /// Sets the session's current style (`StudioState.drawingStyle`, the

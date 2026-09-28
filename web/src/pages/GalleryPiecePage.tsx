@@ -8,17 +8,14 @@ import { Link } from 'react-router';
 import type {
   GalleryPieceDetail,
   Path,
-  PaintingVersionRef,
   PaintingVersionSummary,
   PublicGalleryPiece,
-  RevealPacing,
 } from '@code-monet/shared';
-import { pathToSvgDScaled, pieceDisplayTitle } from '@code-monet/shared';
+import { PERFORMANCE_FILE, pathToSvgDScaled, pieceDisplayTitle } from '@code-monet/shared';
 import { getApiUrl, getPublicAssetUrl } from '../config';
 import { Icon } from '../components/brand/Icon';
 import { SiteFooter, SiteHeader } from '../components/site/SiteChrome';
-import { RasterRevealLayer, type RevealPlaybackInfo } from '../renderers/RasterRevealLayer';
-import { useRevealManifest } from '../renderers/revealManifest';
+import { PerformancePlayer, type PerformanceProgress } from '../renderers/PerformancePlayer';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { formatShortDate } from './galleryFormat';
 
@@ -29,16 +26,16 @@ interface GalleryPiecePageProps {
   initialStrokes?: GalleryPieceDetail;
 }
 
-/** Replay is brisker than live viewing: a few seconds per version. */
-const REPLAY_PACING: RevealPacing = {
-  strokeOpMs: 6,
-  areaOpMs: 160,
-  maxKeyframeMs: 2500,
-  maxVersionMs: 9000,
-};
-
-/** Asset URLs are relative to the API base; the same during SSR and on the client. */
-const ASSET_API = getPublicAssetUrl('');
+/**
+ * Replay speeds a viewer can pick, as multiples of the studio's live pace
+ * (paintings from blank at 3x hand time, revisions at 1x); at 1x no version
+ * takes more than a minute, at 2x half that, and so on.
+ */
+const REPLAY_SPEEDS = [1, 2, 4, 8] as const;
+const DEFAULT_REPLAY_SPEED = 2;
+const BLANK_RATE = 3;
+const REVISION_RATE = 1;
+const MAX_VERSION_MS = 60_000;
 
 function rasterImageUrl(data: GalleryPieceDetail | undefined): string | null {
   if (data?.format !== 'raster' || !data.image_url) return null;
@@ -48,15 +45,8 @@ function rasterImageUrl(data: GalleryPieceDetail | undefined): string | null {
 const versionFinalUrl = (v: PaintingVersionSummary): string =>
   getPublicAssetUrl(`${v.asset_base}final.png`);
 
-function toRef(v: PaintingVersionSummary, pieceNumber: number): PaintingVersionRef {
-  return {
-    piece_number: pieceNumber,
-    version: v.version,
-    asset_base: v.asset_base,
-    image_width: v.image_width,
-    image_height: v.image_height,
-  };
-}
+const versionStreamUrl = (v: PaintingVersionSummary): string =>
+  getPublicAssetUrl(`${v.asset_base}${PERFORMANCE_FILE}`);
 
 function metaLine(
   detail: GalleryPieceDetail | undefined,
@@ -256,21 +246,10 @@ export function GalleryPiecePage({
   const current = versions[index] ?? null;
   const previous = index > 0 ? versions[index - 1]! : null;
   const [progress, setProgress] = useState(0);
-  const manifest = useRevealManifest(
-    ASSET_API,
-    replay.playing && current ? current.asset_base : null
-  );
-  const manifestRef = useRef(manifest);
-  manifestRef.current = manifest;
 
-  const handleProgress = useCallback((info: RevealPlaybackInfo) => {
-    const m = manifestRef.current;
-    if (!info.playing || !m) return;
-    const total = m.keyframes.reduce((sum, kf) => sum + kf.ops.length, 0);
-    const done =
-      m.keyframes.slice(0, info.keyframe).reduce((sum, kf) => sum + kf.ops.length, 0) +
-      info.opsDone;
-    setProgress(total > 0 ? Math.min(1, done / total) : 0);
+  const handleProgress = useCallback((info: PerformanceProgress) => {
+    if (!info.playing || !info.totalMs) return;
+    setProgress(Math.min(1, info.handMs / info.totalMs));
   }, []);
 
   const handlePlaybackDone = useCallback(() => {
@@ -298,6 +277,10 @@ export function GalleryPiecePage({
     if (replay.playing) setProgress(0);
   }, [replay.index, replay.playing]);
 
+  const [speed, setSpeed] = useState<number>(DEFAULT_REPLAY_SPEED);
+  const nextSpeed = (): void =>
+    setSpeed((sp) => REPLAY_SPEEDS[(REPLAY_SPEEDS.indexOf(sp as 1) + 1) % REPLAY_SPEEDS.length]!);
+
   const [programOpen, setProgramOpen] = useState(false);
   const [shareNote, setShareNote] = useState<string | null>(null);
   const share = async (): Promise<void> => {
@@ -320,7 +303,7 @@ export function GalleryPiecePage({
   }, [shareNote]);
 
   const hasArtwork = Boolean(imageUrl) || strokes.length > 0 || versions.length > 0;
-  // Under the reveal layer: the picture before the playing version (blank for v1).
+  // Under the performance: the picture before the playing version (blank for v1).
   const staticSrc = !replay.started
     ? (imageUrl ?? (current ? versionFinalUrl(current) : null))
     : replay.playing
@@ -374,15 +357,17 @@ export function GalleryPiecePage({
                     <VectorArtwork strokes={strokes} width={width} height={height} title={title} />
                   )}
                   {replay.playing && current && (
-                    <RasterRevealLayer
-                      apiUrl={ASSET_API}
-                      base={previous ? toRef(previous, pieceNumber) : null}
-                      playing={toRef(current, pieceNumber)}
-                      width={width}
-                      height={height}
-                      pacing={REPLAY_PACING}
+                    // Each version performs over the one before it (v1 over blank);
+                    // a version from before performances shows its final picture.
+                    <PerformancePlayer
+                      key={current.asset_base}
+                      src={versionStreamUrl(current)}
+                      baseSrc={previous ? versionFinalUrl(previous) : null}
+                      speed={BLANK_RATE * speed}
+                      revisionSpeed={REVISION_RATE * speed}
+                      maxBehindMs={MAX_VERSION_MS / speed}
                       onProgress={handleProgress}
-                      onPlaybackDone={handlePlaybackDone}
+                      onDone={handlePlaybackDone}
                     />
                   )}
                   {showHumanOverlay && (
@@ -421,6 +406,14 @@ export function GalleryPiecePage({
                       />
                     ))}
                   </div>
+                  <button
+                    type="button"
+                    className="mono-label replay-speed"
+                    aria-label={`Playback speed ${speed}x`}
+                    onClick={nextSpeed}
+                  >
+                    {speed}×
+                  </button>
                   <span className="mono-label replay-label">
                     {replay.started ? 'replay' : 'final'} · v{current?.version ?? versions.length}{' '}
                     of {versions.length}

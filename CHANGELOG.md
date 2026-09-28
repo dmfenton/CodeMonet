@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Paintings are performed: every paint run streams its brush strokes live, in a painter's order (grounds primed, masses laid in with lozenge strokes, shapes outlined then filled, region marks patch by patch), timed by one hand. The web studio and the native iOS app play the run as it paints; gallery replay plays every version in order, with a speed control on the web.
+- Revisions paint over the current canvas: a revision's program adds to the picture it continues. Erasing is not allowed (`cv.ground()` in a revision raises); paint new forms over old ones.
+
+### Changed
+
+- Pause stops the agent at once: the running turn is interrupted, and a paint run in progress is stopped and its live stream dropped. When the last viewer disconnects the agent still pauses, but lets a running turn finish.
+- Versions painted before performances no longer animate in gallery replay; they show their finished picture.
+
+### Fixed
+
+- App logs, including warnings and errors, were silenced after server startup: the startup migrations reconfigured logging and disabled every existing logger. Turn completion now also logs its cost.
+- A painting program can no longer stall or mislead viewers through its performance stream: streams are read in linear time, a version is recorded only if its stream is bounded and ends properly, and the stream is served from the file itself, never through a link.
+
 ## [1.42.0] - 2026-09-27
 
 Also rolls up changes tagged v1.41.1–v1.41.4, which had no changelog sections.

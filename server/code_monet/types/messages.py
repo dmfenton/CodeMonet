@@ -142,6 +142,24 @@ class PaintingVersionMessage(BaseModel):
     ops: int  # Reveal ops in this version (the finished picture's mark count)
 
 
+class PaintingLiveMessage(BaseModel):
+    """A paint run started; clients play its performance stream as it is painted."""
+
+    type: Literal["painting_live"] = "painting_live"
+    piece_number: int
+    asset_base: str  # {asset_base}performance.bin is the stream
+    image_width: int
+    image_height: int
+
+
+class PaintingLiveFailedMessage(BaseModel):
+    """The live run failed; clients drop its performance and show the previous picture."""
+
+    type: Literal["painting_live_failed"] = "painting_live_failed"
+    piece_number: int
+    asset_base: str
+
+
 # Client -> Server messages
 
 
@@ -198,6 +216,8 @@ ServerMessage = (
     | IterationMessage
     | AgentStrokesReadyMessage
     | PaintingVersionMessage
+    | PaintingLiveMessage
+    | PaintingLiveFailedMessage
     | TurnStateMessage
     | PieceTitleMessage
 )

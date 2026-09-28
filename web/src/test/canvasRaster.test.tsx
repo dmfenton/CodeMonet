@@ -26,7 +26,7 @@ const painting: PaintingState = {
     image_width: 1600,
     image_height: 1200,
   },
-  playing: null,
+  live: null,
 };
 
 const strokes: Path[] = [
@@ -68,20 +68,21 @@ const renderCanvas = (styleConfig: DrawingStyleConfig, p?: PaintingState): HTMLE
   ).container;
 
 describe('Canvas raster branch', () => {
-  it('uses the raster layer and only vector human strokes when a painting exists', () => {
+  it("shows the version's picture and only vector human strokes when a painting exists", () => {
     const el = renderCanvas(PAINT_STYLE, painting);
-    expect(el.querySelector('[data-testid="raster-reveal-layer"]')).not.toBeNull();
+    const img = el.querySelector('[data-testid="painting-base"]');
+    expect(img?.getAttribute('src')).toBe('/api/painting-assets/u/t/final.png');
     expect(el.querySelectorAll('svg path').length).toBe(1);
   });
 
   it('keeps the stamp layer in paint mode without a painting', () => {
-    const el = renderCanvas(PAINT_STYLE, { base: null, playing: null });
-    expect(el.querySelector('[data-testid="raster-reveal-layer"]')).toBeNull();
+    const el = renderCanvas(PAINT_STYLE, { base: null, live: null });
+    expect(el.querySelector('[data-testid="painting-base"]')).toBeNull();
     expect(el.querySelector('canvas')).not.toBeNull();
   });
 
   it('ignores paintings in plotter mode', () => {
     const el = renderCanvas(PLOTTER_STYLE, painting);
-    expect(el.querySelector('[data-testid="raster-reveal-layer"]')).toBeNull();
+    expect(el.querySelector('[data-testid="painting-base"]')).toBeNull();
   });
 });

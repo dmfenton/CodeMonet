@@ -87,3 +87,6 @@ ios/**/DerivedData/
 ios/**/*.xcuserstate
 ios/**/xcuserdata/
 ios/*.xcworkspace/xcuserdata/
+
+# Local reveal-replay fixtures (copies of painting versions; see web/src/pages/ReplayPage.tsx)
+web/public/replay-fixtures/

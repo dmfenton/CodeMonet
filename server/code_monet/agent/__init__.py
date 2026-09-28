@@ -33,8 +33,8 @@ from code_monet.claude_runtime import ClaudeLaunch, claude_launch
 from code_monet.config import settings
 from code_monet.program_painting import (
     RENDER_SCALE,
+    OnLive,
     PaintResult,
-    PaintSuccess,
     run_painting_program,
 )
 from code_monet.rendering import (
@@ -107,6 +107,9 @@ class AgentCallbacks:
 
 
 logger = logging.getLogger(__name__)
+
+# How long a pause waits for the CLI to acknowledge an interrupt.
+_INTERRUPT_TIMEOUT_S = 5.0
 
 
 _FILESYSTEM_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
@@ -181,6 +184,7 @@ class DrawingAgent:
         self._pause_lock = asyncio.Lock()
         self._abort = False  # Signal to abort current turn
         self._client: ClaudeSDKClient | None = None
+        self._turn_client: ClaudeSDKClient | None = None  # set while a turn streams
         # This agent's tools act only on this context (never on another user's agent)
         self.tool_context = ToolContext()
         self._drawing_server = create_drawing_server(self.tool_context)
@@ -188,6 +192,7 @@ class DrawingAgent:
         # Drawing hook support - orchestrator sets this callback
         self._on_draw: Callable[[list[Path]], Coroutine[Any, Any, None]] | None = None
         # Painting-version hook - orchestrator broadcasts each rendered version
+        self._on_painting_live: OnLive | None = None
         self._on_painting_version: Callable[[PaintingVersion], Coroutine[Any, Any, None]] | None = (
             None
         )
@@ -248,6 +253,10 @@ class DrawingAgent:
     def set_on_draw(self, callback: Callable[[list[Path]], Coroutine[Any, Any, None]]) -> None:
         """Set the callback for drawing paths. Called by orchestrator."""
         self._on_draw = callback
+
+    def set_on_painting_live(self, callback: OnLive) -> None:
+        """Set the callback for paint runs streaming live. Called by orchestrator."""
+        self._on_painting_live = callback
 
     def set_on_painting_version(
         self, callback: Callable[[PaintingVersion], Coroutine[Any, Any, None]]
@@ -367,9 +376,24 @@ class DrawingAgent:
         self.pending_nudges.append(text)
 
     async def pause(self) -> None:
-        """Pause the agent loop (thread-safe)."""
+        """Pause the agent loop: no new turns start (thread-safe)."""
         async with self._pause_lock:
             self._paused = True
+
+    async def stop_turn(self) -> None:
+        """End the running turn now, if one is running.
+
+        Interrupting makes the CLI stop generating (and cancel a tool call in
+        flight) and emit its closing messages, where the turn sees the abort.
+        """
+        self._abort = True
+        client = self._turn_client
+        if client is None:
+            return
+        try:
+            await asyncio.wait_for(client.interrupt(), timeout=_INTERRUPT_TIMEOUT_S)
+        except Exception as e:  # the abort flag still ends the turn at its next message
+            logger.warning(f"Interrupt failed: {e!r}")
 
     async def resume(self) -> None:
         """Resume the agent loop (thread-safe)."""
@@ -584,13 +608,17 @@ class DrawingAgent:
             img = self._get_canvas_image(highlight_human=True)
             return image_to_jpeg_bytes(img)
 
+        async def on_version(version: PaintingVersion) -> None:
+            self.tool_context.gate.note_drawing(version.ops)
+            if self._on_painting_version:
+                await self._on_painting_version(version)
+
         async def run_paint() -> PaintResult:
-            result = await run_painting_program(state)
-            if isinstance(result, PaintSuccess):
-                self.tool_context.gate.note_drawing(result.version.ops)
-                if self._on_painting_version:
-                    await self._on_painting_version(result.version)
-            return result
+            # The version is announced by the run itself: a pause landing while
+            # it is being recorded must not leave it recorded but unannounced.
+            return await run_painting_program(
+                state, on_live=self._on_painting_live, on_version=on_version
+            )
 
         launch = claude_launch(state.user_id, state.workspace_dir)
         self.tool_context.bind_turn(
@@ -612,26 +640,37 @@ class DrawingAgent:
             if client is None:
                 raise RuntimeError("Agent client did not connect")
 
-            # Send the turn prompt with canvas image
-            await client.query(self._build_multimodal_prompt())
+            if self._abort:  # stopped while connecting
+                yield AgentTurnComplete(thinking="", done=False)
+                return
 
-            # Track iteration for tool completion callback
-            self._current_iteration = 1
+            self._turn_client = client
+            try:
+                # Send the turn prompt with canvas image
+                await client.query(self._build_multimodal_prompt())
 
-            # Notify iteration start
-            if cb.on_iteration_start:
-                await cb.on_iteration_start(1, 1)
+                # Track iteration for tool completion callback
+                self._current_iteration = 1
 
-            # Process messages using the processor module
-            result = await _process_turn_messages(
-                client=client,
-                callbacks=cb,
-                is_aborted=lambda: self._abort,
-                iteration=self._current_iteration,
-            )
+                # Notify iteration start
+                if cb.on_iteration_start:
+                    await cb.on_iteration_start(1, 1)
 
-            # Handle abort
+                # Process messages using the processor module
+                result = await _process_turn_messages(
+                    client=client,
+                    callbacks=cb,
+                    is_aborted=lambda: self._abort,
+                    iteration=self._current_iteration,
+                )
+            finally:
+                self._turn_client = None
+
+            # Handle abort. The unread rest of this response would leak into the
+            # next turn's receive_response, so the aborted session is dropped
+            # (each turn rebuilds its full context anyway).
             if result.aborted:
+                await self._disconnect_client(client)
                 yield AgentTurnComplete(thinking=result.thinking, done=False)
                 return
 

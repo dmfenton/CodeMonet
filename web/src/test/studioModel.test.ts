@@ -27,12 +27,9 @@ import {
   routeMessage,
   seedVersionHistory,
   stagesFromLabels,
-  stagesFromManifest,
   truncateText,
   upsertVersion,
 } from '@code-monet/shared';
-import sample from './fixtures/reveal.sample.json';
-import { parseRevealManifest } from '@code-monet/shared';
 
 const ref = (piece: number, version: number): PaintingVersionRef => ({
   piece_number: piece,
@@ -427,14 +424,6 @@ describe('stage bar', () => {
     const bar = buildStageBar(stagesFromLabels(['a', 'b', 'c']), 0);
     expect(bar.map((s) => s.weight)).toEqual([1 / 3, 1 / 3, 1 / 3]);
     expect(bar.map((s) => s.state)).toEqual(['current', 'pending', 'pending']);
-  });
-
-  it('reads a real reveal.json', () => {
-    const manifest = parseRevealManifest(sample);
-    expect(manifest).not.toBeNull();
-    const specs = stagesFromManifest(manifest!);
-    expect(specs.length).toBe(manifest!.keyframes.length);
-    expect(specs[0]!.ops).toBe(manifest!.keyframes[0]!.ops.length);
   });
 
   it('is empty without stages', () => {

@@ -2,9 +2,9 @@ import MonetNetworking
 import MonetRender
 import SwiftUI
 
-/// Shows a `.raster` gallery piece's final image — no reveal animation, no
-/// vector strokes (program-painting spec §2.1's `galleryRasterImageUrl`
-/// case). Deliberately separate from `PaintingRevealController`: a saved
+/// Shows a `.raster` gallery piece's final image — no playback, no vector
+/// strokes (program-painting spec §2.1's `galleryRasterImageUrl` case).
+/// Deliberately separate from `PaintingPerformanceController`: a saved
 /// piece being browsed has nothing to animate, so this is just a fetch +
 /// decode + display, keyed by URL via `.task(id:)` so switching between
 /// gallery pieces (or leaving/re-entering one) re-fetches correctly and
@@ -36,7 +36,7 @@ struct GalleryRasterImageView: View {
             } catch {
                 // Leave the previous image (or blank) on screen rather than
                 // crash or show an error state over a transient fetch
-                // failure — matches `PaintingRevealController`'s own
+                // failure — matches `PaintingPerformanceController`'s own
                 // failure handling.
             }
         }

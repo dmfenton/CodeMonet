@@ -30,7 +30,10 @@ async def handle_paint(ctx: ToolContext, _args: dict[str, Any]) -> dict[str, Any
                 f"stages: {', '.join(v.stages) or '(none)'}. Viewers are watching it paint in now.\n"
                 f"Full resolution ({v.image_width}x{v.image_height}): paintings/{v.token}/final.png "
                 "(use Read on it, or crop it with Bash, to inspect detail).\n"
-                "Look hard at the image below before changing anything."
+                "Look hard at the image below before changing anything.\n"
+                f"Your program is archived as studio/versions/v{v.version}.py and "
+                "studio/painting.py is reset: the next program paints over this canvas "
+                "(only what it adds or changes; no erasing — paint new forms over old)."
             )
             return {
                 "content": [
@@ -46,8 +49,9 @@ paint = ToolSpec(
 
 The program paints on a ready `cv` canvas (paintlib) — see the system prompt for the API.
 Each successful run becomes a new version of the painting that viewers watch paint in,
-stage by stage. Returns the rendered image, or the program's traceback on error.
-Edit the program with Write/Edit, then call paint again.""",
+stroke by stroke. After the first version, each program paints over the current canvas:
+write only the revision (what it adds or changes). Returns the rendered image, or the
+program's traceback on error.""",
     {},
     handle_paint,
 )

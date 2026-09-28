@@ -1,5 +1,23 @@
 import MonetProtocol
 
+/// One pass of a painting version, as the stage bar sees it: its
+/// `cv.stage(...)` label and how much work it holds (the hand time of its
+/// strokes in the performance, or `1` when only the labels are known).
+public struct StageSpec: Equatable, Sendable {
+    public var label: String
+    public var weight: Double
+
+    public init(label: String, weight: Double = 1) {
+        self.label = label
+        self.weight = weight
+    }
+
+    /// Labels only (a version's `stages` list): equal widths.
+    public static func labels(_ labels: [String]) -> [StageSpec] {
+        labels.map { StageSpec(label: $0) }
+    }
+}
+
 /// One stage of a painting version, as drawn in the Studio's stage bar.
 public struct StageSegment: Equatable, Sendable, Identifiable {
     public enum Progress: Equatable, Sendable {
@@ -8,52 +26,53 @@ public struct StageSegment: Equatable, Sendable, Identifiable {
         case pending
     }
 
-    /// Index of the segment's first keyframe in `reveal.json`.
+    /// Index of the segment's first `StageSpec`.
     public var id: Int
     public var label: String
-    public var opCount: Int
+    /// Summed `StageSpec.weight` of the merged specs.
+    public var weight: Double
     /// Share of the bar's width, `0...1`; all segments sum to 1.
     public var fraction: Double
     public var progress: Progress
 
-    public init(id: Int, label: String, opCount: Int, fraction: Double, progress: Progress) {
+    public init(id: Int, label: String, weight: Double, fraction: Double, progress: Progress) {
         self.id = id
         self.label = label
-        self.opCount = opCount
+        self.weight = weight
         self.fraction = fraction
         self.progress = progress
     }
 }
 
-/// Stage bar model: one segment per `reveal.json` keyframe (consecutive
-/// keyframes with the same label merged), width proportional to its op
-/// count with a floor so small stages stay visible.
+/// Stage bar model: one segment per stage (consecutive specs with the same
+/// label merged), width proportional to its weight with a floor so small
+/// stages stay visible.
 public enum StageBar {
     public static let defaultMinimumFraction = 0.08
 
-    /// - Parameter revealingKeyframe: the keyframe index currently being
-    ///   revealed, or `nil` when the version is fully shown.
+    /// - Parameter active: index of the spec being painted right now, or
+    ///   `nil` when the version is fully shown.
     public static func segments(
-        manifest: RevealManifest,
-        revealingKeyframe: Int?,
+        stages: [StageSpec],
+        active: Int?,
         minimumFraction: Double = defaultMinimumFraction
     ) -> [StageSegment] {
-        var groups: [(first: Int, last: Int, label: String, ops: Int)] = []
-        for (index, keyframe) in manifest.keyframes.enumerated() {
-            if let lastGroup = groups.last, lastGroup.label == keyframe.label {
-                groups[groups.count - 1] = (lastGroup.first, index, lastGroup.label, lastGroup.ops + keyframe.ops.count)
+        var groups: [(first: Int, last: Int, label: String, weight: Double)] = []
+        for (index, stage) in stages.enumerated() {
+            if let lastGroup = groups.last, lastGroup.label == stage.label {
+                groups[groups.count - 1] = (lastGroup.first, index, lastGroup.label, lastGroup.weight + max(stage.weight, 0))
             } else {
-                groups.append((index, index, keyframe.label, keyframe.ops.count))
+                groups.append((index, index, stage.label, max(stage.weight, 0)))
             }
         }
-        let fractions = flooredFractions(groups.map { Double($0.ops) }, minimum: minimumFraction)
+        let fractions = flooredFractions(groups.map(\.weight), minimum: minimumFraction)
         return groups.enumerated().map { offset, group in
             StageSegment(
                 id: group.first,
                 label: group.label,
-                opCount: group.ops,
+                weight: group.weight,
                 fraction: fractions[offset],
-                progress: progress(first: group.first, last: group.last, revealing: revealingKeyframe)
+                progress: progress(first: group.first, last: group.last, revealing: active)
             )
         }
     }

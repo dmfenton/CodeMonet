@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import shutil
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -53,6 +54,7 @@ from code_monet.workspace.strokes import (
 
 if TYPE_CHECKING:
     from code_monet.config import Settings
+    from code_monet.program_painting import LiveStarted
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,8 @@ class WorkspaceState:
         self._painting_versions: list[PaintingVersion] = []
         # Bumped whenever the painting resets, so stale paint runs can be discarded
         self._painting_generation: int = 0
+        # The paint run streaming its performance right now, if any (not persisted)
+        self.live_painting: LiveStarted | None = None
         self._loaded = False
 
         # Pending strokes for client-side rendering
@@ -354,9 +358,17 @@ class WorkspaceState:
 
     def _reset_painting(self) -> None:
         """Forget the current painting; the next program starts from scratch."""
+        latest = self.painting
         self._painting_versions = []
         self._painting_generation += 1
+        if latest is not None:
+            # Nothing continues a finished piece's canvas.
+            canvas = self.painting_asset(latest.token, "canvas.npz")
+            if canvas is not None:
+                canvas.unlink(missing_ok=True)
         self.studio_program.unlink(missing_ok=True)
+        # The archived revision programs belong to the finished piece.
+        shutil.rmtree(self.studio_program.parent / "versions", ignore_errors=True)
 
     @property
     def has_pending_strokes(self) -> bool:

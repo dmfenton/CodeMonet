@@ -1,0 +1,7 @@
+cv.stage("ground")
+cv.ground("#d9c9a8")
+cv.stage("sky")
+cv.fill(cv.rect_mask(0, 0, W, H // 2), "#6d8fb0")
+cv.stroke([(20, 20), (200, 60)], 12, "#ffffff")
+cv.stage("hills")
+cv.stroke([(10, 170), (160, 140), (310, 175)], 18, "#557744")

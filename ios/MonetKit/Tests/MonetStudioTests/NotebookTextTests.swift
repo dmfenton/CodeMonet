@@ -115,10 +115,10 @@ struct NotebookTextTests {
     // MARK: - Stage bar caption
 
     private func segments(revealing: Int?) -> [StageSegment] {
-        let manifest = RevealManifest(width: 10, height: 10, keyframes: [
+        let stages = StageSpec.labels([
             "tone", "sky lay-in", "water lay-in", "harbor", "the boats", "the sun", "glaze", "final touches",
-        ].map { RevealKeyframe(label: $0, image: "kf.jpg", ops: [.area(x0: 0, y0: 0, x1: 1, y1: 1)]) })
-        return StageBar.segments(manifest: manifest, revealingKeyframe: revealing)
+        ])
+        return StageBar.segments(stages: stages, active: revealing)
     }
 
     @Test("caption names the revealing stage, or the stage count and last stage when done")
@@ -131,10 +131,7 @@ struct NotebookTextTests {
     func labelsFit() {
         let eight = segments(revealing: nil)
         #expect(!StageBar.labelsFit(eight, totalWidth: 360, spacing: 3, characterWidth: 6.6))
-        let manifest = RevealManifest(width: 10, height: 10, keyframes: ["sky", "sea"].map {
-            RevealKeyframe(label: $0, image: "kf.jpg", ops: [.area(x0: 0, y0: 0, x1: 1, y1: 1)])
-        })
-        let two = StageBar.segments(manifest: manifest, revealingKeyframe: nil)
+        let two = StageBar.segments(stages: StageSpec.labels(["sky", "sea"]), active: nil)
         #expect(StageBar.labelsFit(two, totalWidth: 360, spacing: 3, characterWidth: 6.6))
     }
 }

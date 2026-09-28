@@ -193,12 +193,15 @@ async def handle_load_canvas(workspace: ActiveWorkspace, message: dict[str, Any]
 
 
 async def handle_pause(workspace: ActiveWorkspace) -> None:
-    """Handle pause request."""
+    """Handle pause request: stop the running turn too, not just future ones."""
     await workspace.agent.pause()
     workspace.state.status = AgentStatus.PAUSED
     workspace.state.pause_reason = PauseReason.USER  # User explicitly paused
     await workspace.state.save()
     await workspace.connections.broadcast(PausedMessage(paused=True))
+    # Clients already show paused; this waits (bounded, a few seconds at most)
+    # for the CLI to acknowledge the interrupt of the running turn.
+    await workspace.agent.stop_turn()
     logger.info(f"User {workspace.user_id}: agent paused")
 
 

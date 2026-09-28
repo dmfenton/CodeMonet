@@ -13,6 +13,17 @@ Workflow: design value/color fields ("guides") with numpy, then paint them in pa
 like a painter: ground -> thin lay-in -> big masses -> forms -> detail -> glazes/accents.
 In a painting program `cv` = Canvas(W, H, seed) already exists and is exported for you.
 
+Revisions paint over the current canvas. The first version starts on a blank canvas;
+every later run starts with `cv` holding the current version's paint (colour, relief,
+surface settings), and the program paints only what it adds or changes. `cv.rgb` /
+`cv.height` hold the current picture, so masks and guides can sample it.
+Erasing is not allowed: never paint an area back to empty background, and never
+cover something with a blank layer to repaint it. To change a form, paint the new
+form directly over the old one; where parts of the old form must go (the new shape
+is smaller, an object is removed), paint what belongs there over just those parts,
+after the new form, as finished paint with its brushwork. ground() primes the canvas
+of a piece's first version only; in a revision it raises.
+
     cv.stage("ground"); cv.ground("#d8c8a8", weave=0.5)
     cv.stage("sky")
     sky = cv.rect_mask(0, 0, cv.W, 520)
@@ -24,18 +35,20 @@ In a painting program `cv` = Canvas(W, H, seed) already exists and is exported f
 
 Stages
   stage(label)   Start a painter's pass; viewers watch each pass paint in, stroke by
-                 stroke. Use 4-10 stages named as a painter would ("sky", "figures").
+                 stroke. Use 4-10 stages named as a painter would ("sky", "figures");
+                 a revision may be one or two passes ("warmer sky", "second boat").
                  Long stages auto-split every 2500 marks into extra keyframes of the
                  same label (layered reveal); the export summary lists each label once.
 
 Surface (plain attributes: set them, e.g. cv.impasto = 0.4)
-  ground(color, mottle=.03, weave=.5)   Prime the canvas; weave 0 smooth panel .. 1 linen.
+  ground(color, mottle=.03, weave=.5)   Prime the canvas (first version only);
+                                        weave 0 smooth panel .. 1 linen.
   cv.impasto  Raking-light relief strength: 1.0 thick oil (Turner), 0.3-0.5 flat-brush
               oil (Cezanne), 0-0.2 acrylic/poster.
   cv.light    (dx, dy) light direction, default (-.65, -.6) = upper left.
   cv.varnish  RGB multiplier on the finished image (warm old varnish ~[1, .98, .92]).
   cv.rgb (HxWx3 float 0..1) and cv.height (HxW relief) are writable numpy arrays;
-  direct edits are revealed as one area wipe at the end of the stage.
+  direct edits are laid in as broad strokes at the end of the stage.
   Paint body follows value: light colors deposit more impasto than darks.
 
 Masks (HxW float 0..1)
@@ -157,13 +170,15 @@ import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, BinaryIO, TypedDict
 
 import numpy as np
 from PIL import Image, ImageDraw
 from scipy import ndimage as ndi
 
+from .brushplan import PlanKind
 from .noise import cellular, fbm, smoothstep, value_noise
+from .performance import Performance
 
 ColorLike = str | Sequence[float] | np.ndarray
 Points = Sequence[Sequence[float]] | np.ndarray
@@ -172,9 +187,24 @@ AngleSpec = float | np.ndarray | Callable[[float, float, np.random.Generator], f
 
 # Auto-split long stages so the reveal shows paint layering, not one jump.
 _OPS_PER_KEYFRAME = 2500
-_MAX_KEYFRAMES = 40
+_MAX_KEYFRAMES = 64
+# An area op at least this fraction of the canvas gets a keyframe of its own:
+# its footprint is a whole rect, so sharing a keyframe with marks would reveal
+# their paint in its wipe (or its paint through their footprints).
+_LARGE_AREA = 0.02
 _MAX_REVEAL_POINTS = 8
 _BRISTLE_BANK = 24
+# paint_region works its region in patches of about this many marks across.
+_PATCH_MARKS = 7
+# paint_region marks recorded per performance diff (neighbours, in painter's order).
+_MARKS_PER_RECORD = 24
+
+
+@dataclass
+class _Keyframe:
+    label: str
+    image: np.ndarray  # HxWx3 uint8, the finished look at the keyframe's end
+    ops: list[list[Any]]
 
 
 def rgb(color: ColorLike) -> np.ndarray:
@@ -218,8 +248,13 @@ class Canvas:
         self.impasto = 1.0
         self.varnish = np.array([1.0, 0.985, 0.95], np.float32)
         self._stages: list[_Stage] = [_Stage("start")]
-        self._keyframes: list[tuple[str, np.ndarray, list[list[Any]]]] = []
-        self._last_snapshot = self.rgb.copy()
+        self._keyframes: list[_Keyframe] = []
+        self._performance = Performance(self.rgb, self.height, self._lit_box)
+        # The last brush mark's footprint (ys, xs, position along it), for batching.
+        self._footprint: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
+        # True when this run revises a previous version (load_state): it paints over
+        # that canvas and may not prime a fresh one.
+        self.continues = False
         self._bristle_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
     # ------------------------------------------------------------------ setup
@@ -252,12 +287,18 @@ class Canvas:
 
         weave: 0 = smooth panel/paper tooth, 1 = strong woven canvas.
         """
+        if self.continues:
+            raise ValueError(
+                "ground() primes the canvas of a piece's first version only. This run is a "
+                "revision: it paints over the current picture, and erasing is not allowed. "
+                "Paint the new forms directly over the old ones."
+            )
         self.tooth = self._make_tooth(weave)
         base = rgb(color)
         m = fbm((self.H, self.W), 180, 3, self.seed + 7) - 0.5
         self.rgb[:] = base * (1 + mottle * m[..., None] * 2)
         self.height[:] = 0
-        self._record(["a", 0, 0, self.W, self.H])
+        self._record(["a", 0, 0, self.W, self.H], kind="prime")
 
     # ------------------------------------------------------------------ stages
 
@@ -269,24 +310,33 @@ class Canvas:
         self._close_stage()
         self._stages.append(_Stage(label))
 
-    def _record(self, op: list[Any]) -> None:
+    def _record(self, op: list[Any], kind: PlanKind = "lay") -> None:
         st = self._stages[-1]
+        large = op[0] == "a" and (op[3] - op[1]) * (op[4] - op[2]) >= _LARGE_AREA * self.W * self.H
+        if large and st.ops:
+            # Close before the area op, on the surface as it was before it.
+            self._close_stage(before_op=True)
+            self._stages.append(_Stage(st.label))
+            st = self._stages[-1]
+        self._performance.record(op, self.rgb, self.height, st.label, kind)
         st.ops.append(op)
-        if len(st.ops) >= _OPS_PER_KEYFRAME:
+        if large or len(st.ops) >= _OPS_PER_KEYFRAME:
             self._close_stage()
             self._stages.append(_Stage(st.label))
 
-    def _close_stage(self) -> None:
+    def _close_stage(self, before_op: bool = False) -> None:
+        """Close the open keyframe; before_op: on the surface as of the last recorded op."""
+        self._flush_marks()
         st = self._stages[-1]
-        changed = np.abs(self.rgb - self._last_snapshot).max(axis=2) > 0.004
-        any_change = bool(changed.any())
-        if not st.ops and not any_change:
+        perf = self._performance
+        if not before_op:
+            edit = perf.record_direct_edits(self.rgb, self.height, st.label)
+            if edit is not None:
+                st.ops.append(edit)
+        if not st.ops:
             return
-        if any_change and not st.ops:
-            ys, xs = np.nonzero(changed)
-            st.ops.append(["a", int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1])
-        self._keyframes.append((st.label, self.finished(), st.ops))
-        self._last_snapshot = self.rgb.copy()
+        img = self._lit(perf.shadow_rgb, perf.shadow_height)
+        self._keyframes.append(_Keyframe(st.label, _to_u8(img), st.ops))
         st.ops = []
 
     # ------------------------------------------------------------------ masks
@@ -887,6 +937,7 @@ class Canvas:
         x1 = int(min(self.W, math.ceil(float(p[:, 0].max()) + hw + 2)))
         y0 = int(max(0, math.floor(float(p[:, 1].min()) - hw - 2)))
         y1 = int(min(self.H, math.ceil(float(p[:, 1].max()) + hw + 2)))
+        self._footprint = None
         if x1 <= x0 or y1 <= y0:
             return False
         dist, s, side = _polyline_field(p, hw, (x0, y0, x1, y1))
@@ -929,6 +980,7 @@ class Canvas:
         if not m.any():
             return True
         gy, gx = iy[m] + y0, ix[m] + x0
+        self._footprint = (gy, gx, s[m])
         old = self.rgb[gy, gx]
         c = cov[m][:, None]
         if glaze:
@@ -987,17 +1039,22 @@ class Canvas:
             self._record_dab(x, y, angle, length, width)
 
     def _record_dab(self, x: float, y: float, angle: float, length: float, width: float) -> None:
-        ca, sa = math.cos(angle) * length / 2, math.sin(angle) * length / 2
-        self._record(
-            [
-                "s",
-                round(float(width), 1),
-                round(x - ca, 1),
-                round(y - sa, 1),
-                round(x + ca, 1),
-                round(y + sa, 1),
-            ]
-        )
+        self._record(_dab_op(x, y, angle, length, width))
+
+    def _record_mark(self, op: list[Any]) -> None:
+        """One of paint_region's marks: recorded with its neighbours in one diff."""
+        st = self._stages[-1]
+        if self._footprint is not None:
+            self._performance.add_mark(*self._footprint)
+        st.ops.append(op)
+        if self._performance.pending_marks >= _MARKS_PER_RECORD:
+            self._flush_marks()
+        if len(st.ops) >= _OPS_PER_KEYFRAME:
+            self._close_stage()
+            self._stages.append(_Stage(st.label))
+
+    def _flush_marks(self) -> None:
+        self._performance.record_marks(self.rgb, self.height, self._stages[-1].label)
 
     def _dab(
         self,
@@ -1016,6 +1073,7 @@ class Canvas:
         round_tip: bool,
         r: np.random.Generator,
     ) -> bool:
+        self._footprint = None
         if length <= 0 or width <= 0:
             return False
         ca, sa = math.cos(angle), math.sin(angle)
@@ -1054,6 +1112,7 @@ class Canvas:
         pb = prof[i0] * (1 - fr) + prof[i1] * fr
         pc = prof2[i0] * (1 - fr) + prof2[i1] * fr
         gy, gx = iy + y0, ix + x0
+        self._footprint = (gy, gx, t)
         g = self.tooth[gy, gx]
         dens = 1 - dry * t**1.6
         cov = np.clip((dens * (0.55 + 0.45 * pb) - g * 0.38) * 5 + 0.3, 0, 1)
@@ -1214,8 +1273,9 @@ class Canvas:
                     clip,
                     r,
                 ):
-                    self._record(["s", round(wd, 1), *_reveal_points(path)])
+                    self._record_mark(["s", round(wd, 1), *_reveal_points(path)])
                     laid += 1
+            self._flush_marks()
             return laid
         if brush == "dab":
             for i in range(n):
@@ -1242,8 +1302,9 @@ class Canvas:
                     round_tip,
                     r,
                 ):
-                    self._record_dab(x, y, a, L, wd)
+                    self._record_mark(_dab_op(x, y, a, L, wd))
                     laid += 1
+            self._flush_marks()
             return laid
         # patch: constructive groups of parallel strokes, one modulated color graded across
         for i in range(n):
@@ -1286,8 +1347,9 @@ class Canvas:
                     round_tip,
                     r,
                 ):
-                    self._record_dab(sx, sy, aj, la, wd)
+                    self._record_mark(_dab_op(sx, sy, aj, la, wd))
                     laid += 1
+        self._flush_marks()
         return laid
 
     def contour(
@@ -1524,7 +1586,7 @@ class Canvas:
         if thick:
             h = self.height[y0:y1, x0:x1]
             h[:] = h * (1 - 0.5 * m[..., 0]) + thick * m[..., 0]
-        self._record(["a", x0, y0, x1, y1])
+        self._record(["a", x0, y0, x1, y1], kind="shape")
         if empty is not None:
             empty[y0:y1, x0:x1] = m[..., 0]
         return empty
@@ -1580,9 +1642,66 @@ class Canvas:
 
     def finished(self) -> np.ndarray:
         """The painting as it will be shown: impasto lit by raking light, varnish tone."""
-        h = ndi.gaussian_filter(self.height, 1.0) + 0.06 * self.tooth * (
-            1 - np.clip(self.height, 0, 1)
+        return self._lit(self.rgb, self.height)
+
+    def stream_to(self, sink: BinaryIO) -> None:
+        """Stream the performance (performance.py) to `sink` as the program paints.
+
+        On a continued canvas (load_state) it starts from that version's picture.
+        """
+        self._performance.stream_to(sink, _to_u8(self.finished()), revision=self.continues)
+
+    def save_state(self, path: str | Path) -> None:
+        """Write the canvas (paint, relief, tooth, surface settings) for the next revision."""
+        # float16: well under one 8-bit level, and a third of the size of float32.
+        np.savez_compressed(
+            path,
+            rgb=self.rgb.astype(np.float16),
+            height=self.height.astype(np.float16),
+            tooth=self.tooth.astype(np.float16),
+            light=np.asarray(self.light, np.float32),
+            impasto=np.float32(self.impasto),
+            varnish=np.asarray(self.varnish, np.float32),
         )
+
+    def load_state(self, path: str | Path | BinaryIO) -> None:
+        """Continue a previous version's canvas: this program paints over it."""
+        with np.load(path, allow_pickle=False) as z:
+            rgb_, height, tooth = z["rgb"], z["height"], z["tooth"]
+            plane = (self.H, self.W)
+            if rgb_.shape != (*plane, 3) or height.shape != plane or tooth.shape != plane:
+                raise ValueError(f"canvas state {rgb_.shape} does not fit {self.W}x{self.H}")
+            self.rgb = rgb_.astype(np.float32)
+            self.height = height.astype(np.float32)
+            self.tooth = tooth.astype(np.float32)
+            lx, ly = (float(v) for v in z["light"])
+            self.light = (lx, ly)
+            self.impasto = float(z["impasto"])
+            self.varnish = z["varnish"].astype(np.float32)
+        self._performance = Performance(self.rgb, self.height, self._lit_box)
+        self.continues = True
+
+    def abort_stream(self) -> None:
+        self._performance.abort()
+
+    def _lit_box(self, box: tuple[int, int, int, int]) -> np.ndarray:
+        """finished() inside `box` only (padded so the lighting filter sees neighbours)."""
+        x0, y0, x1, y1 = box
+        p = 4
+        px0, py0 = max(0, x0 - p), max(0, y0 - p)
+        px1, py1 = min(self.W, x1 + p), min(self.H, y1 + p)
+        lit = self._lit(
+            self.rgb[py0:py1, px0:px1],
+            self.height[py0:py1, px0:px1],
+            self.tooth[py0:py1, px0:px1],
+        )
+        return lit[y0 - py0 : y1 - py0, x0 - px0 : x1 - px0]
+
+    def _lit(
+        self, rgb_: np.ndarray, height: np.ndarray, tooth: np.ndarray | None = None
+    ) -> np.ndarray:
+        tooth = self.tooth if tooth is None else tooth
+        h = ndi.gaussian_filter(height, 1.0) + 0.06 * tooth * (1 - np.clip(height, 0, 1))
         gy, gx = np.gradient(h * 2.6 * self.impasto)
         lx, ly = self.light
         L = np.array([lx, ly, 0.58], np.float32)
@@ -1590,7 +1709,7 @@ class Canvas:
         nn = np.sqrt(gx * gx + gy * gy + 1)
         lam = (-gx * L[0] - gy * L[1] + L[2]) / nn
         shade = 1 + 0.7 * (lam - L[2])
-        out = self.rgb * shade[..., None] * self.varnish
+        out = rgb_ * shade[..., None] * self.varnish
         return np.clip(out, 0, 1)
 
     def export(self, out_dir: str | Path, preview_width: int = 1200) -> RevealSummary:
@@ -1600,12 +1719,14 @@ class Canvas:
         out.mkdir(parents=True, exist_ok=True)
         frames = _limit_keyframes(self._keyframes)
         manifest: list[dict[str, Any]] = []
-        for i, (label, img, ops) in enumerate(frames):
+        for i, kf in enumerate(frames):
             name = f"kf_{i:02d}.jpg"
-            Image.fromarray(_to_u8(img)).save(out / name, quality=88)
-            manifest.append({"label": label, "image": name, "ops": ops})
+            Image.fromarray(kf.image).save(out / name, quality=88)
+            manifest.append({"label": kf.label, "image": name, "ops": kf.ops})
         final = self.finished()
         final_u8 = _to_u8(final)
+        self._performance.finish(final_u8, self._stages[-1].label)
+        self.save_state(out / "canvas.npz")
         Image.fromarray(final_u8).save(out / "final.png")
         prev = Image.fromarray(final_u8)
         if prev.width > preview_width:
@@ -1614,7 +1735,12 @@ class Canvas:
                 Image.Resampling.LANCZOS,
             )
         prev.save(out / "preview.jpg", quality=90)
-        reveal = {"width": self.W, "height": self.H, "keyframes": manifest}
+        reveal = {
+            "width": self.W,
+            "height": self.H,
+            "continues": self.continues,
+            "keyframes": manifest,
+        }
         (out / "reveal.json").write_text(json.dumps(reveal, separators=(",", ":")))
         return reveal_summary(reveal)
 
@@ -1687,6 +1813,19 @@ def _smooth1d(r: np.random.Generator, sigma: float, n: int) -> np.ndarray:
     return v / (v.std() + 1e-6)
 
 
+def _dab_op(x: float, y: float, angle: float, length: float, width: float) -> list[Any]:
+    """A dab's reveal op: a two-point stroke along its length."""
+    ca, sa = math.cos(angle) * length / 2, math.sin(angle) * length / 2
+    return [
+        "s",
+        round(float(width), 1),
+        round(x - ca, 1),
+        round(y - sa, 1),
+        round(x + ca, 1),
+        round(y + sa, 1),
+    ]
+
+
 def _stratified_points(region: np.ndarray, count: int, r: np.random.Generator) -> np.ndarray:
     """~count points spread evenly over a soft region (jittered grid, density = region value)."""
     if count <= 0:
@@ -1714,7 +1853,32 @@ def _stratified_points(region: np.ndarray, count: int, r: np.random.Generator) -
         pts = np.vstack([pts, extra])
     elif len(pts) > count:
         pts = pts[r.choice(len(pts), count, replace=False)]
-    return pts[r.permutation(len(pts))].astype(np.float32)
+    return _painter_order(pts, sp, r).astype(np.float32)
+
+
+def _painter_order(pts: np.ndarray, sp: float, r: np.random.Generator) -> np.ndarray:
+    """Marks in the order a painter lays them: patch by patch, not scattered.
+
+    The region is worked in patches of about _PATCH_MARKS x _PATCH_MARKS marks
+    (a hand's working area), going back and forth along its long axis row by
+    row; inside a patch the marks go side by side in short sub-rows. Neighbouring
+    marks sample neighbouring guide colours, so consecutive marks share a load
+    of paint. Jitter keeps the traversal from reading as a raster.
+    """
+    n = len(pts)
+    if n < 3:
+        return pts
+    x, y = pts[:, 0], pts[:, 1]
+    wide = float(np.ptp(x)) >= float(np.ptp(y))
+    u, v = (x, y) if wide else (y, x)
+    u, v = u - u.min(), v - v.min()
+    patch = sp * _PATCH_MARKS
+    pr = np.floor(v / patch + r.uniform(-0.15, 0.15, n))
+    pc = np.floor(u / patch + r.uniform(-0.15, 0.15, n))
+    pc = np.where(pr % 2 == 0, pc, -pc)
+    sub = np.floor(v / (sp * 1.5))
+    su = np.where(sub % 2 == 0, u, -u) + r.normal(0, sp * 0.5, n)
+    return pts[np.lexsort((su, sub, pc, pr))]
 
 
 def _widths_along(pts: np.ndarray, widths: float | Sequence[float] | np.ndarray) -> np.ndarray:
@@ -1792,14 +1956,12 @@ def _polyline_field(
     return dist, sarc / np.float32(cum[-1]), side
 
 
-def _limit_keyframes(
-    frames: list[tuple[str, np.ndarray, list[list[Any]]]],
-) -> list[tuple[str, np.ndarray, list[list[Any]]]]:
+def _limit_keyframes(frames: list[_Keyframe]) -> list[_Keyframe]:
     """Merge adjacent keyframes (keeping the later image) until under the cap."""
     frames = list(frames)
     while len(frames) > _MAX_KEYFRAMES:
-        sizes = [len(frames[i][2]) + len(frames[i + 1][2]) for i in range(len(frames) - 1)]
+        sizes = [len(frames[i].ops) + len(frames[i + 1].ops) for i in range(len(frames) - 1)]
         i = int(np.argmin(sizes))
-        label = frames[i + 1][0]
-        frames[i : i + 2] = [(label, frames[i + 1][1], frames[i][2] + frames[i + 1][2])]
+        a, b = frames[i], frames[i + 1]
+        frames[i : i + 2] = [_Keyframe(b.label, b.image, a.ops + b.ops)]
     return frames

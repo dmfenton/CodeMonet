@@ -192,6 +192,14 @@
   flex: none;
 }
 
+/* Paint mode: the stage bar and version chips appear, grow and change while
+   the painting plays; a fixed height keeps the canvas from ever moving. */
+.studio-under.is-paint {
+  height: 64px;
+  align-content: start;
+  overflow: hidden;
+}
+
 /* Stage bar */
 .stage-bar-wrap {
   display: grid;
@@ -793,4 +801,14 @@
 .status-pill .status-dot {
   width: 6px;
   height: 6px;
+}
+
+/* Program painting: the current version's finished picture (under any performance). */
+.painting-base {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
 }

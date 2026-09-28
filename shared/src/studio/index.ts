@@ -33,7 +33,6 @@ export {
   stageBarCaption,
   stageLabelsFit,
   stagesFromLabels,
-  stagesFromManifest,
 } from './stageBar';
 
 export type { MarkdownBlock, MarkdownSpan, NotebookViewItem } from './notebookView';

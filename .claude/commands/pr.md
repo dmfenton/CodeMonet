@@ -24,6 +24,9 @@ git log Main..HEAD --oneline
 
 Verify:
 
+- If `server/` changed: `make sandbox-e2e` and `make sandbox-tests` pass (paint
+  programs run confined only on Linux, so macOS test runs cannot catch sandbox
+  failures)
 - Working directory is clean
 - Current branch is not Main
 - There are commits ahead of Main

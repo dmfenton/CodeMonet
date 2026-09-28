@@ -53,7 +53,7 @@ struct StudioPresentationTests {
         }
     }
 
-    @Test("a revealing painting reads as painting; plotter strokes as drawing")
+    @Test("a playing painting version reads as painting; plotter strokes as drawing")
     func drawingPills() {
         var state = StudioState()
         state.paused = false
@@ -65,6 +65,18 @@ struct StudioPresentationTests {
         #expect(StudioPresentation.statusPill(for: state) == .init(label: "painting", isActive: true))
         state.drawingStyle = .plotter
         #expect(StudioPresentation.statusPill(for: state).label == "drawing")
+    }
+
+    @Test("a live run reads as painting until its stream has played")
+    func livePaintingPill() {
+        var state = StudioState()
+        state.paused = false
+        state.drawingStyle = .paint
+        let ref = PaintingLiveRef(pieceNumber: 1, assetBase: "/a/", imageWidth: 1, imageHeight: 1)
+        state.painting = PaintingState(live: LivePainting(ref: ref))
+        #expect(StudioPresentation.statusPill(for: state) == .init(label: "painting", isActive: true))
+        state.painting = PaintingState(live: LivePainting(ref: ref, played: true))
+        #expect(StudioPresentation.statusPill(for: state) == .init(label: "idle", isActive: false))
     }
 
     @Test("currentTool is the most recent code_execution's tool")

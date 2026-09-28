@@ -52,7 +52,7 @@ async def run_migrations() -> None:
     from alembic import command
 
     # Run alembic upgrade head
-    alembic_cfg = Config("alembic.ini")
+    alembic_cfg = Config("alembic.ini", attributes={"configure_logger": False})
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
     logger.info("Database migrations completed")
 
@@ -161,6 +161,19 @@ def _painting_ref(state: WorkspaceState) -> dict[str, Any] | None:
     }
 
 
+def _live_ref(state: WorkspaceState) -> dict[str, Any] | None:
+    """The paint run streaming right now, for a client joining mid-performance."""
+    live = state.live_painting
+    if live is None:
+        return None
+    return {
+        "piece_number": live.piece_number,
+        "asset_base": f"/painting-assets/{state.user_id}/{live.token}/",
+        "image_width": live.image_width,
+        "image_height": live.image_height,
+    }
+
+
 async def _init_message(
     state: WorkspaceState, *, paused: bool, turn_active: bool = False
 ) -> dict[str, Any]:
@@ -181,6 +194,7 @@ async def _init_message(
         "drawing_style": drawing_style.value,
         "style_config": get_style_config(drawing_style).model_dump(),
         "painting": _painting_ref(state),
+        "painting_live": _live_ref(state),
         "title": state.current_piece_title,
         "prompt": state.current_piece_prompt,
     }

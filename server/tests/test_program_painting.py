@@ -7,13 +7,22 @@ import json
 import uuid
 from pathlib import Path as FilePath
 
+import numpy as np
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from code_monet import sandbox
-from code_monet.program_painting import PaintFailure, PaintSuccess, run_painting_program
+from code_monet.paintlib.performance import read_frames
+from code_monet.program_painting import (
+    LiveFailed,
+    LiveStarted,
+    PaintFailure,
+    PaintLive,
+    PaintSuccess,
+    run_painting_program,
+)
 from code_monet.routes import paintings as paintings_routes
 from code_monet.types import DrawingStyleType, Path, PathType, Point
 from code_monet.workspace import WorkspaceState
@@ -24,6 +33,12 @@ cv.ground("#d9c9a8")
 cv.stage("sky")
 cv.fill(cv.rect_mask(0, 0, W, H // 2), "#6d8fb0")
 cv.stroke([(20, 20), (200, 60)], 12, "#ffffff")
+"""
+
+# A revision: paints over the canvas the previous version left.
+REVISION = """
+cv.stage("accent")
+cv.stroke([(40, 180), (280, 180)], 14, "#aa2222", dry=0)
 """
 
 
@@ -70,8 +85,8 @@ class TestRunPaintingProgram:
             "painting.py",
         }
         reveal = json.loads((out / "reveal.json").read_text())
-        ops = reveal["keyframes"][1]["ops"]
-        assert ops[0][0] == "a" and ops[1][0] == "s"
+        sky = [op[0] for kf in reveal["keyframes"] if kf["label"] == "sky" for op in kf["ops"]]
+        assert sky[0] == "a" and sky[1] == "s"
         assert v.ops == sum(len(kf["ops"]) for kf in reveal["keyframes"]) > 0
         assert result.preview_jpeg == (out / "preview.jpg").read_bytes()
         assert workspace.painting == v
@@ -90,10 +105,275 @@ class TestRunPaintingProgram:
         assert isinstance(failed, PaintFailure)
         assert "bad brush" in failed.error
         assert workspace.painting == first.version
-        _write_program(workspace, PROGRAM)
+        _write_program(workspace, REVISION)
         second = await run_painting_program(workspace)
         assert isinstance(second, PaintSuccess)
         assert second.version.version == 2
+
+
+class TestLivePerformance:
+    @pytest.mark.asyncio
+    async def test_run_streams_live_into_its_version(self, workspace: WorkspaceState) -> None:
+        _write_program(workspace, PROGRAM)
+        events: list[PaintLive] = []
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+            assert workspace.live_painting == event, "joining viewers can find the live run"
+            stream = workspace.paintings_dir / event.token / "performance.bin"
+            assert stream.is_file(), "the stream exists when it is announced"
+
+        result = await run_painting_program(workspace, on_live=on_live)
+
+        assert isinstance(result, PaintSuccess)
+        assert events == [LiveStarted(workspace.piece_number, result.version.token, 320, 240)]
+        assert workspace.live_painting is None
+        stream = workspace.paintings_dir / result.version.token / "performance.bin"
+        frames = read_frames(stream.read_bytes())
+        assert frames[0].meta["kind"] == "header" and frames[-1].meta["kind"] == "end"
+
+    @pytest.mark.asyncio
+    async def test_failed_run_tells_viewers_to_drop_it(self, workspace: WorkspaceState) -> None:
+        _write_program(workspace, "cv.ground('#fff')\nraise ValueError('bad brush')")
+        events: list[PaintLive] = []
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+
+        result = await run_painting_program(workspace, on_live=on_live)
+
+        assert isinstance(result, PaintFailure)
+        started, failed = events
+        assert isinstance(started, LiveStarted)
+        assert failed == LiveFailed(started.piece_number, started.token)
+        assert not (workspace.paintings_dir / started.token).exists()
+        assert workspace.live_painting is None
+
+    @pytest.mark.asyncio
+    async def test_cancelled_run_stops_and_tells_viewers(self, workspace: WorkspaceState) -> None:
+        """A turn interrupted mid-paint kills the runner and drops the live stream."""
+        import os
+
+        # The program may write only its own output directory (sandboxed on Linux).
+        _write_program(
+            workspace,
+            "import os, sys, time\n"
+            f"open(os.path.join({_OUT_DIR}, 'runner.pid'), 'w').write(str(os.getpid()))\n"
+            "time.sleep(60)",
+        )
+        events: list[PaintLive] = []
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+
+        run = asyncio.create_task(run_painting_program(workspace, on_live=on_live))
+        for _ in range(200):
+            if events:
+                break
+            await asyncio.sleep(0.05)
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        out_dir = workspace.paintings_dir / started.token
+        pid_file = out_dir / "runner.pid"
+        for _ in range(200):
+            if pid_file.exists() and pid_file.read_text():
+                break
+            await asyncio.sleep(0.05)
+        pid = int(pid_file.read_text())
+
+        run.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await run
+
+        for _ in range(100):
+            if len(events) == 2 and not out_dir.exists():
+                break
+            await asyncio.sleep(0.05)
+        assert events[1] == LiveFailed(started.piece_number, started.token)
+        assert not out_dir.exists()
+        for _ in range(100):  # killed at once, reaped by a background task
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
+        else:
+            pytest.fail("the runner is still alive")
+        assert workspace.live_painting is None
+
+
+class TestCancellation:
+    """A version is recorded and announced whole, or the run is dropped whole."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_while_recording_still_records_and_announces(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        saving = asyncio.Event()
+        release = asyncio.Event()
+        record = workspace.record_painting_version
+
+        async def slow_record(*args: object, **kwargs: object) -> object:
+            saving.set()
+            await release.wait()
+            return await record(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(workspace, "record_painting_version", slow_record)
+        live: list[PaintLive] = []
+        announced: list[object] = []
+
+        async def on_live(event: PaintLive) -> None:
+            live.append(event)
+
+        async def on_version(version: object) -> None:
+            announced.append(version)
+
+        run = asyncio.create_task(
+            run_painting_program(workspace, on_live=on_live, on_version=on_version)
+        )
+        await asyncio.wait_for(saving.wait(), 60)
+        run.cancel()  # a pause lands while the version is being saved
+        with pytest.raises(asyncio.CancelledError):
+            await run
+        release.set()
+        for _ in range(200):
+            if announced:
+                break
+            await asyncio.sleep(0.05)
+
+        assert announced == [workspace.painting], "recorded and announced"
+        assert not any(isinstance(e, LiveFailed) for e in live)
+        assert workspace.studio_program.read_text().startswith("# Version 2 paints over")
+        assert workspace.live_painting is None
+
+    @pytest.mark.asyncio
+    async def test_an_error_while_recording_drops_the_run(
+        self, workspace: WorkspaceState, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+
+        async def failing_record(*_args: object, **_kwargs: object) -> object:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(workspace, "record_painting_version", failing_record)
+        events: list[PaintLive] = []
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+
+        with pytest.raises(OSError, match="disk full"):
+            await run_painting_program(workspace, on_live=on_live)
+        await asyncio.sleep(0.05)
+
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        assert events[1] == LiveFailed(started.piece_number, started.token)
+        assert not (workspace.paintings_dir / started.token).exists()
+        assert workspace.live_painting is None
+
+    @pytest.mark.asyncio
+    async def test_cancel_while_announcing_the_live_run_drops_it(
+        self, workspace: WorkspaceState
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        events: list[PaintLive] = []
+        stuck = asyncio.Event()
+
+        async def on_live(event: PaintLive) -> None:
+            events.append(event)
+            if isinstance(event, LiveStarted):
+                stuck.set()
+                await asyncio.sleep(60)
+
+        run = asyncio.create_task(run_painting_program(workspace, on_live=on_live))
+        await asyncio.wait_for(stuck.wait(), 10)
+        run.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await run
+        await asyncio.sleep(0.1)
+
+        started = events[0]
+        assert isinstance(started, LiveStarted)
+        assert events[1] == LiveFailed(started.piece_number, started.token)
+        assert not (workspace.paintings_dir / started.token).exists()
+        assert workspace.painting is None and workspace.live_painting is None
+
+
+class TestRevisions:
+    """A revision paints over the current canvas: its strokes are the new ones."""
+
+    @pytest.mark.asyncio
+    async def test_revision_paints_over_the_current_canvas(self, workspace: WorkspaceState) -> None:
+        _write_program(workspace, PROGRAM)
+        first = await run_painting_program(workspace)
+        assert isinstance(first, PaintSuccess)
+        v1 = workspace.paintings_dir / first.version.token
+        assert workspace.studio_program.read_text().startswith("# Version 2 paints over")
+        assert (workspace.studio_program.parent / "versions" / "v1.py").read_text() == PROGRAM
+
+        _write_program(workspace, REVISION)
+        second = await run_painting_program(workspace)
+
+        assert isinstance(second, PaintSuccess)
+        v2 = workspace.paintings_dir / second.version.token
+        before = np.asarray(Image.open(v1 / "final.png").convert("RGB")).astype(int)
+        after = np.asarray(Image.open(v2 / "final.png").convert("RGB")).astype(int)
+        changed = np.abs(after - before).max(axis=2) > 2
+        assert changed.any() and changed.mean() < 0.2, "only the new stroke changed"
+        assert changed[:, :30].sum() == 0, "the rest of the picture is kept"
+        frames = read_frames((v2 / "performance.bin").read_bytes())
+        assert frames[0].meta["base"] == "previous"
+        stages = {f.meta["stage"] for f in frames if f.meta["kind"] == "chunk"}
+        assert stages == {"accent"}, "the performance is the revision's strokes only"
+        assert second.version.ops > first.version.ops, "the picture's marks accumulate"
+        assert json.loads((v2 / "reveal.json").read_text())["continues"] is True
+        assert not (v1 / "canvas.npz").exists(), "only the latest canvas is kept"
+        assert (v2 / "canvas.npz").is_file()
+
+    @pytest.mark.asyncio
+    async def test_a_revision_cannot_erase_the_canvas(self, workspace: WorkspaceState) -> None:
+        _write_program(workspace, PROGRAM)
+        first = await run_painting_program(workspace)
+        assert isinstance(first, PaintSuccess)
+        _write_program(workspace, 'cv.stage("ground")\ncv.ground("#203040")\n')
+
+        refused = await run_painting_program(workspace)
+
+        assert isinstance(refused, PaintFailure)
+        assert "erasing is not allowed" in refused.error
+        assert workspace.painting == first.version, "the picture is unchanged"
+
+    @pytest.mark.asyncio
+    async def test_failed_revision_keeps_the_program_to_fix(
+        self, workspace: WorkspaceState
+    ) -> None:
+        _write_program(workspace, PROGRAM)
+        assert isinstance(await run_painting_program(workspace), PaintSuccess)
+        _write_program(workspace, "raise ValueError('bad brush')")
+
+        failed = await run_painting_program(workspace)
+
+        assert isinstance(failed, PaintFailure)
+        assert "bad brush" in workspace.studio_program.read_text()
+
+    @pytest.mark.asyncio
+    async def test_new_piece_starts_on_a_blank_canvas(self, workspace: WorkspaceState) -> None:
+        _write_program(workspace, PROGRAM)
+        assert isinstance(await run_painting_program(workspace), PaintSuccess)
+        latest = workspace.paintings_dir / workspace.painting.token  # type: ignore[union-attr]
+        await workspace.new_canvas()
+        assert not (workspace.studio_program.parent / "versions").exists()
+        assert not (latest / "canvas.npz").exists(), "a finished piece keeps no canvas state"
+        _write_program(workspace, REVISION)
+
+        fresh = await run_painting_program(workspace)
+
+        assert isinstance(fresh, PaintSuccess)
+        out = workspace.paintings_dir / fresh.version.token
+        frames = read_frames((out / "performance.bin").read_bytes())
+        assert frames[0].meta["base"] == "blank"
+        assert json.loads((out / "reveal.json").read_text())["continues"] is False
 
 
 # The program shares the runner's process: it can print after the runner, end
@@ -160,7 +440,7 @@ class TestRunnerOutput:
         _write_program(workspace, PROGRAM)
         first = await run_painting_program(workspace)
         assert isinstance(first, PaintSuccess)
-        _write_program(workspace, _REWRITE_REVEAL % reveal + PROGRAM)
+        _write_program(workspace, _REWRITE_REVEAL % reveal + REVISION)
 
         result = await run_painting_program(workspace)
 
@@ -214,6 +494,16 @@ atexit.register(lambda: (os.unlink(p), os.mkdir(p)))
                 "final.png is missing or not a regular file",
             ),
             ("os.unlink(j(out, 'kf_00.jpg'))", "kf_00.jpg is missing or not a regular file"),
+            (
+                # A stream viewers would follow forever: no end frame.
+                "open(j(out, 'performance.bin'), 'wb').write(b'\\x02\\x00\\x00\\x00{}')",
+                "performance.bin does not end properly",
+            ),
+            (
+                # A frame claiming 2 GB, as a program could write to stall readers.
+                "open(j(out, 'performance.bin'), 'wb').write(b'\\xff\\xff\\xff\\x7f' + b'x' * 99)",
+                "performance.bin does not end properly",
+            ),
             (
                 "(os.rename(out, out + '.moved'), os.symlink(out + '.moved', out))",
                 "output directory was moved or replaced",

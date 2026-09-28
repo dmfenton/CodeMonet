@@ -55,10 +55,15 @@ Server (Python)          Shared Library (TS)        Clients (React/RN)
 | `stroke`     | `ClientStrokeMessage`    | Human drew a stroke                    |
 | `nudge`      | `ClientNudgeMessage`     | User guidance text                     |
 | `clear`      | `ClientControlMessage`   | Clear canvas request                   |
-| `pause`      | `ClientControlMessage`   | Pause agent                            |
+| `pause`      | `ClientControlMessage`   | Pause agent; interrupts a running turn |
 | `resume`     | `ClientControlMessage`   | Resume agent (with optional direction) |
 | `new_canvas` | `ClientNewCanvasMessage` | Start new artwork                      |
 | `set_style`  | `ClientSetStyleMessage`  | Change drawing style                   |
+
+A user `pause` stops the agent at once: the running turn is interrupted (a paint
+run in progress is killed and its live stream dropped with `painting_live_failed`).
+When the last client disconnects the agent is also paused, but the running turn is
+left to finish, so a brief disconnect never cuts work short.
 
 ## State Management
 

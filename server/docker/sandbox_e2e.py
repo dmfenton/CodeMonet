@@ -5,7 +5,8 @@
 Runs the real Agent SDK and Claude CLI through `claude-sandboxed`, scripted by a
 local mock of the Anthropic Messages API that makes the "agent" run hostile
 Bash/Read/Grep tool calls, runs hostile painting programs through
-`run_painting_program`, and hostile generate_svg code through `run_python_code`. Fails if anything outside the user's own workspace is
+`run_painting_program` (plus a normal painting, a revision that paints over it,
+and a run cancelled mid-paint), and hostile generate_svg code through `run_python_code`. Fails if anything outside the user's own workspace is
 reachable, or if normal work (own files, Grep, python, painting) breaks.
 Expects DEV_MODE=true, SECRET_CANARY set, and a writable /data owned by the user.
 """
@@ -13,6 +14,7 @@ Expects DEV_MODE=true, SECRET_CANARY set, and a writable /data owned by the user
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -77,6 +79,9 @@ output_paths([line(0, 0, 10, 10)])
 PAINTING = (
     'cv.stage("ground")\ncv.ground("#d9c9a8")\ncv.stroke([(10, 10), (60, 40)], 6, "#223344")\n'
 )
+# A revision paints over the previous version's canvas (read before confinement).
+REVISION = 'cv.stage("accent")\ncv.stroke([(20, 50), (70, 20)], 5, "#aa3322")\n'
+SLOW_PAINTING = 'cv.ground("#d9c9a8")\nimport time\ntime.sleep(60)\n'
 
 tool_results: list[str] = []
 
@@ -184,8 +189,7 @@ async def _agent_turn() -> None:
         pass
 
 
-async def _paint(source: str) -> Any:
-    from code_monet.program_painting import run_painting_program
+def _paint_state() -> Any:
     from code_monet.types import DrawingStyleType
     from code_monet.workspace import WorkspaceState
 
@@ -193,9 +197,63 @@ async def _paint(source: str) -> Any:
     state._loaded = True
     state.canvas.width, state.canvas.height = 80, 60
     state.canvas.drawing_style = DrawingStyleType.PAINT
+    return state
+
+
+async def _paint(source: str, state: Any = None) -> Any:
+    from code_monet.program_painting import run_painting_program
+
+    state = state or _paint_state()
     state.studio_program.parent.mkdir(parents=True, exist_ok=True)
     state.studio_program.write_text(source)
     return await run_painting_program(state)
+
+
+def _paint_runners() -> list[int]:
+    pids = []
+    for proc in Path("/proc").iterdir():
+        try:
+            if proc.name.isdigit() and b"paint_runner" in (proc / "cmdline").read_bytes():
+                pids.append(int(proc.name))
+        except OSError:
+            continue
+    return pids
+
+
+async def _cancelled_paint() -> list[str]:
+    """Cancel a run mid-paint (a pause interrupting the turn): the runner must die,
+    its output go, and viewers hear the stream was dropped."""
+    from code_monet.program_painting import LiveFailed, LiveStarted, run_painting_program
+
+    state = _paint_state()
+    state.studio_program.parent.mkdir(parents=True, exist_ok=True)
+    state.studio_program.write_text(SLOW_PAINTING)
+    events: list[Any] = []
+
+    async def on_live(event: Any) -> None:
+        events.append(event)
+
+    run = asyncio.create_task(run_painting_program(state, on_live=on_live))
+    for _ in range(100):
+        if _paint_runners():
+            break
+        await asyncio.sleep(0.1)
+    await asyncio.sleep(1)
+    run.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await run
+    await asyncio.sleep(1)
+    problems = []
+    if not events or not isinstance(events[0], LiveStarted):
+        problems.append(f"cancelled paint never went live: {events}")
+    else:
+        if LiveFailed(events[0].piece_number, events[0].token) not in events:
+            problems.append(f"cancelled paint not reported as dropped: {events}")
+        if (state.paintings_dir / events[0].token).exists():
+            problems.append("cancelled paint left its output")
+    if _paint_runners():
+        problems.append(f"cancelled paint left runners: {_paint_runners()}")
+    return problems
 
 
 def main() -> int:
@@ -233,10 +291,30 @@ def main() -> int:
     seen = json.loads(probe.error.split("PROBE ", 1)[1].splitlines()[0])
     print("paint probe:", seen)
     failures += [f"paint {k}" for k, v in seen.items() if v != "ok"]
-    painted = asyncio.run(_paint(PAINTING))
+    state = _paint_state()
+    painted = asyncio.run(_paint(PAINTING, state))
     print("paint normal program:", type(painted).__name__)
     if not isinstance(painted, PaintSuccess):
         failures.append(f"normal painting failed: {painted}")
+    else:
+        from code_monet.paintlib.performance import read_frames
+
+        revised = asyncio.run(_paint(REVISION, state))
+        print("paint revision:", type(revised).__name__)
+        if not isinstance(revised, PaintSuccess):
+            failures.append(f"revision (painting over) failed: {revised}")
+        else:
+            version_dir = state.paintings_dir / revised.version.token
+            reveal = json.loads((version_dir / "reveal.json").read_text())
+            frames = read_frames((version_dir / "performance.bin").read_bytes())
+            print("revision continues:", reveal.get("continues"), "frames:", len(frames))
+            if not reveal.get("continues"):
+                failures.append("revision did not paint over the previous canvas")
+            if frames[0].meta.get("base") != "previous" or frames[-1].meta["kind"] != "end":
+                failures.append(f"revision stream malformed: {[f.meta for f in frames[:1]]}")
+    cancelled = asyncio.run(_cancelled_paint())
+    print("cancelled paint:", cancelled or "ok")
+    failures += cancelled
 
     from code_monet.tools.python_sandbox import run_python_code
 

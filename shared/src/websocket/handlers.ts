@@ -16,6 +16,8 @@ import type {
   IterationMessage,
   LoadCanvasMessage,
   NewCanvasMessage,
+  PaintingLiveFailedMessage,
+  PaintingLiveMessage,
   PaintingVersionMessage,
   PausedMessage,
   PieceStateMessage,
@@ -231,6 +233,7 @@ export const handleInit: MessageHandler<InitMessage> = (message, dispatch) => {
     drawingStyle: message.drawing_style,
     styleConfig: message.style_config,
     painting: message.painting ?? null,
+    paintingLive: message.painting_live ?? null,
     title: message.title,
     prompt: message.prompt,
     monologue: message.monologue,
@@ -270,6 +273,27 @@ export const handlePaintingVersion: MessageHandler<PaintingVersionMessage> = (
   });
 };
 
+/** A paint run started streaming: play it live. */
+export const handlePaintingLive: MessageHandler<PaintingLiveMessage> = (message, dispatch) => {
+  dispatch({
+    type: 'PAINTING_LIVE',
+    live: {
+      piece_number: message.piece_number,
+      asset_base: message.asset_base,
+      image_width: message.image_width,
+      image_height: message.image_height,
+    },
+  });
+};
+
+/** The live run failed: drop its performance. */
+export const handlePaintingLiveFailed: MessageHandler<PaintingLiveFailedMessage> = (
+  message,
+  dispatch
+) => {
+  dispatch({ type: 'PAINTING_LIVE_FAILED', assetBase: message.asset_base });
+};
+
 // Handler registry
 const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessage>>> = {
   human_stroke: handleHumanStroke as MessageHandler<ServerMessage>,
@@ -285,6 +309,8 @@ const handlers: Partial<Record<ServerMessage['type'], MessageHandler<ServerMessa
   load_canvas: handleLoadCanvas as MessageHandler<ServerMessage>,
   init: handleInit as MessageHandler<ServerMessage>,
   painting_version: handlePaintingVersion as MessageHandler<ServerMessage>,
+  painting_live: handlePaintingLive as MessageHandler<ServerMessage>,
+  painting_live_failed: handlePaintingLiveFailed as MessageHandler<ServerMessage>,
   turn_state: handleTurnState as MessageHandler<ServerMessage>,
   piece_title: handlePieceTitle as MessageHandler<ServerMessage>,
 };

@@ -30,7 +30,7 @@ enum HomeSelectors {
     /// but still-blank piece (e.g. Surprise me, paused) stays on the easel so
     /// it can be resumed.
     static func easel(_ state: StudioState) -> EaselModel? {
-        let latestPainting = state.painting.playing ?? state.painting.base
+        let latestPainting = state.painting.live?.confirmed ?? state.painting.playing ?? state.painting.base
         let preview: EaselModel.Preview
         if let latestPainting {
             preview = .painting(latestPainting)

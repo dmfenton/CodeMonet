@@ -3,9 +3,9 @@ import Foundation
 import Testing
 
 /// Decode coverage for the program-painting wire additions: the
-/// `painting_version` server message, `init.painting`, `reveal.json`
-/// (`RevealManifest`/`RevealKeyframe`/`RevealOp`), and the raster gallery
-/// fields (program-painting spec §1-3, §5).
+/// `painting_version`, `painting_live` and `painting_live_failed` server
+/// messages, `init.painting`/`init.painting_live`, and the raster gallery
+/// fields.
 @Suite("Program painting decoding")
 struct PaintingVersionDecodingTests {
     @Test("decodes painting_version with all required fields")
@@ -107,80 +107,42 @@ struct PaintingVersionDecodingTests {
         #expect(payload.painting == nil)
     }
 
-    @Test("decodes a full reveal.json manifest, including a single-point (dot) stroke op")
-    func decodesRevealManifest() throws {
-        // Trimmed real-shaped fixture (program-painting spec §3.3), plus a
-        // single-point stroke op appended to `sky` to cover the dot case.
-        let json = Data(#"""
-        {
-          "width": 1600,
-          "height": 1200,
-          "keyframes": [
-            { "label": "ground", "image": "kf_00.jpg", "ops": [["a", 0, 0, 1600, 1200]] },
+    @Test("decodes painting_live and painting_live_failed")
+    func decodesLiveMessages() throws {
+        let live = try JSONDecoder().decode(ServerMessage.self, from: Data(#"""
+        {"type": "painting_live", "piece_number": 12, "asset_base": "/painting-assets/u/tok/",
+         "image_width": 1600, "image_height": 1200}
+        """#.utf8))
+        #expect(live == .paintingLive(PaintingLiveRef(
+            pieceNumber: 12, assetBase: "/painting-assets/u/tok/", imageWidth: 1600, imageHeight: 1200
+        )))
+        let failed = try JSONDecoder().decode(ServerMessage.self, from: Data(#"""
+        {"type": "painting_live_failed", "piece_number": 12, "asset_base": "/painting-assets/u/tok/"}
+        """#.utf8))
+        #expect(failed == .paintingLiveFailed(pieceNumber: 12, assetBase: "/painting-assets/u/tok/"))
+    }
+
+    @Test("init.painting_live seeds the streaming run; absent, null or malformed read as nil")
+    func decodesInitPaintingLive() throws {
+        func payload(_ extra: String) throws -> InitPayload {
+            let json = Data("""
             {
-              "label": "sky",
-              "image": "kf_01.jpg",
-              "ops": [
-                ["a", 0, 0, 1600, 701],
-                ["s", 18.2, 648.2, 94.0, 669.3, 88.5, 683.5, 85.1],
-                ["s", 8, 50, 60]
-              ]
+              "type": "init",
+              "strokes": [], "gallery": [], "status": "idle", "paused": false,
+              "piece_number": 12, "canvas_width": 800, "canvas_height": 600,
+              "monologue": "", "drawing_style": "paint", "style_config": \(Self.styleConfigJSON)\(extra)
             }
-          ]
+            """.utf8)
+            guard case let .initial(payload) = try JSONDecoder().decode(ServerMessage.self, from: json) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "expected init"))
+            }
+            return payload
         }
-        """#.utf8)
-        let manifest = try JSONDecoder().decode(RevealManifest.self, from: json)
-        #expect(manifest.width == 1600)
-        #expect(manifest.height == 1200)
-        #expect(manifest.keyframes.count == 2)
-        guard case let .area(x0, y0, x1, y1) = manifest.keyframes[0].ops[0] else {
-            Issue.record("expected area op")
-            return
-        }
-        #expect((x0, y0, x1, y1) == (0, 0, 1600, 1200))
-
-        guard case let .stroke(width, points) = manifest.keyframes[1].ops[1] else {
-            Issue.record("expected stroke op")
-            return
-        }
-        #expect(width == 18.2)
-        #expect(points.count == 3)
-        #expect(points.first == Point(x: 648.2, y: 94.0))
-
-        // Single-point stroke: a dot, not a degenerate line.
-        guard case let .stroke(dotWidth, dotPoints) = manifest.keyframes[1].ops[2] else {
-            Issue.record("expected single-point stroke op")
-            return
-        }
-        #expect(dotWidth == 8)
-        #expect(dotPoints == [Point(x: 50, y: 60)])
-    }
-
-    @Test("area op normalizes so x0<x1, y0<y1 regardless of input order")
-    func areaOpNormalizes() throws {
-        let json = Data(#"["a", 1600, 1200, 0, 0]"#.utf8)
-        let op = try JSONDecoder().decode(RevealOp.self, from: json)
-        guard case let .area(x0, y0, x1, y1) = op else {
-            Issue.record("expected area op")
-            return
-        }
-        #expect((x0, y0, x1, y1) == (0, 0, 1600, 1200))
-    }
-
-    @Test("malformed stroke op (even numeric count after width) throws rather than silently truncating")
-    func malformedStrokeOpThrows() {
-        let json = Data(#"["s", 8, 1, 2, 3]"#.utf8)
-        #expect(throws: RevealOpDecodingError.self) {
-            _ = try JSONDecoder().decode(RevealOp.self, from: json)
-        }
-    }
-
-    @Test("stroke op with width <= 0 throws, mirroring parseRevealOp's rejection")
-    func nonPositiveWidthStrokeOpThrows() {
-        let json = Data(#"["s", 0, 1, 2, 3, 4]"#.utf8)
-        #expect(throws: RevealOpDecodingError.self) {
-            _ = try JSONDecoder().decode(RevealOp.self, from: json)
-        }
+        let live = try payload(#", "painting_live": {"piece_number": 12, "asset_base": "/a/", "image_width": 1600, "image_height": 1200}"#)
+        #expect(live.paintingLive == PaintingLiveRef(pieceNumber: 12, assetBase: "/a/", imageWidth: 1600, imageHeight: 1200))
+        #expect(try payload("").paintingLive == nil)
+        #expect(try payload(#", "painting_live": null"#).paintingLive == nil)
+        #expect(try payload(#", "painting_live": {"piece_number": "x"}"#).paintingLive == nil)
     }
 
     @Test("gallery entry defaults format to strokes when absent")

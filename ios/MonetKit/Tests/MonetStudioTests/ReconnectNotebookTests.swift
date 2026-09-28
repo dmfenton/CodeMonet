@@ -123,6 +123,7 @@ struct ReconnectNotebookTests {
     @Test("parallel calls of one tool: a completion closes the oldest running call")
     func parallelCallsCloseOldest() {
         var state = StudioState()
+        state.turnActive = true
         state = route(tool("view_canvas", .started), state)
         state = route(tool("view_canvas", .started), state)
         state = route(tool("view_canvas", .completed), state)

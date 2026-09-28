@@ -110,6 +110,7 @@ struct NotebookTests {
     func inProgressAndFailed() {
         var state = StudioState()
         state.pieceNumber = 1
+        state.turnActive = true
         state = route(tool("paint", .started), state, at: 0)
         guard case let .tool(open) = Notebook.entries(state).last?.kind else {
             Issue.record("expected tool entry")
@@ -162,5 +163,22 @@ struct NotebookUnclosedToolTests {
         }
         #expect(call.inProgress == false)
         #expect(Notebook.runningTool(later) == nil)
+    }
+
+    @Test("a tool still open when its turn ends (a pause interrupted it) stops reading as running")
+    func toolOpenAtTurnEndSettles() {
+        let started = AgentMessage(
+            id: "p", type: .codeExecution, text: "Executing...", timestamp: 0, iteration: 1, status: .started,
+            metadata: AgentMessageMetadata(toolName: "paint"), version: 1
+        )
+        let ended = Notebook.entries(
+            messages: [started], liveThinking: "", versions: [], workingVersion: 1, turnActive: false
+        )
+        guard case let .tool(call) = ended[0].kind else {
+            Issue.record("expected tool entry")
+            return
+        }
+        #expect(call.inProgress == false)
+        #expect(Notebook.runningTool(ended) == nil)
     }
 }

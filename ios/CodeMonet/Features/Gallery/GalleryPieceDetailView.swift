@@ -19,7 +19,7 @@ struct GalleryPieceDetailView: View {
     @State private var detail: GalleryPieceStrokes?
     @State private var replayIndex: Int?
     @State private var isPlaying = false
-    @State private var replay = PaintingRevealController()
+    @State private var replay = PaintingPerformanceController(rates: .replay)
     @State private var showsProgram = false
 
     private var versions: [PaintingVersionSummary] { detail?.versions ?? [] }
@@ -48,6 +48,7 @@ struct GalleryPieceDetailView: View {
         .background(palette.surface.ignoresSafeArea())
         .toolbar(.hidden, for: .navigationBar)
         .task(id: entry.pieceNumber) { await load() }
+        .onDisappear { replay.idle() }
         .sheet(isPresented: $showsProgram) {
             if let summary = programVersion {
                 ProgramSheet(
@@ -133,10 +134,13 @@ struct GalleryPieceDetailView: View {
     @ViewBuilder
     private var rasterImage: some View {
         if let replayIndex, versions.indices.contains(replayIndex) {
+            // Replaying: v1 performs over blank, each later version over the
+            // previous version's final. Paused: the selected version's final.
             ReplayCanvas(
                 controller: replay,
-                base: isPlaying ? (replayIndex > 0 ? ref(at: replayIndex - 1) : nil) : ref(at: replayIndex),
-                playing: isPlaying ? ref(at: replayIndex) : nil,
+                painting: isPlaying
+                    ? PaintingState(base: replayIndex > 0 ? ref(at: replayIndex - 1) : nil, playing: ref(at: replayIndex))
+                    : PaintingState(base: ref(at: replayIndex)),
                 apiBaseURL: environment.config.apiBaseURL,
                 onPlaybackDone: advanceReplay
             )
@@ -240,8 +244,8 @@ struct GalleryPieceDetailView: View {
         isPlaying = true
     }
 
-    /// Called from the reveal loop when a version finishes; deferred so the
-    /// state change lands outside the render pass that reported it.
+    /// Called when a version's performance finishes (the controller reports
+    /// outside the render pass).
     private func advanceReplay(_ assetBase: String) {
         Task { @MainActor in
             guard isPlaying, let index = replayIndex, versions.indices.contains(index),
@@ -262,19 +266,22 @@ struct GalleryPieceDetailView: View {
     }
 }
 
-/// Drives a `PaintingRevealController` for the replay: static final image
-/// when `playing` is nil, the version's stroke-by-stroke reveal otherwise.
+/// Drives a `PaintingPerformanceController` for the replay: the final
+/// image when nothing is playing, else the version's performance (its
+/// `performance.bin`, or its final image for a version without one).
 private struct ReplayCanvas: View {
-    let controller: PaintingRevealController
-    let base: PaintingVersionRef?
-    let playing: PaintingVersionRef?
+    let controller: PaintingPerformanceController
+    let painting: PaintingState
     let apiBaseURL: URL
     let onPlaybackDone: (String) -> Void
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: playing == nil)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: painting.playing == nil)) { timeline in
             if let image = controller.frame(
-                base: base, playing: playing, apiBaseURL: apiBaseURL, now: timeline.date, onPlaybackDone: onPlaybackDone
+                painting: painting, apiBaseURL: apiBaseURL, now: timeline.date,
+                onDone: { completion in
+                    if case let .version(assetBase) = completion { onPlaybackDone(assetBase) }
+                }
             ) {
                 Image(decorative: image, scale: 1).resizable()
             } else {

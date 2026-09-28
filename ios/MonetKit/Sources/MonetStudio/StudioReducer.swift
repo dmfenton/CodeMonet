@@ -110,8 +110,8 @@ public enum StudioReducer {
                     pieceNumber: s.pieceNumber,
                     drawingStyle: s.drawingStyle,
                     styleConfig: s.styleConfig,
-                    // Settle any in-flight reveal before snapshotting — an
-                    // interrupted reveal must come back finished, not
+                    // Settle any in-flight playback before snapshotting —
+                    // interrupted playback must come back finished, not
                     // resumed (program-painting spec §4.1 `LOAD_CANVAS`).
                     painting: settlePainting(s.painting)
                 )
@@ -152,7 +152,7 @@ public enum StudioReducer {
                     s.drawingStyle = saved.drawingStyle
                     s.styleConfig = saved.styleConfig
                     // Restored verbatim — already settled by `.loadCanvas`,
-                    // so an interrupted reveal comes back finished, not
+                    // so interrupted playback comes back finished, not
                     // resumed (program-painting spec §4.1 `CLEAR_VIEWING`).
                     s.painting = saved.painting
                     s.savedCanvas = nil
@@ -249,6 +249,19 @@ public enum StudioReducer {
         case let .paintingPlaybackDone(assetBase):
             guard s.painting.playing?.assetBase == assetBase else { break }
             s.painting = settlePainting(s.painting)
+        case let .paintingLive(ref):
+            Self.applyPaintingLive(ref, to: &s)
+        case let .paintingLiveFailed(assetBase):
+            guard s.painting.live?.ref.assetBase == assetBase else { break }
+            s.painting.live = nil
+        case let .paintingLiveDone(assetBase):
+            guard var live = s.painting.live, live.ref.assetBase == assetBase else { break }
+            if live.confirmed != nil {
+                s.painting = settlePainting(s.painting)
+            } else {
+                live.played = true
+                s.painting.live = live
+            }
         }
         return s
     }
@@ -270,21 +283,58 @@ public enum StudioReducer {
         // Guard 2: stale-piece guard — an out-of-order message about an
         // older piece.
         guard incoming.pieceNumber >= state.pieceNumber else { return }
-        // Collapse any in-flight reveal into `base` first, then read it.
+        let entry = PaintingVersionSummary(ref: incoming, stages: stages, ops: ops)
+        // The live run this version records: it was (being) watched as it
+        // painted, so it is confirmed, never replayed. Settles now if its
+        // stream already played to the end.
+        if var live = state.painting.live, live.ref.assetBase == incoming.assetBase {
+            let base = state.painting.base
+            recordVersion(entry, samePiece: base?.pieceNumber == incoming.pieceNumber, hasBase: base != nil, in: &state)
+            if live.played {
+                state.painting = PaintingState(base: incoming)
+            } else {
+                live.confirmed = incoming
+                state.painting.live = live
+            }
+            return
+        }
+        // Collapse any in-flight playback into `base` first, then read it.
         let current = settlePainting(state.painting).base
         let samePiece = current?.pieceNumber == incoming.pieceNumber
         // Guard 3: duplicate/older-version guard.
         if samePiece, let current, incoming.version <= current.version { return }
         state.pieceNumber = max(state.pieceNumber, incoming.pieceNumber)
         state.painting = PaintingState(base: samePiece ? current : nil, playing: incoming)
-        // Version history follows the same acceptance: a new piece starts a
-        // fresh list; the same piece appends (replacing a same-numbered
-        // entry, e.g. one seeded from `init` without stages/ops).
-        let entry = PaintingVersionSummary(ref: incoming, stages: stages, ops: ops)
-        var history = samePiece || current == nil ? state.versions : []
-        history.removeAll { $0.version >= incoming.version }
+        recordVersion(entry, samePiece: samePiece, hasBase: current != nil, in: &state)
+    }
+
+    /// Version history follows the same acceptance as playback: a new piece
+    /// starts a fresh list; the same piece appends (replacing a same- or
+    /// higher-numbered entry, e.g. one seeded from `init` without
+    /// stages/ops).
+    private static func recordVersion(
+        _ entry: PaintingVersionSummary,
+        samePiece: Bool,
+        hasBase: Bool,
+        in state: inout StudioState
+    ) {
+        var history = samePiece || !hasBase ? state.versions : []
+        history.removeAll { $0.version >= entry.version }
         history.append(entry)
         state.versions = history
+    }
+
+    /// `PAINTING_LIVE`: a paint run started streaming. Same gallery and
+    /// stale-piece guards as a version; a new run replaces whatever is
+    /// still playing (settled to its final — an unconfirmed earlier run is
+    /// dropped).
+    private static func applyPaintingLive(_ ref: PaintingLiveRef, to state: inout StudioState) {
+        guard state.viewingPiece == nil else { return }
+        guard ref.pieceNumber >= state.pieceNumber else { return }
+        let current = settlePainting(state.painting).base
+        let samePiece = current?.pieceNumber == ref.pieceNumber
+        state.pieceNumber = max(state.pieceNumber, ref.pieceNumber)
+        state.painting = PaintingState(base: samePiece ? current : nil, live: LivePainting(ref: ref))
     }
 
     /// `INIT`. Reconnecting to the piece already on screen (same piece
@@ -312,11 +362,17 @@ public enum StudioReducer {
         s.messages = []
         s.thinking = ""
         s.currentStroke = []
-        // Latest known version only, shown immediately with no reveal
-        // animation — `INIT` never starts a `playing` reveal, no matter
-        // how recent the version (program-painting spec §4.1 `INIT`,
-        // §4.6's reconnect row).
-        s.painting = PaintingState(base: payload.painting, playing: nil)
+        // Latest known version only, shown immediately with no playback —
+        // `INIT` never starts a `playing` version, no matter how recent.
+        // A run streaming right now (`init.painting_live`) for this piece
+        // that isn't already the current version is followed live.
+        var live: LivePainting?
+        if let streaming = payload.paintingLive,
+           streaming.pieceNumber == payload.pieceNumber,
+           streaming.assetBase != payload.painting?.assetBase {
+            live = LivePainting(ref: streaming)
+        }
+        s.painting = PaintingState(base: payload.painting, live: live)
         if samePiece {
             s.versions = mergeVersions(s.versions, seedVersions(payload))
             s.title = payload.title ?? s.title
