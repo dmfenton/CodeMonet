@@ -99,6 +99,75 @@ class TestDrawingAgentRunTurn:
         assert events[0].thinking == ""
         assert events[0].done is False
 
+    @pytest.mark.asyncio
+    async def test_stop_turn_ends_running_turn(self) -> None:
+        """stop_turn mid-turn ends it at the next message and drops the session."""
+        from claude_agent_sdk.types import StreamEvent
+
+        agent = DrawingAgent()
+        await agent.resume()
+        state = MagicMock()
+        state.save = AsyncMock()
+        agent._state = state
+
+        def delta(text: str) -> StreamEvent:
+            event = {"type": "content_block_delta", "delta": {"type": "text_delta", "text": text}}
+            return StreamEvent(uuid="u", session_id="s", event=event)
+
+        async def receive_response() -> Any:
+            yield delta("before ")
+            await agent.stop_turn()  # the user pauses while the model is mid-response
+            yield delta("after")
+            yield delta("never read")
+
+        client = MagicMock()
+        client.query = AsyncMock()
+        client.receive_response = receive_response
+        client.interrupt = AsyncMock()
+        client.disconnect = AsyncMock()
+        agent._client = client
+
+        async def no_prompt() -> Any:
+            yield {}
+
+        agent._build_multimodal_prompt = no_prompt  # type: ignore[method-assign]
+
+        from code_monet.agent import AgentCallbacks
+
+        on_thinking = AsyncMock()
+        events = [event async for event in agent.run_turn(AgentCallbacks(on_thinking=on_thinking))]
+
+        assert len(events) == 1
+        assert isinstance(events[0], AgentTurnComplete)
+        on_thinking.assert_awaited_once_with("before ", 1)
+        assert events[0].done is False
+        client.interrupt.assert_awaited_once()  # the CLI stops generating at once
+        client.disconnect.assert_awaited_once()
+        assert agent._client is None
+        assert agent._turn_client is None
+
+    @pytest.mark.asyncio
+    async def test_stop_turn_without_a_turn_does_not_interrupt(self) -> None:
+        agent = DrawingAgent()
+        client = MagicMock()
+        client.interrupt = AsyncMock()
+        agent._client = client  # connected, but no turn streaming
+
+        await agent.stop_turn()
+
+        client.interrupt.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_pause_alone_lets_running_turn_finish(self) -> None:
+        """pause (e.g. last client disconnected) stops new turns, not the one in flight."""
+        agent = DrawingAgent()
+        await agent.resume()
+        agent._abort = False  # a turn in flight
+
+        await agent.pause()
+
+        assert agent._abort is False
+
 
 class TestDrawingAgentBuildPrompt:
     """Tests for building the prompt string."""

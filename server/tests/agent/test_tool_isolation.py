@@ -124,7 +124,7 @@ def _make_agent(name: str, width: int, height: int) -> tuple[DrawingAgent, FakeS
     return agent, state
 
 
-async def _fake_paint(state: FakeState) -> PaintResult:
+async def _fake_paint(state: FakeState, on_live: object = None) -> PaintResult:  # noqa: ARG001
     return PaintFailure(error=f"ran program of {state.name}", seconds=0.0)
 
 

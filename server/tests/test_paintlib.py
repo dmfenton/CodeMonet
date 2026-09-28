@@ -24,7 +24,14 @@ def _canvas(seed: int = 3) -> Canvas:
 
 
 def _ops(cv: Canvas) -> list[list[Any]]:
-    return cv._stages[-1].ops
+    """Reveal ops of the current stage label, including keyframes it already closed."""
+    label = cv._stages[-1].label
+    closed: list[list[Any]] = []
+    for kf in reversed(cv._keyframes):
+        if kf.label != label:
+            break
+        closed = kf.ops + closed
+    return closed + cv._stages[-1].ops
 
 
 def _check_op(op: list[Any]) -> None:
@@ -79,7 +86,8 @@ class TestExport:
         assert reveal["width"] == W and reveal["height"] == H
         assert info["width"] == W and info["height"] == H
         kfs = reveal["keyframes"]
-        assert [k["label"] for k in kfs] == info["stages"] == ["ground", "sky", "land", "figure"]
+        labels = list(dict.fromkeys(k["label"] for k in kfs))
+        assert labels == info["stages"] == ["ground", "sky", "land", "figure"]
         assert info["ops"] == sum(len(k["ops"]) for k in kfs)
         for i, kf in enumerate(kfs):
             assert kf["image"] == f"kf_{i:02d}.jpg"
@@ -106,7 +114,8 @@ class TestExport:
         _paint_study(cv)
         cv.export(tmp_path)
         final = np.asarray(Image.open(tmp_path / "final.png"), np.float32)
-        last = np.asarray(Image.open(tmp_path / "kf_03.jpg"), np.float32)
+        n = len(json.loads((tmp_path / "reveal.json").read_text())["keyframes"])
+        last = np.asarray(Image.open(tmp_path / f"kf_{n - 1:02d}.jpg"), np.float32)
         assert np.abs(final - last).mean() < 3.0
 
 
@@ -153,6 +162,49 @@ _mask_ops: dict[str, MaskOp] = {
     ),
     "sign": lambda cv: cv.sign(100, 110, size=20),
 }
+
+
+class TestKeyframeSplits:
+    """A large area op gets its own keyframe, so reveals show each op's own paint."""
+
+    def test_large_area_op_is_isolated(self, tmp_path: Path) -> None:
+        cv = _canvas()
+        cv.stage("sky")
+        sky = cv.rect_mask(0, 0, W, 60)
+        cv.paint_region(sky, 30, "#556677", length=(8, 12), width=(3, 5))
+        cv.fill(sky, "#aabbcc")
+        cv.paint_region(sky, 30, "#223344", length=(8, 12), width=(3, 5))
+        cv.export(tmp_path)
+        kfs = json.loads((tmp_path / "reveal.json").read_text())["keyframes"]
+        sky_kfs = [[op[0] for op in k["ops"]] for k in kfs if k["label"] == "sky"]
+        assert ["a"] in sky_kfs, "the fill is a keyframe of its own"
+        i = sky_kfs.index(["a"])
+        assert set(sky_kfs[i - 1]) == {"s"} and set(sky_kfs[i + 1]) == {"s"}
+
+    def test_fill_keyframe_is_before_later_marks(self, tmp_path: Path) -> None:
+        cv = _canvas()
+        cv.stage("sky")
+        cv.paint_region(cv.rect_mask(0, 0, W, H), 20, "#000000", length=(8, 12), width=(3, 5))
+        cv.fill(cv.rect_mask(0, 0, W, H), "#ffffff", mottle=0, streak=0, grain=0)
+        cv.paint_region(cv.rect_mask(0, 0, W, H), 200, "#000000", length=(8, 12), width=(3, 5))
+        cv.export(tmp_path)
+        kfs = json.loads((tmp_path / "reveal.json").read_text())["keyframes"]
+        fill_kf = next(
+            k for k in kfs if [op[0] for op in k["ops"]] == ["a"] and k["label"] == "sky"
+        )
+        img = np.asarray(Image.open(tmp_path / fill_kf["image"]), np.float32)
+        assert img.mean() > 200, (
+            "the fill's keyframe shows the white fill, not the dark marks after it"
+        )
+
+    def test_small_area_ops_share_keyframes(self, tmp_path: Path) -> None:
+        cv = _canvas()
+        cv.stage("figures")
+        for i in range(6):
+            cv.shape(parts=[("rect", 10 + i * 20, 80, 16 + i * 20, 90, "#442222")])
+        cv.export(tmp_path)
+        kfs = json.loads((tmp_path / "reveal.json").read_text())["keyframes"]
+        assert [len(k["ops"]) for k in kfs if k["label"] == "figures"] == [6]
 
 
 class TestRevealOps:
@@ -205,10 +257,10 @@ class TestStages:
         cv.stage("b")
         cv.dab(80, 40, 0, 20, 6, "#456")
         cv._close_stage()
-        assert [k[0] for k in cv._keyframes] == ["ground", "a", "b"]
-        for _, img, ops in cv._keyframes:
-            assert img.shape == (H, W, 3)
-            assert ops
+        assert [k.label for k in cv._keyframes] == ["ground", "a", "b"]
+        for kf in cv._keyframes:
+            assert kf.image.shape == (H, W, 3)
+            assert kf.ops
 
     def test_long_stage_splits(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from code_monet.paintlib import canvas as canvas_mod
@@ -218,7 +270,7 @@ class TestStages:
         cv.stage("many")
         cv.paint_region(cv.rect_mask(0, 0, W, H), 35, "#557799", length=(8, 12), width=(3, 5))
         cv._close_stage()
-        labels = [k[0] for k in cv._keyframes]
+        labels = [k.label for k in cv._keyframes]
         assert labels.count("many") == 4
 
     def test_keyframes_capped(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -240,9 +292,9 @@ class TestStages:
         cv.stage("manual")
         cv.rgb[10:20, 30:50] = 0.0
         cv._close_stage()
-        label, _, ops = cv._keyframes[-1]
-        assert label == "manual"
-        assert ops == [["a", 30, 10, 50, 20]]
+        kf = cv._keyframes[-1]
+        assert kf.label == "manual"
+        assert kf.ops == [["a", 30, 10, 50, 20]]
 
 
 class TestDeterminism:

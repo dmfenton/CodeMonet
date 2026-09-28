@@ -34,6 +34,9 @@ def main() -> int:
     parser.add_argument("--height", type=int, required=True)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--human", help="JSON file of human strokes in image pixels")
+    parser.add_argument(
+        "--previous", help="the last version's directory: this run paints over its canvas"
+    )
     args = parser.parse_args()
 
     human = json.loads(Path(args.human).read_text()) if args.human else []
@@ -57,17 +60,34 @@ def main() -> int:
     }
     random.seed(args.seed)
     source = Path(args.program).read_text()
-    t0 = time.monotonic()
-    try:
-        exec(compile(source, "studio/painting.py", "exec"), scope)
-    except Exception:
-        traceback.print_exc(limit=8)
-        return 1
-    t1 = time.monotonic()
-    summary = cv.export(args.out)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    with (out / "performance.bin").open("wb") as stream:
+        if args.previous:
+            cv.load_state(Path(args.previous) / "canvas.npz")
+        cv.stream_to(stream)
+        t0 = time.monotonic()
+        try:
+            exec(compile(source, "studio/painting.py", "exec"), scope)
+        except Exception:
+            cv.abort_stream()
+            traceback.print_exc(limit=8)
+            return 1
+        t1 = time.monotonic()
+        summary = cv.export(out)
+    perf = cv._performance.stats
     timings = {
         "paint_seconds": round(t1 - t0, 1),
         "export_seconds": round(time.monotonic() - t1, 1),
+        "performance": {
+            "bytes": perf.bytes,
+            "chunks": perf.chunks,
+            "patches": perf.patches,
+            "pixels": perf.pixels,
+            "hand_ms": round(perf.ms),
+            "encode_seconds": round(perf.encode_seconds, 2),
+            "diff_seconds": round(perf.diff_seconds, 2),
+        },
     }
     print(json.dumps({**summary, **timings}), file=sys.stderr)
     return 0

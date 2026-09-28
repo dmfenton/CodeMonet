@@ -9,6 +9,7 @@ from typing import Any, Protocol
 from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent_logger import AgentFileLogger
 from code_monet.config import settings
+from code_monet.program_painting import LiveStarted, OnLive, PaintLive
 from code_monet.tools import ToolContext
 from code_monet.tools.naming import normalize_title
 from code_monet.tools.quality_gate import parse_critique_verdict
@@ -20,6 +21,8 @@ from code_monet.types import (
     CodeExecutionMessage,
     ErrorMessage,
     IterationMessage,
+    PaintingLiveFailedMessage,
+    PaintingLiveMessage,
     PaintingVersion,
     PaintingVersionMessage,
     Path,
@@ -69,6 +72,10 @@ class DrawingAgentBackend(Protocol):
         """Set callback for rendered program-painting versions."""
         ...
 
+    def set_on_painting_live(self, callback: OnLive) -> None:
+        """Set callback for paint runs starting to stream (and failing)."""
+        ...
+
     def set_on_tool_complete(
         self,
         callback: Callable[
@@ -84,7 +91,11 @@ class DrawingAgentBackend(Protocol):
         ...
 
     async def pause(self) -> None:
-        """Pause the agent."""
+        """Pause the agent: no new turns start."""
+        ...
+
+    async def stop_turn(self) -> None:
+        """End the running turn now, if one is running."""
         ...
 
     def run_turn(self, callbacks: AgentCallbacks | None = None) -> AsyncGenerator[AgentEvent, None]:
@@ -122,6 +133,8 @@ class AgentOrchestrator:
         self.agent.set_on_draw(self._draw_paths)
         # Broadcast each rendered program-painting version to viewers
         self.agent.set_on_painting_version(self._publish_painting_version)
+        # Viewers watch each paint run live as it streams
+        self.agent.set_on_painting_live(self._publish_painting_live)
         # Set up tool completion callback to broadcast "completed" events
         self.agent.set_on_tool_complete(self._handle_tool_complete)
 
@@ -139,6 +152,24 @@ class AgentOrchestrator:
                 ops=version.ops,
             )
         )
+
+    async def _publish_painting_live(self, event: PaintLive) -> None:
+        """Tell clients a paint run is streaming its performance, or that it failed."""
+        user_id = self.agent.get_state().user_id
+        asset_base = f"/painting-assets/{user_id}/{event.token}/"
+        if isinstance(event, LiveStarted):
+            await self.broadcaster.broadcast(
+                PaintingLiveMessage(
+                    piece_number=event.piece_number,
+                    asset_base=asset_base,
+                    image_width=event.image_width,
+                    image_height=event.image_height,
+                )
+            )
+        else:
+            await self.broadcaster.broadcast(
+                PaintingLiveFailedMessage(piece_number=event.piece_number, asset_base=asset_base)
+            )
 
     def signal_animation_done(self, batch_id: int | None) -> None:
         """Signal that client has finished animating strokes.

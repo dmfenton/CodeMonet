@@ -50,6 +50,18 @@ class TestOpenAIDrawingAgentPauseResume:
         assert events[0].thinking == ""
         assert events[0].done is False
 
+    @pytest.mark.asyncio
+    async def test_stop_turn_aborts_running_turn(self) -> None:
+        agent = OpenAIDrawingAgent()
+        await agent.resume()
+        agent._abort = False  # a turn in flight
+
+        await agent.pause()
+        assert agent._abort is False  # pause alone lets the turn finish
+        await agent.stop_turn()
+
+        assert agent._abort is True
+
     def test_reset_container_sets_abort(self) -> None:
         agent = OpenAIDrawingAgent()
         agent.add_nudge("change the old canvas")

@@ -182,6 +182,7 @@ class TestHandlePause:
         workspace.state.save = AsyncMock()
         workspace.agent = MagicMock()
         workspace.agent.pause = AsyncMock()
+        workspace.agent.stop_turn = AsyncMock()
         workspace.connections = MagicMock()
         workspace.connections.broadcast = AsyncMock()
         return workspace
@@ -195,6 +196,13 @@ class TestHandlePause:
         assert mock_workspace.state.pause_reason == PauseReason.USER
         mock_workspace.agent.pause.assert_awaited_once()
         mock_workspace.state.save.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_pause_stops_running_turn(self, mock_workspace: MagicMock) -> None:
+        """A user pause ends the turn in flight, not only future turns."""
+        await handle_pause(mock_workspace)
+
+        mock_workspace.agent.stop_turn.assert_awaited_once_with()
 
     @pytest.mark.asyncio
     async def test_pause_broadcasts_paused_true(self, mock_workspace: MagicMock) -> None:

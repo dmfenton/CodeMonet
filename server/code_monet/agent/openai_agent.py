@@ -19,6 +19,7 @@ from code_monet.agent import AgentCallbacks, CodeExecutionResult, ToolCallInfo
 from code_monet.agent.prompts import build_system_prompt
 from code_monet.agent.renderer import image_to_base64
 from code_monet.config import settings
+from code_monet.program_painting import OnLive
 from code_monet.rendering import options_for_agent_view, render_strokes
 from code_monet.tools import DRAWING_TOOLS, ToolContext, ToolHandler
 from code_monet.types import (
@@ -241,6 +242,9 @@ class OpenAIDrawingAgent:
     ) -> None:
         """The OpenAI backend draws vector paths only; program painting is Claude-only."""
 
+    def set_on_painting_live(self, callback: OnLive) -> None:
+        """The OpenAI backend draws vector paths only; program painting is Claude-only."""
+
     def set_on_tool_complete(
         self,
         callback: Callable[
@@ -256,6 +260,10 @@ class OpenAIDrawingAgent:
     async def pause(self) -> None:
         async with self._pause_lock:
             self._paused = True
+
+    async def stop_turn(self) -> None:
+        """End the running turn before its next iteration, if one is running."""
+        self._abort = True
 
     async def resume(self) -> None:
         async with self._pause_lock:
