@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-09-28
+
 ### Changed
 
 - Native iOS Home hangs the piece on the easel as the hero: a framed painting with a live status badge, Watch and pause while it paints, and Continue when paused. Starting a piece is one composer with a Paint/Plotter toggle, a size chip, one-tap prompt ideas led by Surprise me, and a send button that stays above the keyboard. Recent pieces scroll as a titled gallery strip.
@@ -1298,7 +1300,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...HEAD
+[1.44.0]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/dmfenton/CodeMonet/compare/v1.40.1...v1.41.0
