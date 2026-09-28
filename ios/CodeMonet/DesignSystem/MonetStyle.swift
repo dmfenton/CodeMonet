@@ -6,7 +6,8 @@ import SwiftUI
 /// metadata lines, rounded/system for controls — the same split as
 /// `FentonTypography`, which these complement for the redesign's roles.
 enum MonetType {
-    static let display = Font.system(.title2, design: .serif)
+    static let hero = Font.system(.title, design: .serif)
+    static let heroTitle = Font.system(.title2, design: .serif).italic()
     static let screenTitle = Font.system(.largeTitle, design: .serif, weight: .medium)
     static let pieceTitle = Font.system(.headline, design: .serif, weight: .regular).italic()
     static let pieceTitleSmall = Font.system(.subheadline, design: .serif).italic()
@@ -50,6 +51,72 @@ struct SectionLabel: View {
     }
 }
 
+/// A section label that runs into a hairline rule, with an optional
+/// trailing element ("ON THE EASEL ——— mon, sep 28").
+struct RuleLabel<Trailing: View>: View {
+    let text: String
+    @ViewBuilder var trailing: () -> Trailing
+
+    init(_ text: String, @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }) {
+        self.text = text
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        PaletteReader { palette in
+            HStack(alignment: .center, spacing: 10) {
+                Text(text.uppercased())
+                    .font(MonetType.label)
+                    .tracking(1)
+                    .foregroundStyle(palette.tertiaryText)
+                    .accessibilityAddTraits(.isHeader)
+                Rectangle().fill(palette.divider).frame(height: 1)
+                trailing()
+            }
+        }
+    }
+}
+
+/// A framed-picture mat for the hero piece: a wide mat, a fine bevel line
+/// around the image, and a soft hanging shadow. The image keeps its own
+/// colors; the mat follows the color scheme (dark linen in dark mode).
+struct MuseumMat: ViewModifier {
+    var padding: CGFloat = 14
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        PaletteReader { palette in
+            let dark = colorScheme == .dark
+            content
+                .clipShape(RoundedRectangle(cornerRadius: 1.5, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                        .strokeBorder(Color.black.opacity(dark ? 0.5 : 0.12), lineWidth: 0.5)
+                )
+                .padding(4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 2.5, style: .continuous)
+                        .strokeBorder(palette.divider.opacity(dark ? 1 : 0.8), lineWidth: 1)
+                )
+                .padding(padding - 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(palette.elevatedSurface)
+                        .shadow(color: dark ? .black.opacity(0.5) : Self.shadowInk.opacity(0.08), radius: 1, y: 1)
+                        .shadow(color: dark ? .black.opacity(0.6) : Self.shadowInk.opacity(0.2), radius: 16, y: 10)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .strokeBorder(palette.divider.opacity(dark ? 0.9 : 0.35), lineWidth: 0.5)
+                )
+        }
+    }
+
+    /// A warm umber so light-mode shadows read as paper, not grey plastic;
+    /// on dark surfaces it would glow, so dark mode uses black.
+    private static let shadowInk = Color(hex: "#3c2d14")
+}
+
 /// The paper mat every piece sits in: a thin subtle border around light
 /// canvas paper, which stays light in dark mode.
 struct PaperMat: ViewModifier {
@@ -76,6 +143,10 @@ struct PaperMat: ViewModifier {
 extension View {
     func paperMat(padding: CGFloat = 6) -> some View {
         modifier(PaperMat(padding: padding))
+    }
+
+    func museumMat(padding: CGFloat = 14) -> some View {
+        modifier(MuseumMat(padding: padding))
     }
 }
 
@@ -108,25 +179,26 @@ struct ChipLabel: View {
     }
 }
 
-/// The filled accent capsule used for primary actions (Begin, Watch).
+/// The filled accent capsule used for primary actions (Watch, Continue).
 struct PrimaryCapsuleStyle: ButtonStyle {
-    var compact = false
+    /// `large` is the 46pt hero-action height.
+    var large = false
 
     func makeBody(configuration: Configuration) -> some View {
-        PrimaryCapsuleBody(configuration: configuration, compact: compact)
+        PrimaryCapsuleBody(configuration: configuration, large: large)
     }
 
     private struct PrimaryCapsuleBody: View {
         let configuration: ButtonStyleConfiguration
-        let compact: Bool
+        let large: Bool
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
             PaletteReader { palette in
                 configuration.label
-                    .font(compact ? MonetType.chip.weight(.semibold) : MonetType.button)
-                    .padding(.horizontal, compact ? 12 : 16)
-                    .padding(.vertical, compact ? 6 : 9)
+                    .font(large ? .system(.body, design: .rounded, weight: .semibold) : MonetType.button)
+                    .padding(.horizontal, large ? 20 : 16)
+                    .frame(minHeight: large ? 46 : 36)
                     .foregroundStyle(isEnabled ? palette.surface : palette.tertiaryText)
                     .background(
                         Capsule().fill(
@@ -138,6 +210,15 @@ struct PrimaryCapsuleStyle: ButtonStyle {
                     .overlay(Capsule().strokeBorder(isEnabled ? Color.clear : palette.divider, lineWidth: 1))
             }
         }
+    }
+}
+
+/// A gentle press-down scale for chips, cards, and round buttons.
+struct PressScaleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

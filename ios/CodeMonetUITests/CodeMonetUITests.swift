@@ -71,8 +71,8 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         app.launch()
     }
 
-    /// Home: brand header, one composer (prompt, style + size chips,
-    /// Surprise me, Begin), and the recent row with the Gallery link.
+    /// Home: brand header, one composer (prompt, style toggle, size chip,
+    /// send), the idea row led by Surprise me, and the gallery strip link.
     func testHomeScreenShowsComposer() throws {
         let homePanel = app.scrollViews["home-panel"]
         XCTAssertTrue(homePanel.waitForExistence(timeout: 15), "expected to reach Home via the DEBUG dev-token bootstrap")
@@ -85,6 +85,15 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         XCTAssertTrue(element("home-size-menu").exists)
         XCTAssertTrue(app.buttons["home-gallery"].exists)
         XCTAssertTrue(element("home-account-menu").exists)
+    }
+
+    /// An idea chip fills the composer, which enables Begin without typing.
+    func testIdeaChipFillsPrompt() throws {
+        XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
+        let begin = app.buttons["home-prompt-submit"]
+        XCTAssertFalse(begin.isEnabled, "Begin needs a prompt")
+        app.buttons["home-idea-0"].tap()
+        XCTAssertTrue(begin.isEnabled, "an idea is a prompt")
     }
 
     /// Begin starts a piece from the composer and enters Studio, whose nudge

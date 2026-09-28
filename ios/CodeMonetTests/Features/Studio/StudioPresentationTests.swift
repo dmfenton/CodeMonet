@@ -5,7 +5,7 @@ import MonetStudio
 import Testing
 
 /// Coverage for `StudioPresentation`'s pure rules: the status pill, the
-/// Home easel status line, and the notebook's tool lines.
+/// Home easel detail line, and the notebook's tool lines.
 @Suite("StudioPresentation")
 struct StudioPresentationTests {
     // MARK: - Status pill
@@ -20,13 +20,12 @@ struct StudioPresentationTests {
         #expect(StudioPresentation.statusPill(for: state).label == "viewing")
     }
 
-    @Test("an active turn with nothing streaming reads as thinking, on the pill and the easel line")
+    @Test("an active turn with nothing streaming reads as thinking")
     func activeTurnPill() {
         var state = StudioState()
         state.paused = false
         state.turnActive = true
         #expect(StudioPresentation.statusPill(for: state) == .init(label: "thinking", isActive: true))
-        #expect(StudioPresentation.easelStatusLine(for: state) == "thinking")
         state.paused = true
         #expect(StudioPresentation.statusPill(for: state) == .init(label: "paused", isActive: false))
     }

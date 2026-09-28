@@ -49,12 +49,13 @@ enum StudioPresentation {
         return state.performance.buffer.contains { if case .strokes = $0 { true } else { false } }
     }
 
-    /// Home's "on the easel" status line, e.g. "painting · v4 · poplars".
-    /// Version and stage appear only when a painting version exists.
-    static func easelStatusLine(for state: StudioState) -> String {
-        var parts = [statusPill(for: state).label]
+    /// Home's easel placard detail, e.g. "paint · version 4 · poplars" —
+    /// version and stage only once a painting version exists. The live
+    /// status itself is the pill's.
+    static func easelDetailLine(for state: StudioState) -> String {
+        var parts = [GalleryFormatting.styleLabel(state.drawingStyle)]
         if let latest = state.versions.last {
-            parts.append("v\(latest.version)")
+            parts.append("version \(latest.version)")
             if let stage = latest.stages.last { parts.append(stage) }
         }
         return parts.joined(separator: " · ")

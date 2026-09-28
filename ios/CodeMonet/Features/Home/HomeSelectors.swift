@@ -13,7 +13,10 @@ struct EaselModel: Equatable {
     }
 
     var title: String
-    var statusLine: String
+    /// The status pill's label ("painting", "paused", …).
+    var status: String
+    /// "paint · version 4 · poplars" (version/stage once a version exists).
+    var detail: String
     /// The agent is working right now ("Watch") vs. paused/idle ("Continue").
     var isActive: Bool
     var preview: Preview
@@ -44,7 +47,8 @@ enum HomeSelectors {
         let pill = StudioPresentation.statusPill(for: state)
         return EaselModel(
             title: PieceTitle.resolve(title: state.title, prompt: state.prompt, pieceNumber: state.pieceNumber),
-            statusLine: StudioPresentation.easelStatusLine(for: state),
+            status: pill.label,
+            detail: StudioPresentation.easelDetailLine(for: state),
             isActive: pill.isActive,
             preview: preview,
             canvasWidth: state.canvasWidth,

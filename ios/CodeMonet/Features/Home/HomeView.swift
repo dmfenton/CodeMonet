@@ -1,54 +1,83 @@
 import FentonDesignSystem
 import MonetProtocol
-import MonetRender
 import MonetStudio
 import SwiftUI
 
-/// Home: the brand header, the live piece "on the easel", one composer
-/// ("What should we paint today?") that starts every new piece, and the
-/// three most recent gallery pieces.
+/// Home: the brand header, the live piece hung "on the easel" as the hero,
+/// one composer ("What should we paint next?") that starts every new piece,
+/// and a strip of recent gallery pieces.
 struct HomeView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.fentonTheme) private var theme
 
+    /// Horizontal page margin; the horizontal strips bleed past it.
+    static let gutter: CGFloat = 20
+    private static let composerAnchor = "home-composer"
+
     var body: some View {
         let state = environment.studio.state
         let palette = theme.palette(for: colorScheme)
         let connected = environment.studio.connected
+        let easel = HomeSelectors.easel(state)
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                header
-                    .padding(.bottom, FentonSpacing.medium)
+        ScrollViewReader { scroller in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                        .padding(.bottom, 14)
 
-                if let easel = HomeSelectors.easel(state) {
-                    EaselRow(easel: easel, connected: connected, onContinue: continueWork)
-                    Rectangle().fill(palette.divider).frame(height: 1)
-                        .padding(.vertical, FentonSpacing.large - 4)
+                    if let easel {
+                        EaselSection(
+                            easel: easel,
+                            connected: connected,
+                            onContinue: continueWork,
+                            onPause: pause
+                        )
+                        .padding(.bottom, 34)
+                    }
+
+                    headline(palette: palette, next: easel != nil)
+                        .padding(.bottom, 14)
+                        .id(Self.composerAnchor)
+                    HomeComposer(
+                        connected: connected,
+                        replacesEasel: easel != nil,
+                        onFocusChange: { focused in
+                            guard focused else { return }
+                            // The hero pushes the composer below the keyboard;
+                            // bring the whole card (and its send button) into view.
+                            withAnimation(.easeOut(duration: 0.3)) {
+                                scroller.scrollTo(Self.composerAnchor, anchor: .top)
+                            }
+                        },
+                        onStarted: { environment.navigation.screen = .studio }
+                    )
+
+                    recentSection(state: state, palette: palette)
+                        .padding(.top, 34)
+
+                    if !connected {
+                        connectionHint(palette: palette)
+                    }
                 }
-
-                Text("What should we paint today?")
-                    .font(MonetType.display)
-                    .foregroundStyle(palette.text)
-                    .padding(.bottom, FentonSpacing.small + 4)
-                HomeComposer(connected: connected, onStarted: { environment.navigation.screen = .studio })
-
-                recentSection(state: state, palette: palette)
-
-                if !connected {
-                    connectionHint(palette: palette)
-                }
+                .padding(.horizontal, Self.gutter)
+                .padding(.top, FentonSpacing.small)
+                .padding(.bottom, 48)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, FentonSpacing.small)
-            .padding(.bottom, FentonSpacing.large)
-            .frame(maxWidth: 560)
-            .frame(maxWidth: .infinity)
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .scrollDismissesKeyboard(.interactively)
-        .background(palette.surface.ignoresSafeArea())
+        .overlay(alignment: .bottom) { bottomFade(palette: palette) }
+        .background {
+            ZStack {
+                palette.surface
+                PaperGrain()
+            }
+            .ignoresSafeArea()
+        }
         .accessibilityIdentifier("home-panel")
     }
 
@@ -61,21 +90,28 @@ struct HomeView: View {
         .padding(.top, FentonSpacing.small)
     }
 
+    /// "What should we paint next?" — the last word set in italic accent.
+    private func headline(palette: FentonTheme.Palette, next: Bool) -> some View {
+        (Text("What should we paint ")
+            + Text(next ? "next?" : "today?").italic().foregroundStyle(palette.accent))
+            .font(MonetType.hero)
+            .foregroundStyle(palette.text)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+    }
+
     @ViewBuilder
     private func recentSection(state: StudioState, palette: FentonTheme.Palette) -> some View {
         let recent = HomeSelectors.recentPieces(state)
-        VStack(alignment: .leading, spacing: FentonSpacing.small) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionLabel("recent")
-                Spacer()
+        VStack(alignment: .leading, spacing: 14) {
+            RuleLabel("From the gallery") {
                 Button {
                     environment.navigation.openGallery(from: .home)
                 } label: {
                     HStack(spacing: 3) {
-                        Text("Gallery")
+                        Text("See all")
                         if !state.gallery.isEmpty {
                             Text("\(state.gallery.count)")
-                                .font(MonetType.meta)
                                 .foregroundStyle(palette.tertiaryText)
                         }
                         Image(systemName: "chevron.forward")
@@ -93,27 +129,38 @@ struct HomeView: View {
                     .font(MonetType.proseItalic)
                     .foregroundStyle(palette.tertiaryText)
             } else {
-                HStack(alignment: .top, spacing: FentonSpacing.small) {
-                    ForEach(recent) { entry in
-                        Button {
-                            environment.navigation.openGallery(from: .home, focusing: entry.pieceNumber)
-                        } label: {
-                            AuthenticatedThumbnailView(token: entry.thumbnailToken, fallbackSymbol: "photo", contentMode: .fill)
-                                .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                                .clipped()
-                                .paperMat(padding: 4)
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(recent) { entry in
+                            RecentCard(entry: entry) {
+                                environment.navigation.openGallery(from: .home, focusing: entry.pieceNumber)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(GalleryFormatting.title(for: entry))
-                        .accessibilityIdentifier("home-recent-\(entry.pieceNumber)")
-                    }
-                    ForEach(recent.count ..< HomeSelectors.recentLimit, id: \.self) { _ in
-                        Color.clear.frame(maxWidth: .infinity)
                     }
                 }
+                .scrollIndicators(.hidden)
+                .contentMargins(.horizontal, Self.gutter, for: .scrollContent)
+                .padding(.horizontal, -Self.gutter)
             }
         }
-        .padding(.top, FentonSpacing.large)
+    }
+
+    /// Content dissolves into the paper at the bottom edge instead of being
+    /// cut off under the home indicator.
+    private func bottomFade(palette: FentonTheme.Palette) -> some View {
+        LinearGradient(
+            stops: [
+                .init(color: palette.surface.opacity(0), location: 0),
+                .init(color: palette.surface.opacity(0.85), location: 0.6),
+                .init(color: palette.surface, location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 56)
+        .ignoresSafeArea(edges: .bottom)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 
     private func connectionHint(palette: FentonTheme.Palette) -> some View {
@@ -137,69 +184,44 @@ struct HomeView: View {
         }
         environment.navigation.screen = .studio
     }
+
+    private func pause() {
+        environment.studio.setPausedLocally(true)
+        environment.studio.send(.pause)
+    }
 }
 
-/// "On the easel": the live piece's thumbnail in a mat, its title, a
-/// monospaced status line, and Watch/Continue.
-private struct EaselRow: View {
-    @Environment(AppEnvironment.self) private var environment
-    let easel: EaselModel
-    let connected: Bool
-    let onContinue: () -> Void
+/// A gallery strip card: the piece in a light mat, its title and date.
+private struct RecentCard: View {
+    let entry: GalleryEntry
+    let onOpen: () -> Void
+
+    static let width: CGFloat = 168
 
     var body: some View {
         PaletteReader { palette in
-            VStack(alignment: .leading, spacing: FentonSpacing.small) {
-                SectionLabel("on the easel")
-                HStack(alignment: .center, spacing: 14) {
-                    preview
-                        .aspectRatio(CGFloat(easel.canvasWidth) / CGFloat(max(easel.canvasHeight, 1)), contentMode: .fit)
-                        .frame(width: 120)
-                        .paperMat()
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(easel.title)
-                            .font(MonetType.pieceTitle)
-                            .foregroundStyle(palette.text)
-                            .lineLimit(2)
-                        HStack(spacing: 5) {
-                            Circle()
-                                .fill(easel.isActive ? palette.emphasis : palette.tertiaryText)
-                                .frame(width: 6, height: 6)
-                            Text(easel.statusLine)
-                                .font(MonetType.meta)
-                                .foregroundStyle(palette.tertiaryText)
-                                .lineLimit(1)
-                        }
-                        Button(action: onContinue) {
-                            HStack(spacing: 4) {
-                                Text(easel.isActive ? "Watch" : "Continue")
-                                Image(systemName: "arrow.right").accessibilityHidden(true)
-                            }
-                        }
-                        .buttonStyle(PrimaryCapsuleStyle(compact: true))
-                        .disabled(!connected)
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 0) {
+                    AuthenticatedThumbnailView(token: entry.thumbnailToken, fallbackSymbol: "photo", contentMode: .fill)
+                        .frame(width: Self.width - 12, height: (Self.width - 12) * 3 / 4)
+                        .clipped()
+                        .paperMat(padding: 6)
+                        .shadow(color: Color.black.opacity(0.08), radius: 6, y: 4)
+                    Text(GalleryFormatting.title(for: entry))
+                        .font(MonetType.pieceTitleSmall)
+                        .foregroundStyle(palette.text)
+                        .lineLimit(1)
+                        .padding(.top, 10)
+                    Text(GalleryFormatting.shortDate(entry.createdAt).lowercased())
+                        .font(MonetType.meta)
+                        .foregroundStyle(palette.tertiaryText)
                         .padding(.top, 2)
-                        .accessibilityIdentifier("home-continue-button")
-                    }
-                    Spacer(minLength: 0)
                 }
+                .frame(width: Self.width, alignment: .leading)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var preview: some View {
-        switch easel.preview {
-        case let .painting(ref):
-            GalleryRasterImageView(
-                urlString: PaintingAssetURL.paintingAssetUrl(
-                    apiBase: environment.config.apiBaseURL.absoluteString, ref: ref, file: "preview.jpg"
-                )
-            )
-        case let .strokes(strokes, styleConfig):
-            WipPreview(strokes: strokes, canvasWidth: easel.canvasWidth, canvasHeight: easel.canvasHeight, styleConfig: styleConfig)
-        case .blank:
-            CodeMonetDesignSystem.Extra.canvasBackground
+            .buttonStyle(PressScaleStyle())
+            .accessibilityLabel(GalleryFormatting.title(for: entry))
+            .accessibilityIdentifier("home-recent-\(entry.pieceNumber)")
         }
     }
 }
@@ -224,9 +246,9 @@ private struct AccountMenu: View {
                 }
             } label: {
                 Text(Self.initials(email))
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(palette.secondaryText)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 34, height: 34)
                     .background(Circle().fill(palette.subtleSurface))
                     .overlay(Circle().strokeBorder(palette.divider, lineWidth: 1))
             }
