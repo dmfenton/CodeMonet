@@ -531,6 +531,8 @@ export interface InitMessage {
   style_config?: DrawingStyleConfig;
   /** Current program-painting version (paint mode), shown immediately without animating. */
   painting?: InitPaintingRef | null;
+  /** The paint run streaming right now, for a client joining mid-performance. */
+  painting_live?: PaintingLiveRef | null;
   /** Current piece title, when the agent has named it (additive; may be absent). */
   title?: string | null;
   /** Direction the current piece was started with (additive; may be absent). */
@@ -594,34 +596,32 @@ export interface InitPaintingRef extends PaintingVersionRef {
   prompt?: string | null;
 }
 
+/** A paint run streaming its performance: `{asset_base}performance.bin`. */
+export interface PaintingLiveRef {
+  piece_number: number;
+  asset_base: string;
+  image_width: number;
+  image_height: number;
+}
+
+/** Server -> client: a paint run started; play its stream as it is painted. */
+export interface PaintingLiveMessage extends PaintingLiveRef {
+  type: 'painting_live';
+}
+
+/** Server -> client: the live run failed; drop it and show the previous picture. */
+export interface PaintingLiveFailedMessage {
+  type: 'painting_live_failed';
+  piece_number: number;
+  asset_base: string;
+}
+
 /** Server -> client: a new version is ready to reveal. */
 export interface PaintingVersionMessage extends PaintingVersionRef {
   type: 'painting_version';
   stages: string[];
   /** Recorded marks (reveal ops) in the version (additive; may be absent). */
   ops?: number;
-}
-
-/** Brush stroke footprint: polyline of `width` through [x0, y0, x1, y1, ...] (image px). */
-export type StrokeRevealOp = ['s', number, ...number[]];
-
-/** Area op (fill/wash/glaze/smear): reveal rect [x0, y0, x1, y1] (image px) with a wipe. */
-export type AreaRevealOp = ['a', number, number, number, number];
-
-export type RevealOp = StrokeRevealOp | AreaRevealOp;
-
-export interface RevealKeyframe {
-  label: string;
-  /** File name relative to the version's asset_base, e.g. 'kf_00.jpg'. */
-  image: string;
-  ops: RevealOp[];
-}
-
-/** reveal.json */
-export interface RevealManifest {
-  width: number;
-  height: number;
-  keyframes: RevealKeyframe[];
 }
 
 // ============================================================================
@@ -760,6 +760,8 @@ export type ServerMessage =
   | IterationMessage
   | AgentStrokesReadyMessage
   | PaintingVersionMessage
+  | PaintingLiveMessage
+  | PaintingLiveFailedMessage
   | TurnStateMessage
   | PieceTitleMessage;
 
@@ -817,12 +819,7 @@ export type ClientMessage =
 
 // Agent message types for MessageStream component
 export type AgentMessageType =
-  | 'thinking'
-  | 'thinking_delta'
-  | 'error'
-  | 'piece_complete'
-  | 'code_execution'
-  | 'iteration';
+  'thinking' | 'thinking_delta' | 'error' | 'piece_complete' | 'code_execution' | 'iteration';
 
 export interface AgentMessage {
   id: string;

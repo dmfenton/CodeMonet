@@ -34,43 +34,59 @@ const atPiece = (n: number): CanvasHookState => ({
   paused: false,
 });
 
+/** A version replaying its recorded stream (it did not stream live). */
+const replaying = (piece: number, version: number) => {
+  const v = ref(piece, version);
+  return {
+    ref: {
+      piece_number: v.piece_number,
+      asset_base: v.asset_base,
+      image_width: v.image_width,
+      image_height: v.image_height,
+    },
+    confirmed: v,
+    played: false,
+  };
+};
+
 describe('painting reducer', () => {
-  it('starts playing the first version over a blank base', () => {
+  it('performs a version that did not stream live from its recorded stream', () => {
     const s = reduce(atPiece(3), { type: 'PAINTING_VERSION', version: ref(3, 1) });
-    expect(s.painting).toEqual({ base: null, playing: ref(3, 1) });
+    expect(s.painting).toEqual({ base: null, live: replaying(3, 1) });
     expect(deriveAgentStatus(s)).toBe('drawing');
     expect(shouldShowIdleAnimation(s)).toBe(false);
   });
 
-  it('promotes the playing version to base when playback finishes', () => {
+  it('settles the version as the picture when its performance ends', () => {
     const s = reduce(
       atPiece(3),
       { type: 'PAINTING_VERSION', version: ref(3, 1) },
-      { type: 'PAINTING_PLAYBACK_DONE', assetBase: ref(3, 1).asset_base }
+      { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 1).asset_base }
     );
-    expect(s.painting).toEqual({ base: ref(3, 1), playing: null });
+    expect(s.painting).toEqual({ base: ref(3, 1), live: null });
     expect(deriveAgentStatus(s)).toBe('idle');
   });
 
-  it('ignores playback-done for a version that is not playing', () => {
+  it('ignores performance-done for a version that is not performing', () => {
     const s0 = reduce(atPiece(3), { type: 'PAINTING_VERSION', version: ref(3, 2) });
-    const s1 = reduce(s0, { type: 'PAINTING_PLAYBACK_DONE', assetBase: ref(3, 1).asset_base });
+    const s1 = reduce(s0, { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 1).asset_base });
     expect(s1).toBe(s0);
   });
 
-  it('finishes the current version when another arrives mid-playback', () => {
+  it('finishes the current performance when another version arrives', () => {
     const s = reduce(
       atPiece(3),
       { type: 'PAINTING_VERSION', version: ref(3, 1) },
       { type: 'PAINTING_VERSION', version: ref(3, 2) }
     );
-    expect(s.painting).toEqual({ base: ref(3, 1), playing: ref(3, 2) });
+    expect(s.painting).toEqual({ base: ref(3, 1), live: replaying(3, 2) });
   });
 
   it('ignores duplicate or older versions of the same piece', () => {
     const s0 = reduce(atPiece(3), { type: 'PAINTING_VERSION', version: ref(3, 2) });
-    expect(reduce(s0, { type: 'PAINTING_VERSION', version: ref(3, 2) })).toBe(s0);
     expect(reduce(s0, { type: 'PAINTING_VERSION', version: ref(3, 1) })).toBe(s0);
+    const settled = reduce(s0, { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 2).asset_base });
+    expect(reduce(settled, { type: 'PAINTING_VERSION', version: ref(3, 2) })).toBe(settled);
   });
 
   it('ignores versions for an older piece', () => {
@@ -85,11 +101,11 @@ describe('painting reducer', () => {
 
   it('syncs the piece number and drops the old base for a newer piece', () => {
     const s = reduce(
-      { ...atPiece(3), painting: { base: ref(3, 4), playing: null } },
+      { ...atPiece(3), painting: { base: ref(3, 4), live: null } },
       { type: 'PAINTING_VERSION', version: ref(4, 1) }
     );
     expect(s.pieceNumber).toBe(4);
-    expect(s.painting).toEqual({ base: null, playing: ref(4, 1) });
+    expect(s.painting).toEqual({ base: null, live: replaying(4, 1) });
   });
 
   it('resets on CLEAR', () => {
@@ -98,10 +114,10 @@ describe('painting reducer', () => {
       { type: 'PAINTING_VERSION', version: ref(3, 1) },
       { type: 'CLEAR' }
     );
-    expect(s.painting).toEqual({ base: null, playing: null });
+    expect(s.painting).toEqual({ base: null, live: null });
   });
 
-  it('INIT shows the current version without animating', () => {
+  it('INIT shows the current version without performing it', () => {
     const s = reduce(atPiece(0), {
       type: 'INIT',
       strokes: [],
@@ -110,7 +126,7 @@ describe('painting reducer', () => {
       paused: true,
       painting: ref(7, 3),
     });
-    expect(s.painting).toEqual({ base: ref(7, 3), playing: null });
+    expect(s.painting).toEqual({ base: ref(7, 3), live: null });
     const none = reduce(s, {
       type: 'INIT',
       strokes: [],
@@ -118,7 +134,7 @@ describe('painting reducer', () => {
       pieceNumber: 8,
       paused: true,
     });
-    expect(none.painting).toEqual({ base: null, playing: null });
+    expect(none.painting).toEqual({ base: null, live: null });
   });
 
   it('hides the painting while viewing a gallery piece and restores it after', () => {
@@ -127,10 +143,10 @@ describe('painting reducer', () => {
       { type: 'PAINTING_VERSION', version: ref(3, 1) },
       { type: 'LOAD_CANVAS', strokes: [], pieceNumber: 1 }
     );
-    expect(viewing.painting).toEqual({ base: null, playing: null });
+    expect(viewing.painting).toEqual({ base: null, live: null });
     const back = reduce(viewing, { type: 'CLEAR_VIEWING' });
-    // In-flight playback is collapsed to its final on the way out
-    expect(back.painting).toEqual({ base: ref(3, 1), playing: null });
+    // An in-flight performance is collapsed to its final on the way out
+    expect(back.painting).toEqual({ base: ref(3, 1), live: null });
   });
 });
 
@@ -170,6 +186,78 @@ describe('painting_version routing', () => {
   it('new_canvas clears the painting', () => {
     const start = reduce(atPiece(3), { type: 'PAINTING_VERSION', version: ref(3, 1) });
     const s = collect({ type: 'new_canvas', saved_id: null }).reduce(canvasReducer, start);
-    expect(s.painting).toEqual({ base: null, playing: null });
+    expect(s.painting).toEqual({ base: null, live: null });
+  });
+});
+
+describe('live painting', () => {
+  const liveRef = (piece: number, version: number) => {
+    const { piece_number, asset_base, image_width, image_height } = ref(piece, version);
+    return { piece_number, asset_base, image_width, image_height };
+  };
+  const withBase = reduce(
+    atPiece(3),
+    { type: 'PAINTING_VERSION', version: ref(3, 1) },
+    { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 1).asset_base }
+  );
+
+  it('plays a run live over the current picture', () => {
+    const s = reduce(withBase, { type: 'PAINTING_LIVE', live: liveRef(3, 2) });
+    expect(s.painting).toEqual({
+      base: ref(3, 1),
+      live: { ref: liveRef(3, 2), confirmed: null, played: false },
+    });
+    expect(deriveAgentStatus(s)).toBe('drawing');
+  });
+
+  it('confirms the run without replaying it, then settles when playback ends', () => {
+    const s = reduce(
+      withBase,
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) },
+      { type: 'PAINTING_VERSION', version: ref(3, 2) }
+    );
+    expect(s.painting.live?.confirmed).toEqual(ref(3, 2));
+    expect(s.versionHistory.versions.map((v) => v.version)).toEqual([1, 2]);
+    const done = reduce(s, { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 2).asset_base });
+    expect(done.painting).toEqual({ base: ref(3, 2), live: null });
+  });
+
+  it('settles on confirmation when playback finished first', () => {
+    const s = reduce(
+      withBase,
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) },
+      { type: 'PAINTING_LIVE_DONE', assetBase: ref(3, 2).asset_base },
+      { type: 'PAINTING_VERSION', version: ref(3, 2) }
+    );
+    expect(s.painting).toEqual({ base: ref(3, 2), live: null });
+  });
+
+  it('rolls back to the previous picture when the run fails', () => {
+    const s = reduce(
+      withBase,
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) },
+      { type: 'PAINTING_LIVE_FAILED', assetBase: ref(3, 2).asset_base }
+    );
+    expect(s.painting).toEqual({ base: ref(3, 1), live: null });
+  });
+
+  it('a new run replaces an unconfirmed one', () => {
+    const s = reduce(
+      withBase,
+      { type: 'PAINTING_LIVE', live: liveRef(3, 2) },
+      { type: 'PAINTING_LIVE', live: liveRef(3, 3) }
+    );
+    expect(s.painting.base).toEqual(ref(3, 1));
+    expect(s.painting.live?.ref).toEqual(liveRef(3, 3));
+  });
+
+  it('routes live messages and ignores them while viewing a gallery piece', () => {
+    const actions: CanvasAction[] = [];
+    routeMessage({ type: 'painting_live', ...liveRef(3, 2) }, (a) => actions.push(a));
+    const [started] = actions;
+    const s = reduce(withBase, started!);
+    expect(s.painting.live?.ref).toEqual(liveRef(3, 2));
+    const viewing = { ...withBase, viewingPiece: 1 };
+    expect(reduce(viewing, started!).painting).toBe(viewing.painting);
   });
 });

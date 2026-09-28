@@ -14,12 +14,24 @@ import type {
   RendererProps,
   StrokeStyle,
 } from '@code-monet/shared';
-import { CANVAS_HEIGHT, CANVAS_WIDTH, PLOTTER_STYLE } from '@code-monet/shared';
+import {
+  CANVAS_HEIGHT,
+  CANVAS_WIDTH,
+  PAINTING_FINAL_FILE,
+  PERFORMANCE_FILE,
+  PLOTTER_STYLE,
+  paintingAssetUrl,
+} from '@code-monet/shared';
 
 import { useRendererConfig } from '../context/RendererContext';
 import { SvgRenderer, FreehandSvgRenderer } from '../renderers';
 import { StampCanvasLayer } from '../renderers/StampCanvasLayer';
-import { RasterRevealLayer, type RevealPlaybackInfo } from '../renderers/RasterRevealLayer';
+import { PerformancePlayer, type PerformanceProgress } from '../renderers/PerformancePlayer';
+
+/** Paintings from blank play at this multiple of hand time (a version in a minute or two). */
+const LIVE_SPEED = 3;
+/** Revisions (small changes over the last version) play at hand time. */
+const LIVE_REVISION_SPEED = 1;
 
 interface CanvasProps {
   strokes: Path[];
@@ -37,8 +49,9 @@ interface CanvasProps {
   painting?: PaintingState;
   /** API base URL for painting assets. */
   apiUrl?: string;
-  onPaintingPlaybackDone?: (assetBase: string) => void;
-  onPaintingProgress?: (info: RevealPlaybackInfo) => void;
+  /** A performance's stream played to its end. */
+  onPaintingLiveDone?: (assetBase: string) => void;
+  onPaintingLiveProgress?: (info: PerformanceProgress) => void;
   /** Rendered over the canvas, inside the frame (e.g. an older version's image). */
   overlay?: React.ReactNode;
   onStrokeStart: (x: number, y: number) => void;
@@ -78,8 +91,8 @@ export function Canvas({
   showIdleAnimation,
   painting,
   apiUrl = '',
-  onPaintingPlaybackDone,
-  onPaintingProgress,
+  onPaintingLiveDone,
+  onPaintingLiveProgress,
   overlay,
   onStrokeStart,
   onStrokeMove,
@@ -122,11 +135,14 @@ export function Canvas({
     return (): void => resizeObserver.disconnect();
   }, [canvasWidth, canvasHeight]);
 
-  const getPoint = useCallback((e: React.MouseEvent): Point | null => {
-    if (!svgRef.current) return null;
-    const rect = svgRef.current.getBoundingClientRect();
-    return screenToCanvas(e.clientX, e.clientY, rect, canvasWidth, canvasHeight);
-  }, [canvasWidth, canvasHeight]);
+  const getPoint = useCallback(
+    (e: React.MouseEvent): Point | null => {
+      if (!svgRef.current) return null;
+      const rect = svgRef.current.getBoundingClientRect();
+      return screenToCanvas(e.clientX, e.clientY, rect, canvasWidth, canvasHeight);
+    },
+    [canvasWidth, canvasHeight]
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -165,13 +181,15 @@ export function Canvas({
     }
   }, [isDrawing, onStrokeEnd]);
 
-  // Paint mode with a program painting: server-rendered versions revealed on
-  // a raster layer; only human strokes stay vector on top, and the agent
-  // pen/in-progress stroke visuals don't apply.
+  // Paint mode with a program painting: the current version's picture, with
+  // any performance playing over it; only human strokes stay vector on top,
+  // and the agent pen/in-progress stroke visuals don't apply.
   const useRasterLayer =
     styleConfig.type === 'paint' &&
     painting !== undefined &&
-    (painting.base !== null || painting.playing !== null);
+    (painting.base !== null || painting.live !== null);
+  const live = painting?.live ?? null;
+  const liveAsset = live?.ref.asset_base ?? null;
   // Paint mode without one (legacy stroke pieces): completed strokes render on
   // a raster stamp layer (painterly, matches the server renderer); the SVG
   // overlay keeps in-progress strokes, the pen indicator, and idle animation.
@@ -226,15 +244,27 @@ export function Canvas({
           aspectRatio: `${canvasWidth} / ${canvasHeight}`,
         }}
       >
-        {useRasterLayer && (
-          <RasterRevealLayer
-            apiUrl={apiUrl}
-            base={painting.base}
-            playing={painting.playing}
-            width={canvasWidth}
-            height={canvasHeight}
-            onPlaybackDone={onPaintingPlaybackDone}
-            onProgress={onPaintingProgress}
+        {useRasterLayer && painting.base && (
+          <img
+            className="painting-base"
+            data-testid="painting-base"
+            src={paintingAssetUrl(apiUrl, painting.base, PAINTING_FINAL_FILE)}
+            alt=""
+            draggable={false}
+          />
+        )}
+        {/* Stays mounted (holding its last frame) until the performance settles. */}
+        {useRasterLayer && live && liveAsset && (
+          <PerformancePlayer
+            key={liveAsset}
+            src={paintingAssetUrl(apiUrl, live.ref, PERFORMANCE_FILE)}
+            baseSrc={
+              painting?.base ? paintingAssetUrl(apiUrl, painting.base, PAINTING_FINAL_FILE) : null
+            }
+            speed={LIVE_SPEED}
+            revisionSpeed={LIVE_REVISION_SPEED}
+            onProgress={onPaintingLiveProgress}
+            onDone={() => onPaintingLiveDone?.(liveAsset)}
           />
         )}
         {useStampLayer && (

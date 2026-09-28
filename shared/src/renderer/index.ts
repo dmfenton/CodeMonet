@@ -44,24 +44,17 @@ export {
   strokeSeed,
 } from './stamping';
 
-// Program-painting reveal (server-rendered keyframes revealed along footprints)
-export type {
-  KeyframeSchedule,
-  RevealBounds,
-  RevealPacing,
-  RevealPathSink,
-  RevealProgress,
-  RevealSchedule,
-} from './reveal';
+// Performance stream (live pixel deltas from the paint run)
+export type { PerformanceFrame, PerformanceMeta, PerformancePatch } from './performance';
 export {
-  DEFAULT_REVEAL_PACING,
   PAINTING_FINAL_FILE,
-  PAINTING_MANIFEST_FILE,
-  buildRevealSchedule,
+  PERFORMANCE_FILE,
+  PERFORMANCE_MAX_BEHIND_MS,
+  PERFORMANCE_ORDER_SCALE,
+  PerformanceParser,
+  decodePatchIndex,
   paintingAssetUrl,
-  parseRevealManifest,
-  parseRevealOp,
-  revealOpBounds,
-  revealProgressAt,
-  traceRevealOp,
-} from './reveal';
+  patchFits,
+  patchOrderThreshold,
+  playbackRate,
+} from './performance';

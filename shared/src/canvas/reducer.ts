@@ -9,6 +9,7 @@ import type {
   DrawingStyleType,
   GalleryEntry,
   InitPaintingRef,
+  PaintingLiveRef,
   PaintingVersionRef,
   Path,
   PendingStroke,
@@ -124,24 +125,47 @@ export const initialPerformanceState: PerformanceState = {
 /**
  * Program-painting (paint mode) display state.
  *
- * `base` is the version whose final image is fully shown; `playing` is the
- * version being revealed over it. When playback finishes (or another version
- * arrives), `playing` becomes the new `base`.
+ * `base` is the version whose final image is fully shown; `live` is a version
+ * performing over it — a paint run streaming as it paints, or a recorded
+ * version replaying its stream. When the performance ends (confirmed), it
+ * becomes the base.
  */
 export interface PaintingState {
   base: PaintingVersionRef | null;
-  playing: PaintingVersionRef | null;
+  /** A performance playing over `base` (its performance.bin). */
+  live: LivePainting | null;
 }
 
-export const initialPaintingState: PaintingState = { base: null, playing: null };
+/** A performance, from its first streamed stroke until it settles into `base`. */
+export interface LivePainting {
+  ref: PaintingLiveRef;
+  /** The recorded version, once the server confirms the run succeeded. */
+  confirmed: PaintingVersionRef | null;
+  /** Playback reached the end of the stream (waiting only on confirmation). */
+  played: boolean;
+}
 
-/** Collapse any in-flight playback to its final image. */
-const settlePainting = (painting: PaintingState): PaintingState =>
-  painting.playing ? { base: painting.playing, playing: null } : painting;
+export const initialPaintingState: PaintingState = { base: null, live: null };
+
+/**
+ * Collapse any performance to its final image: a confirmed one becomes the
+ * base; an unconfirmed live run is dropped.
+ */
+const settlePainting = (painting: PaintingState): PaintingState => ({
+  base: painting.live?.confirmed ?? painting.base,
+  live: null,
+});
+
+const liveRefOf = (v: PaintingVersionRef): PaintingLiveRef => ({
+  piece_number: v.piece_number,
+  asset_base: v.asset_base,
+  image_width: v.image_width,
+  image_height: v.image_height,
+});
 
 /** True when a program painting is displayed or being revealed. */
 export const hasPainting = (painting: PaintingState): boolean =>
-  painting.base !== null || painting.playing !== null;
+  painting.base !== null || painting.live !== null;
 
 /**
  * Canvas state has two text representations:
@@ -279,7 +303,7 @@ export function deriveAgentStatus(state: CanvasHookState): AgentStatus {
 
   // Drawing = strokes being animated or waiting, or a painting version revealing
   if (hasStrokesOnStage || hasStrokesInBuffer) return 'drawing';
-  if (state.painting.playing !== null) return 'drawing';
+  if (state.painting.live !== null && !state.painting.live.played) return 'drawing';
 
   return state.turnActive ? 'thinking' : 'idle';
 }
@@ -354,6 +378,8 @@ export type CanvasAction =
       drawingStyle?: DrawingStyleType;
       styleConfig?: DrawingStyleConfig;
       painting?: InitPaintingRef | null;
+      /** The paint run streaming right now (additive; absent = none). */
+      paintingLive?: PaintingLiveRef | null;
       /** Additive server fields: undefined = not sent (older server). */
       title?: string | null;
       prompt?: string | null;
@@ -368,8 +394,12 @@ export type CanvasAction =
   | { type: 'SET_STYLE'; drawingStyle: DrawingStyleType; styleConfig: DrawingStyleConfig }
   // Program painting: a version arrived (guards applied in the reducer)
   | { type: 'PAINTING_VERSION'; version: PaintingVersionRef; stages?: string[]; ops?: number }
-  // Program painting: the client finished revealing a version (matched by asset_base)
-  | { type: 'PAINTING_PLAYBACK_DONE'; assetBase: string }
+  // Program painting: a paint run started streaming its performance
+  | { type: 'PAINTING_LIVE'; live: PaintingLiveRef }
+  // Program painting: the live run failed; drop it
+  | { type: 'PAINTING_LIVE_FAILED'; assetBase: string }
+  // Program painting: the client played a live run's stream to its end
+  | { type: 'PAINTING_LIVE_DONE'; assetBase: string }
   // Server: an agent turn started or ended
   | { type: 'SET_TURN_ACTIVE'; active: boolean }
   // Server: the agent named a piece (applied only to the current piece)
@@ -425,7 +455,7 @@ export function notebookVersions(state: CanvasHookState): NotebookVersions {
   const piece = state.pieceNumber;
   const fromHistory =
     state.versionHistory.piece === piece ? latestVersionNumber(state.versionHistory) : 0;
-  const refs = [state.painting.base, state.painting.playing].filter(
+  const refs = [state.painting.base, state.painting.live?.confirmed ?? null].filter(
     (ref): ref is PaintingVersionRef => ref !== null && ref.piece_number === piece
   );
   const latest = Math.max(fromHistory, ...refs.map((ref) => ref.version));
@@ -442,7 +472,8 @@ function initNotebook(
   if (samePiece) return state.notebook;
   let entries: NotebookEntry[] = [];
   if (prompt) entries = addNudge(entries, prompt, null, true);
-  if (monologue?.trim()) entries = sealThought(appendThought(sealThought(entries), monologue, null));
+  if (monologue?.trim())
+    entries = sealThought(appendThought(sealThought(entries), monologue, null));
   return entries;
 }
 
@@ -594,15 +625,18 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         styleConfig: loadedStyleConfig,
         painting: initialPaintingState,
         // Save current canvas state so we can restore when exiting gallery view
-        savedCanvas: state.viewingPiece === null ? {
-          strokes: state.strokes,
-          canvasWidth: state.canvasWidth,
-          canvasHeight: state.canvasHeight,
-          pieceNumber: state.pieceNumber,
-          drawingStyle: state.drawingStyle,
-          styleConfig: state.styleConfig,
-          painting: settlePainting(state.painting),
-        } : state.savedCanvas,
+        savedCanvas:
+          state.viewingPiece === null
+            ? {
+                strokes: state.strokes,
+                canvasWidth: state.canvasWidth,
+                canvasHeight: state.canvasHeight,
+                pieceNumber: state.pieceNumber,
+                drawingStyle: state.drawingStyle,
+                styleConfig: state.styleConfig,
+                painting: settlePainting(state.painting),
+              }
+            : state.savedCanvas,
       };
     }
 
@@ -632,8 +666,7 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       const initStyleConfig = action.styleConfig || getStyleConfig(initStyle);
       // Reconnecting to the piece already on screen keeps this session's notebook.
       const samePiece = state.notebook.length > 0 && action.pieceNumber === state.pieceNumber;
-      const title =
-        action.title !== undefined ? action.title : samePiece ? state.pieceTitle : null;
+      const title = action.title !== undefined ? action.title : samePiece ? state.pieceTitle : null;
       const serverPrompt = action.prompt !== undefined ? action.prompt : action.painting?.prompt;
       const prompt =
         serverPrompt !== undefined ? serverPrompt : samePiece ? state.piecePrompt : null;
@@ -652,7 +685,15 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         drawingStyle: initStyle,
         styleConfig: initStyleConfig,
         // Current version is shown immediately (no reveal animation)
-        painting: { base: action.painting ?? null, playing: null },
+        painting: {
+          base: action.painting ?? null,
+          live:
+            action.paintingLive &&
+            action.paintingLive.piece_number === action.pieceNumber &&
+            action.paintingLive.asset_base !== action.painting?.asset_base
+              ? { ref: action.paintingLive, confirmed: null, played: false }
+              : null,
+        },
         versionHistory: seedVersionHistory(
           samePiece ? state.versionHistory : EMPTY_VERSION_HISTORY,
           action.painting
@@ -682,6 +723,21 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
       // Stale piece guard
       if (incoming.piece_number < state.pieceNumber) return state;
 
+      const history = upsertVersion(
+        state.versionHistory,
+        incoming.piece_number,
+        summaryFromRef(incoming, { stages: action.stages, ops: action.ops })
+      );
+      const notebook = attachProducedVersion(state.notebook, incoming.version, action.ops ?? null);
+      // The live run this version records: it was (being) watched as it painted.
+      const live = state.painting.live;
+      if (live && live.ref.asset_base === incoming.asset_base) {
+        const painting: PaintingState = live.played
+          ? { base: incoming, live: null }
+          : { ...state.painting, live: { ...live, confirmed: incoming } };
+        return { ...state, painting, versionHistory: history, notebook };
+      }
+
       const current = settlePainting(state.painting).base;
       const samePiece = current !== null && current.piece_number === incoming.piece_number;
       // Duplicate / out-of-order version of the same piece
@@ -691,21 +747,47 @@ export function canvasReducer(state: CanvasHookState, action: CanvasAction): Can
         ...state,
         // Piece sync
         pieceNumber: Math.max(state.pieceNumber, incoming.piece_number),
-        // A version arriving mid-playback finishes the current one (jump to its final);
-        // a version for a new piece starts from a blank base.
-        painting: { base: samePiece ? current : null, playing: incoming },
-        versionHistory: upsertVersion(
-          state.versionHistory,
-          incoming.piece_number,
-          summaryFromRef(incoming, { stages: action.stages, ops: action.ops })
-        ),
-        notebook: attachProducedVersion(state.notebook, incoming.version, action.ops ?? null),
+        // A version that did not stream live (e.g. after a reconnect) replays its
+        // recorded stream. One arriving mid-performance finishes the current
+        // one (jump to its final); a version for a new piece starts from blank.
+        painting: {
+          base: samePiece ? current : null,
+          live: { ref: liveRefOf(incoming), confirmed: incoming, played: false },
+        },
+        versionHistory: history,
+        notebook,
       };
     }
 
-    case 'PAINTING_PLAYBACK_DONE':
-      if (state.painting.playing?.asset_base !== action.assetBase) return state;
-      return { ...state, painting: settlePainting(state.painting) };
+    case 'PAINTING_LIVE': {
+      const ref = action.live;
+      if (state.viewingPiece !== null) return state;
+      if (ref.piece_number < state.pieceNumber) return state;
+      // A new run replaces whatever is still playing (settled to its final).
+      const current = settlePainting(state.painting).base;
+      const samePiece = current !== null && current.piece_number === ref.piece_number;
+      return {
+        ...state,
+        pieceNumber: Math.max(state.pieceNumber, ref.piece_number),
+        painting: {
+          base: samePiece ? current : null,
+          live: { ref, confirmed: null, played: false },
+        },
+      };
+    }
+
+    case 'PAINTING_LIVE_FAILED': {
+      const live = state.painting.live;
+      if (live?.ref.asset_base !== action.assetBase) return state;
+      return { ...state, painting: { ...state.painting, live: null } };
+    }
+
+    case 'PAINTING_LIVE_DONE': {
+      const live = state.painting.live;
+      if (live?.ref.asset_base !== action.assetBase) return state;
+      if (live.confirmed) return { ...state, painting: settlePainting(state.painting) };
+      return { ...state, painting: { ...state.painting, live: { ...live, played: true } } };
+    }
 
     case 'SET_PAUSED':
       return { ...state, paused: action.paused };

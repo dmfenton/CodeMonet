@@ -1,17 +1,14 @@
 /**
- * Stage bar model: a version's painting passes, sized by work done.
+ * Stage bar model: a version's painting passes.
  *
- * Built from reveal.json keyframes (label + op count) when available, else
- * from the stage labels alone (equal widths). Long stages are split by the
- * server into consecutive keyframes with the same label; they merge into one
- * segment here.
+ * Built from the version's stage labels (equal widths, or sized by work when
+ * counts are known). Consecutive specs with the same label merge into one
+ * segment.
  */
-
-import type { RevealManifest } from '../types';
 
 export interface StageSpec {
   label: string;
-  /** Reveal ops in this keyframe; null when unknown (labels only). */
+  /** Marks in this stage; null when unknown (labels only). */
   ops: number | null;
 }
 
@@ -28,10 +25,6 @@ export interface StageSegment {
 
 /** Every segment gets at least this share of the bar so short passes stay visible. */
 export const STAGE_MIN_SHARE = 0.06;
-
-export function stagesFromManifest(manifest: RevealManifest): StageSpec[] {
-  return manifest.keyframes.map((kf) => ({ label: kf.label, ops: kf.ops.length }));
-}
 
 export function stagesFromLabels(labels: readonly string[]): StageSpec[] {
   return labels.map((label) => ({ label, ops: null }));
@@ -65,8 +58,8 @@ function stateFor(group: StageGroup, activeKeyframe: number | null): StageState 
 }
 
 /**
- * @param activeKeyframe keyframe being revealed (earlier ones are done, later
- *   ones pending), or null when the whole version is shown.
+ * @param activeKeyframe index of the stage being performed (earlier ones are
+ *   done, later ones pending), or null when the whole version is shown.
  */
 export function buildStageBar(
   stages: readonly StageSpec[],

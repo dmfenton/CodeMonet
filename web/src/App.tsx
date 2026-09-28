@@ -25,7 +25,6 @@ import {
   pieceDisplayTitle,
   shouldShowIdleAnimation,
   stagesFromLabels,
-  stagesFromManifest,
   useCanvas,
   usePerformer,
 } from '@code-monet/shared';
@@ -40,8 +39,7 @@ import { Notebook } from './components/studio/Notebook';
 import { StageBar } from './components/studio/StageBar';
 import { StudioMenu } from './components/studio/StudioMenu';
 import { VersionChips } from './components/studio/VersionChips';
-import type { RevealPlaybackInfo } from './renderers/RasterRevealLayer';
-import { useRevealManifest } from './renderers/revealManifest';
+import type { PerformanceProgress } from './renderers/PerformancePlayer';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useDebug } from './hooks/useDebug';
 import { useAuth } from './context/AuthContext';
@@ -52,28 +50,22 @@ interface DevState {
   revealedChars: number;
   paused: boolean;
   pieceNumber: number;
-  /** Program painting: version shown or being revealed (null = none). */
+  /** Program painting: version shown or performing (null = none). */
   paintingVersion: number | null;
-  /** Keyframe being revealed (-1 when not playing). */
-  revealKeyframe: number;
-  /** Ops of that keyframe revealed so far. */
-  revealOpsDone: number;
-  revealPlaying: boolean;
+  /** Stage of the performance playing ('' when none). */
+  performanceStage: string;
+  /** Hand time played so far, and the whole performance's (null until its end arrives). */
+  performanceHandMs: number;
+  performanceTotalMs: number | null;
+  performancePlaying: boolean;
 }
 
-const IDLE_REVEAL: RevealPlaybackInfo = {
-  version: null,
-  keyframe: -1,
-  label: '',
-  opsDone: 0,
+const IDLE_PERFORMANCE: PerformanceProgress = {
+  stage: '',
+  handMs: 0,
+  totalMs: null,
   playing: false,
 };
-
-/** Version being revealed and its keyframe (changes per keyframe, not per frame). */
-interface RevealPosition {
-  version: number | null;
-  keyframe: number;
-}
 
 declare global {
   interface Window {
@@ -194,26 +186,27 @@ function App(): React.ReactElement {
     sendRef.current?.({ type: 'animation_done', batch_id: batchId });
   }, []);
 
-  // Program painting playback (paint mode). Progress fires per frame, so it
-  // lives in a ref; only the keyframe position is state (changes per keyframe).
-  const revealRef = useRef<RevealPlaybackInfo>(IDLE_REVEAL);
-  const [revealPos, setRevealPos] = useState<RevealPosition>({ version: null, keyframe: -1 });
-  const handlePaintingProgress = useCallback((info: RevealPlaybackInfo) => {
-    revealRef.current = info;
-    const version = info.playing ? info.version : null;
-    const keyframe = info.playing ? info.keyframe : -1;
-    setRevealPos((prev) =>
-      prev.version === version && prev.keyframe === keyframe ? prev : { version, keyframe }
-    );
+  // Program painting performances (paint mode). Progress fires per frame, so it
+  // lives in a ref; only the stages performed so far are state (change per stage).
+  const performanceRef = useRef<PerformanceProgress>(IDLE_PERFORMANCE);
+  const [performedStages, setPerformedStages] = useState<string[]>([]);
+  const handlePerformanceProgress = useCallback((info: PerformanceProgress) => {
+    performanceRef.current = info;
+    if (info.playing && info.stage) {
+      setPerformedStages((prev) =>
+        prev[prev.length - 1] === info.stage ? prev : [...prev, info.stage]
+      );
+    }
     const dev = window.__CM_DEV_STATE__;
     if (import.meta.env.DEV && dev) {
-      dev.revealKeyframe = info.keyframe;
-      dev.revealOpsDone = info.opsDone;
-      dev.revealPlaying = info.playing;
+      dev.performanceStage = info.stage;
+      dev.performanceHandMs = info.handMs;
+      dev.performanceTotalMs = info.totalMs;
+      dev.performancePlaying = info.playing;
     }
   }, []);
-  const handlePaintingPlaybackDone = useCallback(
-    (assetBase: string) => dispatch({ type: 'PAINTING_PLAYBACK_DONE', assetBase }),
+  const handlePaintingLiveDone = useCallback(
+    (assetBase: string) => dispatch({ type: 'PAINTING_LIVE_DONE', assetBase }),
     [dispatch]
   );
 
@@ -279,10 +272,11 @@ function App(): React.ReactElement {
       revealedChars: state.performance.revealedText.length,
       paused: state.paused,
       pieceNumber: state.pieceNumber,
-      paintingVersion: (state.painting.playing ?? state.painting.base)?.version ?? null,
-      revealKeyframe: revealRef.current.keyframe,
-      revealOpsDone: revealRef.current.opsDone,
-      revealPlaying: revealRef.current.playing,
+      paintingVersion: (state.painting.live?.confirmed ?? state.painting.base)?.version ?? null,
+      performanceStage: performanceRef.current.stage,
+      performanceHandMs: performanceRef.current.handMs,
+      performanceTotalMs: performanceRef.current.totalMs,
+      performancePlaying: performanceRef.current.playing,
     };
   });
 
@@ -300,24 +294,32 @@ function App(): React.ReactElement {
   // An older version stays selected only while it belongs to the piece on the easel.
   const viewed: PaintingVersionSummary | null =
     (viewingBase !== null && history.find((v) => v.asset_base === viewingBase)) || null;
-  const live = state.painting.playing ?? state.painting.base;
-  const shownBase = viewed?.asset_base ?? live?.asset_base ?? null;
-  const manifest = useRevealManifest(apiUrl, isPaint ? shownBase : null);
+  const performance = state.painting.live;
+  const performing = !viewed && performance !== null && !performance.played;
+  const performingAsset = performance?.ref.asset_base ?? null;
+  // A new performance starts its stage list afresh.
+  useEffect(() => setPerformedStages([]), [performingAsset]);
+  const shownBase =
+    viewed?.asset_base ??
+    performance?.confirmed?.asset_base ??
+    performingAsset ??
+    state.painting.base?.asset_base ??
+    null;
 
   const segments = useMemo(() => {
     if (!isPaint || !shownBase) return [];
     const summary = history.find((v) => v.asset_base === shownBase);
-    const stages = manifest
-      ? stagesFromManifest(manifest)
-      : stagesFromLabels(summary?.stages ?? []);
-    const playing = !viewed && state.painting.playing !== null;
-    const activeKeyframe = playing
-      ? revealPos.version === state.painting.playing?.version
-        ? Math.max(0, revealPos.keyframe)
-        : 0
-      : null;
-    return buildStageBar(stages, activeKeyframe);
-  }, [isPaint, shownBase, history, manifest, viewed, state.painting.playing, revealPos]);
+    // A live run is only summarized once it is recorded: until then, show the
+    // stages performed so far.
+    const labels = summary?.stages ?? (shownBase === performingAsset ? performedStages : []);
+    const stages = stagesFromLabels(labels);
+    const current = performedStages[performedStages.length - 1];
+    const activeStage =
+      performing && shownBase === performingAsset && current !== undefined
+        ? Math.max(0, labels.indexOf(current))
+        : null;
+    return buildStageBar(stages, activeStage);
+  }, [isPaint, shownBase, history, performing, performingAsset, performedStages]);
 
   const title = pieceDisplayTitle({
     title: state.pieceTitle,
@@ -325,7 +327,9 @@ function App(): React.ReactElement {
     pieceNumber: state.pieceNumber,
   });
   const pillVersion =
-    isPaint && phase === 'painting' ? (state.painting.playing?.version ?? versions.working) : null;
+    isPaint && phase === 'painting'
+      ? (state.painting.live?.confirmed?.version ?? versions.working)
+      : null;
   const canSend = wsStatus === 'connected';
 
   const versionOverlay = viewed ? (
@@ -415,15 +419,15 @@ function App(): React.ReactElement {
               showIdleAnimation={shouldShowIdleAnimation(state)}
               painting={state.painting}
               apiUrl={apiUrl}
-              onPaintingPlaybackDone={handlePaintingPlaybackDone}
-              onPaintingProgress={handlePaintingProgress}
+              onPaintingLiveDone={handlePaintingLiveDone}
+              onPaintingLiveProgress={handlePerformanceProgress}
               overlay={versionOverlay}
               onStrokeStart={startStroke}
               onStrokeMove={addPoint}
               onStrokeEnd={handleStrokeEnd}
             />
           </div>
-          <div className="studio-under">
+          <div className={isPaint ? 'studio-under is-paint' : 'studio-under'}>
             {isPaint ? (
               <>
                 <StageBar segments={segments} />

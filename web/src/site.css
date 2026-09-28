@@ -581,6 +581,17 @@
   flex: none;
 }
 
+.replay-speed {
+  flex: none;
+  min-width: 36px;
+  padding: 4px 6px;
+  border: 1px solid var(--faint);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 .piece-info {
   display: grid;
   gap: 14px;
