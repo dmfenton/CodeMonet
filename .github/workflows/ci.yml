@@ -28,17 +28,17 @@ jobs:
               - 'fenton-platform.lock'
               - 'scripts/worktree-bootstrap.sh'
               - 'scripts/publish-tenant-manifest.sh'
-              - '.github/workflows/**'
-              - 'ios/fastlane/**'
-              - 'ios/project.yml'
+              - '.github/workflows/ci.yml'
             frontend:
               - 'web/**'
               - 'shared/**'
               - 'package.json'
               - 'package-lock.json'
+              - '.github/workflows/ci.yml'
             ios:
               - 'ios/**'
               - 'fenton-platform.lock'
+              - '.github/workflows/ci.yml'
 
   server:
     name: Server (Python)
@@ -311,13 +311,18 @@ jobs:
     name: CI Success
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 5
-    needs: [server, app, replay, docker, ios]
+    needs: [changes, server, app, replay, docker, ios]
     if: always()
     steps:
       - name: Check job results
         run: |
-          if [[ "${{ needs.server.result }}" == "failure" || "${{ needs.app.result }}" == "failure" || "${{ needs.replay.result }}" == "failure" || "${{ needs.docker.result }}" == "failure" || "${{ needs.ios.result }}" == "failure" ]]; then
-            echo "One or more jobs failed"
-            exit 1
-          fi
+          [[ "${{ needs.changes.result }}" == "success" ]] || exit 1
+          for result in \
+            "${{ needs.server.result }}" \
+            "${{ needs.app.result }}" \
+            "${{ needs.replay.result }}" \
+            "${{ needs.docker.result }}" \
+            "${{ needs.ios.result }}"; do
+            [[ "$result" == "success" || "$result" == "skipped" ]] || exit 1
+          done
           echo "All jobs passed or were skipped"
