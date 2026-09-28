@@ -17,7 +17,7 @@ jobs:
       ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -28,7 +28,9 @@ jobs:
               - 'fenton-platform.lock'
               - 'scripts/worktree-bootstrap.sh'
               - 'scripts/publish-tenant-manifest.sh'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
+              - 'ios/fastlane/**'
+              - 'ios/project.yml'
             frontend:
               - 'web/**'
               - 'shared/**'
