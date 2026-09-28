@@ -94,6 +94,8 @@ async function decodePixels(
 async function loadImage(src: string): Promise<HTMLImageElement> {
   const img = new Image();
   img.decoding = 'async';
+  // A cross-origin API (VITE_API_URL) must not taint the canvas we read back.
+  img.crossOrigin = 'anonymous';
   img.src = src;
   await img.decode();
   return img;
