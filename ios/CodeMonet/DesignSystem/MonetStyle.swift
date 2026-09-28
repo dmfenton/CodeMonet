@@ -16,7 +16,7 @@ enum MonetType {
     static let meta = Font.system(.caption, design: .monospaced)
     static let label = Font.system(.caption2, design: .monospaced, weight: .medium)
     static let chip = Font.system(.caption, design: .rounded, weight: .medium)
-    static let button = Font.system(.subheadline, design: .rounded, weight: .semibold)
+    static let button = Font.system(.body, design: .rounded, weight: .semibold)
 }
 
 /// Resolves the current palette from the environment — one line instead of
@@ -57,7 +57,7 @@ struct RuleLabel<Trailing: View>: View {
     let text: String
     @ViewBuilder var trailing: () -> Trailing
 
-    init(_ text: String, @ViewBuilder trailing: @escaping () -> Trailing = { EmptyView() }) {
+    init(_ text: String, @ViewBuilder trailing: @escaping () -> Trailing) {
         self.text = text
         self.trailing = trailing
     }
@@ -181,24 +181,20 @@ struct ChipLabel: View {
 
 /// The filled accent capsule used for primary actions (Watch, Continue).
 struct PrimaryCapsuleStyle: ButtonStyle {
-    /// `large` is the 46pt hero-action height.
-    var large = false
-
     func makeBody(configuration: Configuration) -> some View {
-        PrimaryCapsuleBody(configuration: configuration, large: large)
+        PrimaryCapsuleBody(configuration: configuration)
     }
 
     private struct PrimaryCapsuleBody: View {
         let configuration: ButtonStyleConfiguration
-        let large: Bool
         @Environment(\.isEnabled) private var isEnabled
 
         var body: some View {
             PaletteReader { palette in
                 configuration.label
-                    .font(large ? .system(.body, design: .rounded, weight: .semibold) : MonetType.button)
-                    .padding(.horizontal, large ? 20 : 16)
-                    .frame(minHeight: large ? 46 : 36)
+                    .font(MonetType.button)
+                    .padding(.horizontal, 20)
+                    .frame(minHeight: 46)
                     .foregroundStyle(isEnabled ? palette.surface : palette.tertiaryText)
                     .background(
                         Capsule().fill(

@@ -54,6 +54,17 @@ struct HomeSelectorsTests {
         #expect(!easel.isActive)
     }
 
+    @Test("a socket without an init frame shows the easel as reconnecting, not live")
+    func reconnectingEasel() throws {
+        var state = StudioState()
+        state.pieceNumber = 4
+        state.paused = false
+        state.turnActive = true
+        let easel = try #require(HomeSelectors.easel(state, receivingUpdates: false))
+        #expect(easel.status == "reconnecting")
+        #expect(!easel.isActive)
+    }
+
     @Test("recent pieces are the three newest")
     func recentPieces() {
         var state = StudioState()

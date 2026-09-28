@@ -55,6 +55,7 @@ struct EaselSection: View {
                     Spacer(minLength: 12)
                     Button(action: onPause) {
                         CircleIconLabel(systemImage: "pause.fill", size: 40)
+                            .opacity(connected ? 1 : 0.45)
                     }
                     .buttonStyle(PressScaleStyle())
                     .disabled(!connected)
@@ -88,7 +89,7 @@ struct EaselSection: View {
             }
             .frame(maxWidth: fullWidth ? .infinity : nil)
         }
-        .buttonStyle(PrimaryCapsuleStyle(large: true))
+        .buttonStyle(PrimaryCapsuleStyle())
         .disabled(!connected)
         .accessibilityIdentifier("home-continue-button")
     }

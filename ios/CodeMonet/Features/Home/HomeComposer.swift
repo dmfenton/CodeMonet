@@ -42,7 +42,7 @@ struct HomeComposer: View {
             }
             .animation(.easeOut(duration: 0.2), value: promptFocused)
             .onChange(of: promptFocused) { _, focused in onFocusChange(focused) }
-            .sensoryFeedback(.selection, trigger: style)
+            .sensoryFeedback(.selection, trigger: chosenStyle)
             .sensoryFeedback(.selection, trigger: profile)
         }
     }
@@ -63,11 +63,10 @@ struct HomeComposer: View {
         .padding(.horizontal, 16)
         .padding(.top, 16)
         .padding(.bottom, 12)
-        .background(shape.fill(palette.elevatedSurface))
+        // Tapping bare card (not a control) focuses the prompt.
+        .background(shape.fill(palette.elevatedSurface).onTapGesture { promptFocused = true })
         .overlay(shape.strokeBorder(promptFocused ? palette.accent.opacity(0.55) : palette.divider, lineWidth: 1))
         .background(shape.inset(by: -4).fill(palette.accent.opacity(promptFocused ? 0.08 : 0)))
-        .contentShape(shape)
-        .onTapGesture { promptFocused = true }
     }
 
     private func promptField(palette: FentonTheme.Palette) -> some View {

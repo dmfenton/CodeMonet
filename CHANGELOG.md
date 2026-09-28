@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Native iOS Home hangs the piece on the easel as the hero: a framed painting with a live status badge, Watch and pause while it paints, and Continue when paused. Starting a piece is one composer with a Paint/Plotter toggle, a size chip, one-tap prompt ideas led by Surprise me, and a send button that stays above the keyboard. Recent pieces scroll as a titled gallery strip.
+
 ## [1.43.0] - 2026-09-28
 
 Also rolls up v1.42.1 (native iOS resumes painting after backgrounding from Home), which had no changelog section.

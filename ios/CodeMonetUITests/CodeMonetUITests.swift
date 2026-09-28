@@ -85,15 +85,24 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         XCTAssertTrue(element("home-size-menu").exists)
         XCTAssertTrue(app.buttons["home-gallery"].exists)
         XCTAssertTrue(element("home-account-menu").exists)
+
+        // The size chip opens its menu without also focusing the prompt.
+        element("home-size-menu").tap()
+        XCTAssertTrue(app.buttons["Square · 1:1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.keyboards.element.exists, "the size menu must not raise the keyboard")
+        app.buttons["Square · 1:1"].tap()
     }
 
     /// An idea chip fills the composer, which enables Begin without typing.
     func testIdeaChipFillsPrompt() throws {
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 15))
+        // Begin also needs the socket; wait for it (Surprise me enables on
+        // connect) so the checks below are about the prompt alone.
+        XCTAssertTrue(waitForEnabled(app.buttons["home-surprise-me"], timeout: 15))
         let begin = app.buttons["home-prompt-submit"]
         XCTAssertFalse(begin.isEnabled, "Begin needs a prompt")
         app.buttons["home-idea-0"].tap()
-        XCTAssertTrue(begin.isEnabled, "an idea is a prompt")
+        XCTAssertTrue(waitForEnabled(begin, timeout: 5), "an idea is a prompt")
     }
 
     /// Begin starts a piece from the composer and enters Studio, whose nudge
@@ -131,6 +140,11 @@ final class CodeMonetLiveServerUITests: XCTestCase {
         app.buttons["gallery-close-button"].tap()
 
         XCTAssertTrue(app.scrollViews["home-panel"].waitForExistence(timeout: 10))
+    }
+
+    private func waitForEnabled(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
+        let enabled = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: element)
+        return XCTWaiter.wait(for: [enabled], timeout: timeout) == .completed
     }
 
     private func element(_ identifier: String) -> XCUIElement {

@@ -15,11 +15,13 @@ struct HomeView: View {
     static let gutter: CGFloat = 20
     private static let composerAnchor = "home-composer"
 
+    @State private var composerFocused = false
+
     var body: some View {
         let state = environment.studio.state
         let palette = theme.palette(for: colorScheme)
         let connected = environment.studio.connected
-        let easel = HomeSelectors.easel(state)
+        let easel = HomeSelectors.easel(state, receivingUpdates: environment.studio.receivingUpdates)
 
         ScrollViewReader { scroller in
             ScrollView {
@@ -44,12 +46,8 @@ struct HomeView: View {
                         connected: connected,
                         replacesEasel: easel != nil,
                         onFocusChange: { focused in
-                            guard focused else { return }
-                            // The hero pushes the composer below the keyboard;
-                            // bring the whole card (and its send button) into view.
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                scroller.scrollTo(Self.composerAnchor, anchor: .top)
-                            }
+                            composerFocused = focused
+                            if focused { liftComposer(scroller) }
                         },
                         onStarted: { environment.navigation.screen = .studio }
                     )
@@ -69,8 +67,15 @@ struct HomeView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
+            // Scrolling at focus can be clamped before the keyboard inset
+            // lands (short screens); scroll again once it has.
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                if composerFocused { liftComposer(scroller) }
+            }
         }
-        .overlay(alignment: .bottom) { bottomFade(palette: palette) }
+        .overlay(alignment: .bottom) {
+            bottomFade(palette: palette).opacity(composerFocused ? 0 : 1)
+        }
         .background {
             ZStack {
                 palette.surface
@@ -175,6 +180,14 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .padding(.top, FentonSpacing.large)
         .accessibilityIdentifier("home-connecting")
+    }
+
+    /// The hero pushes the composer below the keyboard; bring the whole
+    /// card (and its send button) into view.
+    private func liftComposer(_ scroller: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.3)) {
+            scroller.scrollTo(Self.composerAnchor, anchor: .top)
+        }
     }
 
     private func continueWork() {
