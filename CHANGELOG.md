@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-09-28
+
+Also rolls up v1.42.1 (native iOS resumes painting after backgrounding from Home), which had no changelog section.
+
 ### Added
 
 - Paintings are performed: every paint run streams its brush strokes live, in a painter's order (grounds primed, masses laid in with lozenge strokes, shapes outlined then filled, region marks patch by patch), timed by one hand. The web studio and the native iOS app play the run as it paints; gallery replay plays every version in order, with a speed control on the web.
@@ -1290,7 +1294,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...HEAD
+[1.43.0]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...v1.42.0
 [1.41.0]: https://github.com/dmfenton/CodeMonet/compare/v1.40.1...v1.41.0
 [1.40.1]: https://github.com/dmfenton/CodeMonet/compare/v1.39.3...v1.40.1
