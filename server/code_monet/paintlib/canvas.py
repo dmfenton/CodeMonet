@@ -196,6 +196,8 @@ _MAX_REVEAL_POINTS = 8
 _BRISTLE_BANK = 24
 # paint_region works its region in patches of about this many marks across.
 _PATCH_MARKS = 7
+# paint_region marks recorded per performance diff (neighbours, in painter's order).
+_MARKS_PER_RECORD = 24
 
 
 @dataclass
@@ -248,6 +250,8 @@ class Canvas:
         self._stages: list[_Stage] = [_Stage("start")]
         self._keyframes: list[_Keyframe] = []
         self._performance = Performance(self.rgb, self.height, self._lit_box)
+        # The last brush mark's footprint (ys, xs, position along it), for batching.
+        self._footprint: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
         # True when this run revises a previous version (load_state): it paints over
         # that canvas and may not prime a fresh one.
         self.continues = False
@@ -322,6 +326,7 @@ class Canvas:
 
     def _close_stage(self, before_op: bool = False) -> None:
         """Close the open keyframe; before_op: on the surface as of the last recorded op."""
+        self._flush_marks()
         st = self._stages[-1]
         perf = self._performance
         if not before_op:
@@ -932,6 +937,7 @@ class Canvas:
         x1 = int(min(self.W, math.ceil(float(p[:, 0].max()) + hw + 2)))
         y0 = int(max(0, math.floor(float(p[:, 1].min()) - hw - 2)))
         y1 = int(min(self.H, math.ceil(float(p[:, 1].max()) + hw + 2)))
+        self._footprint = None
         if x1 <= x0 or y1 <= y0:
             return False
         dist, s, side = _polyline_field(p, hw, (x0, y0, x1, y1))
@@ -974,6 +980,7 @@ class Canvas:
         if not m.any():
             return True
         gy, gx = iy[m] + y0, ix[m] + x0
+        self._footprint = (gy, gx, s[m])
         old = self.rgb[gy, gx]
         c = cov[m][:, None]
         if glaze:
@@ -1032,17 +1039,22 @@ class Canvas:
             self._record_dab(x, y, angle, length, width)
 
     def _record_dab(self, x: float, y: float, angle: float, length: float, width: float) -> None:
-        ca, sa = math.cos(angle) * length / 2, math.sin(angle) * length / 2
-        self._record(
-            [
-                "s",
-                round(float(width), 1),
-                round(x - ca, 1),
-                round(y - sa, 1),
-                round(x + ca, 1),
-                round(y + sa, 1),
-            ]
-        )
+        self._record(_dab_op(x, y, angle, length, width))
+
+    def _record_mark(self, op: list[Any]) -> None:
+        """One of paint_region's marks: recorded with its neighbours in one diff."""
+        st = self._stages[-1]
+        if self._footprint is not None:
+            self._performance.add_mark(*self._footprint)
+        st.ops.append(op)
+        if self._performance.pending_marks >= _MARKS_PER_RECORD:
+            self._flush_marks()
+        if len(st.ops) >= _OPS_PER_KEYFRAME:
+            self._close_stage()
+            self._stages.append(_Stage(st.label))
+
+    def _flush_marks(self) -> None:
+        self._performance.record_marks(self.rgb, self.height, self._stages[-1].label)
 
     def _dab(
         self,
@@ -1061,6 +1073,7 @@ class Canvas:
         round_tip: bool,
         r: np.random.Generator,
     ) -> bool:
+        self._footprint = None
         if length <= 0 or width <= 0:
             return False
         ca, sa = math.cos(angle), math.sin(angle)
@@ -1099,6 +1112,7 @@ class Canvas:
         pb = prof[i0] * (1 - fr) + prof[i1] * fr
         pc = prof2[i0] * (1 - fr) + prof2[i1] * fr
         gy, gx = iy + y0, ix + x0
+        self._footprint = (gy, gx, t)
         g = self.tooth[gy, gx]
         dens = 1 - dry * t**1.6
         cov = np.clip((dens * (0.55 + 0.45 * pb) - g * 0.38) * 5 + 0.3, 0, 1)
@@ -1259,8 +1273,9 @@ class Canvas:
                     clip,
                     r,
                 ):
-                    self._record(["s", round(wd, 1), *_reveal_points(path)])
+                    self._record_mark(["s", round(wd, 1), *_reveal_points(path)])
                     laid += 1
+            self._flush_marks()
             return laid
         if brush == "dab":
             for i in range(n):
@@ -1287,8 +1302,9 @@ class Canvas:
                     round_tip,
                     r,
                 ):
-                    self._record_dab(x, y, a, L, wd)
+                    self._record_mark(_dab_op(x, y, a, L, wd))
                     laid += 1
+            self._flush_marks()
             return laid
         # patch: constructive groups of parallel strokes, one modulated color graded across
         for i in range(n):
@@ -1331,8 +1347,9 @@ class Canvas:
                     round_tip,
                     r,
                 ):
-                    self._record_dab(sx, sy, aj, la, wd)
+                    self._record_mark(_dab_op(sx, sy, aj, la, wd))
                     laid += 1
+        self._flush_marks()
         return laid
 
     def contour(
@@ -1793,6 +1810,19 @@ def _per_mark(v: float | tuple[float, float], n: int, r: np.random.Generator) ->
 def _smooth1d(r: np.random.Generator, sigma: float, n: int) -> np.ndarray:
     v = ndi.gaussian_filter1d(r.standard_normal(n + 200), sigma, mode="wrap")[100:-100]
     return v / (v.std() + 1e-6)
+
+
+def _dab_op(x: float, y: float, angle: float, length: float, width: float) -> list[Any]:
+    """A dab's reveal op: a two-point stroke along its length."""
+    ca, sa = math.cos(angle) * length / 2, math.sin(angle) * length / 2
+    return [
+        "s",
+        round(float(width), 1),
+        round(x - ca, 1),
+        round(y - sa, 1),
+        round(x + ca, 1),
+        round(y + sa, 1),
+    ]
 
 
 def _stratified_points(region: np.ndarray, count: int, r: np.random.Generator) -> np.ndarray:

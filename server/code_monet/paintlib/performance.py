@@ -132,6 +132,8 @@ class Performance:
         self._chunk = _Chunk()
         self.clock = 0.0
         self._pen = (w / 2, h / 2)
+        # Footprints (ys, xs, position along the mark) of marks not yet recorded.
+        self._marks: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
         self.stats = PerformanceStats()
 
     # ------------------------------------------------------------------ stream
@@ -201,6 +203,43 @@ class Performance:
                 stage, len(p.strokes), ys, xs, p.labels, p.frac, None, instant=kind == "prime"
             )
 
+    def add_mark(self, ys: np.ndarray, xs: np.ndarray, along: np.ndarray) -> None:
+        """A brush mark's footprint: the pixels it touched and how far along it each is."""
+        self._marks.append((ys, xs, along))
+
+    @property
+    def pending_marks(self) -> int:
+        return len(self._marks)
+
+    def record_marks(self, rgb: np.ndarray, height: np.ndarray, stage: str) -> None:
+        """Record the pending marks with one diff: each changed pixel is painted by the
+        last mark that touched it, along that mark (one patch per mark, in order).
+
+        Per-op recording costs about as much as a small mark itself; a region's
+        thousands of marks are recorded in groups instead.
+        """
+        marks, self._marks = self._marks, []
+        if not marks:
+            return
+        t_diff = time.perf_counter()
+        bx0 = min(int(m[1].min()) for m in marks)
+        by0 = min(int(m[0].min()) for m in marks)
+        bx1 = max(int(m[1].max()) for m in marks) + 1
+        by1 = max(int(m[0].max()) for m in marks) + 1
+        box = _pad_box((bx0, by0, bx1, by1), _STROKE_PAD, self.W, self.H)
+        ys, xs = self._take_changes(box, rgb, height)
+        self.stats.diff_seconds += time.perf_counter() - t_diff
+        if len(xs) == 0 or self._sink is None:
+            return
+        x0, y0, x1, y1 = box
+        lab = np.full((y1 - y0, x1 - x0), -1, np.int32)
+        along = np.zeros((y1 - y0, x1 - x0), np.float32)
+        for k, (my, mx, ma) in enumerate(marks):
+            lab[my - y0, mx - x0] = k
+            along[my - y0, mx - x0] = ma
+        iy, ix = ys - y0, xs - x0
+        self._emit(stage, len(marks), ys, xs, lab[iy, ix], along[iy, ix], None)
+
     def record_direct_edits(
         self, rgb: np.ndarray, height: np.ndarray, stage: str
     ) -> list[Any] | None:
@@ -267,14 +306,18 @@ class Performance:
         delta = np.abs(color.astype(np.int16) - shown.astype(np.int16)).max(axis=2)
         lab[delta == 0] = -1
         step = 254 // (_ORDER_STEPS - 1)
-        for k in range(n_strokes):
-            sel = lab == k
-            if not sel.any():
+        # Each stroke's bounding rect in one pass (not a full-box scan per stroke).
+        rects = ndi.find_objects(lab + 1, max_label=n_strokes)
+        for k, rect in enumerate(rects):
+            if rect is None:
                 continue
-            start, dur = (self.clock, 0.0) if instant else self._time_stroke(sel, delta, x0, y0)
-            rows, cols = np.nonzero(sel)
-            r0, r1, c0, c1 = rows.min(), rows.max() + 1, cols.min(), cols.max() + 1
-            s_sel = sel[r0:r1, c0:c1]
+            r0, r1, c0, c1 = rect[0].start, rect[0].stop, rect[1].start, rect[1].stop
+            s_sel = lab[r0:r1, c0:c1] == k
+            start, dur = (
+                (self.clock, 0.0)
+                if instant
+                else self._time_stroke(s_sel, delta[r0:r1, c0:c1], x0 + c0, y0 + r0)
+            )
             order = np.zeros(s_sel.shape, np.uint8)
             steps = np.round(fr[r0:r1, c0:c1][s_sel] * (_ORDER_STEPS - 1)).astype(np.uint8)
             order[s_sel] = 1 + steps * step

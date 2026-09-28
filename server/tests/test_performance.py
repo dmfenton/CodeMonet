@@ -239,16 +239,46 @@ class TestPainterOrder:
     def test_marks_are_laid_patch_by_patch_not_scattered(self) -> None:
         cv = Canvas(800, 600, seed=4)
         pts: list[tuple[float, float]] = []
-        original = cv._record_dab
+        original = cv._record_mark
 
-        def spy(x: float, y: float, *rest: float) -> None:
-            pts.append((x, y))
-            original(x, y, *rest)
+        def spy(op: list[float]) -> None:
+            pts.append(((op[2] + op[4]) / 2, (op[3] + op[5]) / 2))  # the dab's centre
+            original(op)
 
-        cv._record_dab = spy  # type: ignore[method-assign]
+        cv._record_mark = spy  # type: ignore[method-assign]
         cv.paint_region(cv.rect_mask(0, 0, 800, 600), 600, "#335577", length=(10, 20), width=(4, 8))
         p = np.array(pts)
         step = np.hypot(*np.diff(p, axis=0).T)
         shuffled = p[np.random.default_rng(0).permutation(len(p))]
         random_step = np.hypot(*np.diff(shuffled, axis=0).T)
         assert np.median(step) < 0.2 * np.median(random_step)
+
+
+class TestRegionMarks:
+    """paint_region's marks are diffed in groups, yet each is still its own stroke."""
+
+    def test_marks_are_recorded_in_groups_one_stroke_each(self, tmp_path: FilePath) -> None:
+        cv = Canvas(W, H, seed=5)
+        diffs = 0
+        original = cv._performance._take_changes
+
+        def count(*args: object) -> tuple[np.ndarray, np.ndarray]:
+            nonlocal diffs
+            diffs += 1
+            return original(*args)  # type: ignore[arg-type]
+
+        with (tmp_path / "performance.bin").open("wb") as f:
+            cv.stream_to(f)
+            cv._performance._take_changes = count  # type: ignore[method-assign]
+            laid = cv.paint_region(
+                cv.rect_mask(0, 0, W, H), 120, "#335577", length=(8, 14), width=(3, 5)
+            )
+            cv._performance._take_changes = original  # type: ignore[method-assign]
+            cv.export(tmp_path)
+        frames = read_frames((tmp_path / "performance.bin").read_bytes())
+        patches = sum(len(f.patches()) for f in frames if f.meta["kind"] == "chunk")
+
+        assert laid > 100
+        assert diffs <= laid // 10, "marks share a diff instead of one each"
+        # Overpainted marks can vanish; the rest each land as their own timed stroke.
+        assert laid * 0.8 <= patches <= laid + 10
