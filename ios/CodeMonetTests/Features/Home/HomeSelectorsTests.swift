@@ -20,7 +20,7 @@ struct HomeSelectorsTests {
         #expect(easel.title == "Piece 3")
     }
 
-    @Test("a painting shows its latest version, title, and a status line with version and stage")
+    @Test("a painting shows its latest version, title, status, and a version/stage detail")
     func paintingEasel() throws {
         var state = StudioState()
         state.pieceNumber = 4
@@ -32,7 +32,8 @@ struct HomeSelectorsTests {
         let easel = try #require(HomeSelectors.easel(state))
         #expect(easel.title == "Poplars at dusk")
         #expect(easel.preview == .painting(Self.ref))
-        #expect(easel.statusLine == "painting · v4 · poplars")
+        #expect(easel.status == "painting")
+        #expect(easel.detail == "paint · version 4 · poplars")
         #expect(easel.isActive)
     }
 
@@ -48,7 +49,19 @@ struct HomeSelectorsTests {
         state.strokes = [Path(type: .polyline, points: [Point(x: 0, y: 0), Point(x: 5, y: 5)])]
         let easel = try #require(HomeSelectors.easel(state))
         #expect(easel.title == "Piece 2")
-        #expect(easel.statusLine == "paused")
+        #expect(easel.status == "paused")
+        #expect(easel.detail == "plotter")
+        #expect(!easel.isActive)
+    }
+
+    @Test("a socket without an init frame shows the easel as reconnecting, not live")
+    func reconnectingEasel() throws {
+        var state = StudioState()
+        state.pieceNumber = 4
+        state.paused = false
+        state.turnActive = true
+        let easel = try #require(HomeSelectors.easel(state, receivingUpdates: false))
+        #expect(easel.status == "reconnecting")
         #expect(!easel.isActive)
     }
 

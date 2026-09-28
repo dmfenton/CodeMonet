@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0309EF9DFE1DB3BDB012F4DA /* PromptIdea.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F586C1FEED1C1BF134D5391 /* PromptIdea.swift */; };
 		0577A6BAE0256D55C48BB321 /* WipPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = D69ECA128215DE3C5212546F /* WipPreview.swift */; };
 		0B282C422D4AA72C5DB1E7FF /* ThumbnailCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8DF1E580A173C68617E7AEA /* ThumbnailCacheTests.swift */; };
 		12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */; };
@@ -48,6 +49,7 @@
 		B50825FF926E71521BE8582B /* StudioUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D54494DA646E353267BCAFDC /* StudioUITests.swift */; };
 		B7CAC2A070B797729AD15399 /* HomeSelectors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 901C6365C3450B9C1BFB320B /* HomeSelectors.swift */; };
 		B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 025FFC0A720D0DFF2D799F0D /* GalleryPieceDetailView.swift */; };
+		B8F69A00DB8B7B6E66E1A626 /* EaselSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30A372B2AA48281BF278D1DF /* EaselSection.swift */; };
 		B9D3906A86DE3DA7D00512E9 /* ForegroundResumeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3FAB9E03BE033F4083BA4BF /* ForegroundResumeTests.swift */; };
 		C520059C42E5757249C12957 /* StudioStore+Pieces.swift in Sources */ = {isa = PBXBuildFile; fileRef = 186C888C958C6BE8C2B47984 /* StudioStore+Pieces.swift */; };
 		C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */; };
@@ -60,6 +62,7 @@
 		F95DD9D4FE5C88F906C0E22C /* MonetStudio in Frameworks */ = {isa = PBXBuildFile; productRef = 15B7043D6142FDEA8DD537B7 /* MonetStudio */; };
 		F9972B04273718665320F46B /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A178E0739AE265CF31CAF184 /* Assets.xcassets */; };
 		FCB02DFA82BBAEECFE5A72C2 /* GalleryRasterImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA2978DE221F6E5A1AB4C9D7 /* GalleryRasterImageView.swift */; };
+		FD8EC8230D12CE6E847C59E7 /* PaperGrain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9290FF962438059A13F69DE7 /* PaperGrain.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -88,7 +91,9 @@
 		20AD2487AFDAF81DC2222BE6 /* SceneResumeIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneResumeIntent.swift; sourceTree = "<group>"; };
 		2279D8BC1717425C6A89565F /* IdleParticlesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdleParticlesView.swift; sourceTree = "<group>"; };
 		2A122485A7BCFEFD23497579 /* HomeSelectorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectorsTests.swift; sourceTree = "<group>"; };
+		2F586C1FEED1C1BF134D5391 /* PromptIdea.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptIdea.swift; sourceTree = "<group>"; };
 		2F9B8B6FBCBE978E2A17EB20 /* CanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasView.swift; sourceTree = "<group>"; };
+		30A372B2AA48281BF278D1DF /* EaselSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EaselSection.swift; sourceTree = "<group>"; };
 		35AB865BA80F26AFB9EEACF1 /* CanvasSizeProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanvasSizeProfile.swift; sourceTree = "<group>"; };
 		373D5E81A5A3E2F361A6A797 /* ThumbnailCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailCache.swift; sourceTree = "<group>"; };
 		3C75594C9100EECCCD83DC47 /* CodeMonet.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CodeMonet.entitlements; sourceTree = "<group>"; };
@@ -110,6 +115,7 @@
 		8372F9F4537B913A1B9B88AF /* ReplayScrubber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayScrubber.swift; sourceTree = "<group>"; };
 		901C6365C3450B9C1BFB320B /* HomeSelectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSelectors.swift; sourceTree = "<group>"; };
 		917FFCF67F64818833BB8779 /* PaintingPerformanceController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaintingPerformanceController.swift; sourceTree = "<group>"; };
+		9290FF962438059A13F69DE7 /* PaperGrain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaperGrain.swift; sourceTree = "<group>"; };
 		95E266E95B648C934E866D73 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		9C7FE14086D7AD9C272AD076 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		A178E0739AE265CF31CAF184 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -184,9 +190,11 @@
 			isa = PBXGroup;
 			children = (
 				35AB865BA80F26AFB9EEACF1 /* CanvasSizeProfile.swift */,
+				30A372B2AA48281BF278D1DF /* EaselSection.swift */,
 				A91BFA2237576839904E7414 /* HomeComposer.swift */,
 				901C6365C3450B9C1BFB320B /* HomeSelectors.swift */,
 				488E8004DCBEBAB3333BB48C /* HomeView.swift */,
+				2F586C1FEED1C1BF134D5391 /* PromptIdea.swift */,
 				D69ECA128215DE3C5212546F /* WipPreview.swift */,
 			);
 			path = Home;
@@ -276,6 +284,7 @@
 				454497465AB8A03F73EB2F61 /* BrandMark.swift */,
 				81E314022FF86AE474994A58 /* CodeMonetDesignSystem.swift */,
 				F999FE7E9447C8B5CDDBAFE2 /* MonetStyle.swift */,
+				9290FF962438059A13F69DE7 /* PaperGrain.swift */,
 			);
 			path = DesignSystem;
 			sourceTree = "<group>";
@@ -577,6 +586,7 @@
 				22C60179A09FA386921DFE50 /* CanvasView.swift in Sources */,
 				E52CF3D7F96B1AF93065738E /* CodeMonetApp.swift in Sources */,
 				12549F3C85ED9C362028BA8D /* CodeMonetDesignSystem.swift in Sources */,
+				B8F69A00DB8B7B6E66E1A626 /* EaselSection.swift in Sources */,
 				DD977D7CFB23D941EF92C514 /* ForegroundResumeState.swift in Sources */,
 				588F73124B9ACA116B6ED949 /* GalleryFormatting.swift in Sources */,
 				B8CCFE670BC42A4975C7FFD7 /* GalleryPieceDetailView.swift in Sources */,
@@ -590,6 +600,8 @@
 				587FB805A51C21177B1132A4 /* Navigation.swift in Sources */,
 				D475CD72024DE203E494C3D7 /* NotebookView.swift in Sources */,
 				C9F6A439D748AE1E71FBBE66 /* PaintingPerformanceController.swift in Sources */,
+				FD8EC8230D12CE6E847C59E7 /* PaperGrain.swift in Sources */,
+				0309EF9DFE1DB3BDB012F4DA /* PromptIdea.swift in Sources */,
 				A2AEE046BE330A9F7A743002 /* ReplayScrubber.swift in Sources */,
 				A3FA6821DB99B881BA311CEF /* RootView.swift in Sources */,
 				9DF6BD6CFDE04F1FDFF9DE0A /* SceneResumeIntent.swift in Sources */,
