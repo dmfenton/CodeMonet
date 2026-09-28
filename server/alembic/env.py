@@ -17,8 +17,10 @@ config = context.config
 # Override sqlalchemy.url from settings
 config.set_main_option("sqlalchemy.url", settings.database_url)
 
-# Interpret config file for Python logging
-if config.config_file_name is not None:
+# Interpret config file for Python logging — only for the alembic CLI. When the
+# server migrates at startup it passes configure_logger=False: fileConfig would
+# otherwise disable every logger that already exists (all of code_monet's).
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 # Model's MetaData object for 'autogenerate' support

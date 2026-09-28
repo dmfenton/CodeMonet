@@ -179,7 +179,10 @@ async def process_turn_messages(
 
         elif isinstance(message, ResultMessage):
             # Turn complete
-            logger.info(f"Turn complete: {message.subtype}")
+            logger.info(
+                f"Turn complete: {message.subtype} cost_usd={message.total_cost_usd} "
+                f"turns={message.num_turns} duration_ms={message.duration_ms}"
+            )
             if message.is_error and callbacks.on_error:
                 await callbacks.on_error(message.result or "Unknown error", None)
 

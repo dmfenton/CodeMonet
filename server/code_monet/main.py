@@ -52,7 +52,7 @@ async def run_migrations() -> None:
     from alembic import command
 
     # Run alembic upgrade head
-    alembic_cfg = Config("alembic.ini")
+    alembic_cfg = Config("alembic.ini", attributes={"configure_logger": False})
     await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
     logger.info("Database migrations completed")
 
