@@ -7,7 +7,7 @@ pin="$(tr -d '[:space:]' < "$repo/fenton-simulator.lock")"
 common="$(git -C "$repo" rev-parse --path-format=absolute --git-common-dir)"
 main="$(dirname "$common")"
 source="${FENTON_PLATFORM_SOURCE:-$(dirname "$main")/platform.dmfenton.net}"
-tool="$main/runtime/simulator-tool/$pin"
+tool="$common/fenton-simulator-tool/$pin"
 if [[ ! -f "$tool/tools/simulators/cli.py" ]]; then
   git -C "$source" cat-file -e "$pin^{commit}" || {
     echo "Simulator tool commit $pin unavailable in $source; fetch the approved Platform commit there." >&2
@@ -19,10 +19,12 @@ if [[ ! -f "$tool/tools/simulators/cli.py" ]]; then
   git -C "$source" archive "$pin" tools/simulators | tar -xf - -C "$staging"
   # Concurrent launchers can share the immutable tool version.
   python3 - "$staging" "$tool" <<'PYRENAME'
-import os,sys
+import errno,os,sys
 try: os.rename(sys.argv[1],sys.argv[2])
-except FileExistsError:
+except OSError as error:
+    if error.errno not in (errno.EEXIST,errno.ENOTEMPTY): raise
     if not os.path.isfile(os.path.join(sys.argv[2],"tools/simulators/cli.py")): raise
 PYRENAME
+  rm -rf -- "$staging"
 fi
 exec python3 "$tool/tools/simulators/cli.py" "$@"
