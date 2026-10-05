@@ -25,24 +25,15 @@ build: generate
 test-kit:
 	cd MonetKit && swift test
 
-# Full app-target test run (CodeMonetTests + CodeMonetUITests) on a booted
-# simulator. Slower than test-kit; run before a PR, not on every save.
-#
-# The target device varies per machine (a fixed "iPhone 16 Pro" simulator
-# doesn't exist everywhere), so this is parameterized two ways:
-#   make test-app SIMULATOR_ID=<udid>                 # exact simulator, by id
-#   make test-app DESTINATION='platform=iOS Simulator,name=iPhone 17'
-# SIMULATOR_ID wins if both are set. With neither, falls back to the old
-# by-name default (kept for machines where it still resolves).
-DESTINATION ?= platform=iOS Simulator,name=iPhone 16 Pro
-ifdef SIMULATOR_ID
-DESTINATION := platform=iOS Simulator,id=$(SIMULATOR_ID)
-endif
-
+# Full app tests share the Mac-wide two-device pool; busy runs queue.
+# Optional helper arguments: make test-app SIMULATOR_ARGS='--device-type <identifier>'
+SIMULATOR_ARGS ?=
 test-app: generate
-	xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
-		-destination '$(DESTINATION)' \
-		test
+	../scripts/simulator.sh run --app code-monet $(SIMULATOR_ARGS) -- \
+		xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
+		-destination 'platform=iOS Simulator,id={simulator}' \
+		-parallel-testing-enabled NO -maximum-concurrent-test-simulator-destinations 1 \
+		-maximum-parallel-testing-workers 1 test
 
 clean:
 	rm -rf CodeMonet.xcodeproj
