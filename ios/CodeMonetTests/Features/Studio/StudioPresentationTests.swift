@@ -43,6 +43,7 @@ struct StudioPresentationTests {
     func executingPills() {
         var state = StudioState()
         state.paused = false
+        state.turnActive = true
         // Messages reach both the status window and the notebook log via the reducer.
         for tool in ["critique_canvas", "paint", "view_canvas"] {
             state = StudioReducer.reduce(state, .clearMessages)
@@ -50,6 +51,8 @@ struct StudioPresentationTests {
             let expected = ["critique_canvas": "critique", "paint": "painting", "view_canvas": "looking"][tool]
             #expect(StudioPresentation.statusPill(for: state) == .init(label: expected ?? "", isActive: true))
         }
+        state.turnActive = false
+        #expect(StudioPresentation.statusPill(for: state) == .init(label: "idle", isActive: false))
     }
 
     @Test("a playing painting version reads as painting; plotter strokes as drawing")

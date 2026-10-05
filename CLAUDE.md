@@ -659,3 +659,18 @@ which caps review at two Codex rounds per PR. Follow its procedure:
 - If the first review reports P0/P1 findings, fix them together, push, and request one final review for the new head. A review with no blocking finding is already the final round.
 - After the final round, fix any blocking findings, reply to and resolve each thread, rerun the local checks, and dispatch the gate with `gh workflow run codex-p1-gate.yml -f pr_number=<n>`. Never request a third review. The gate accepts a head that descends from the final reviewed commit with no unresolved blocking Codex thread, including later base-branch merges; the base advancing after the final review is a warning, not a block.
 - Immediately before merge, re-query the live review threads and stop if any Codex thread is unresolved; never rely only on an earlier green status.
+
+## Shared simulator lifecycle
+
+- Use `make -C ios test-app (MonetKit tests/build-only targets use no boot slot)` through the pinned `scripts/simulator.sh` helper.
+- Two managed boot slots are shared across the whole Mac and all app worktrees; busy tests queue.
+- Do not create per-task devices, take the first booted user device, or run simulator tests outside
+  a lease. Keep Xcode parallel simulator testing disabled. Generic builds and Swift package tests
+  do not need a booted device.
+- For interactive review use `scripts/simulator.sh preview --app code-monet --ttl 600 -- <command>`;
+  renew the printed lease token explicitly when needed. Ordinary test/capture leases shut down
+  after their owned command exits. Device/app data is retained; never erase/delete for cleanup.
+- `scripts/simulator.sh status` reports owners/queue; `cleanup` reconciles only abandoned managed
+  leases after their child jobs exit. Never stop intake agents, native services or unrelated jobs.
+- `fenton-simulator.lock` pins local tooling independently of the production Platform pin.
+  Set `FENTON_PLATFORM_SOURCE` only when the authorized local Platform clone is elsewhere.
