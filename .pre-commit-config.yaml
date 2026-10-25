@@ -23,6 +23,12 @@ repos:
         language: system
         files: (^|/)package(-lock)?\.json$
         pass_filenames: false
+      - id: python-dependency-audit
+        name: Python dependency audit
+        entry: bash scripts/audit-python-dependencies.sh
+        language: system
+        files: ^(server/(pyproject\.toml|uv\.lock)|fenton-platform\.lock|scripts/audit-python-dependencies\.sh)$
+        pass_filenames: false
       - id: workflow-contracts
         name: workflow contract tests (server)
         entry: bash -c 'cd server && uv run pytest -q tests/test_testflight_signing.py tests/test_release_contract.py tests/test_tenant_manifest.py'
