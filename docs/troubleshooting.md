@@ -29,7 +29,7 @@ If `scripts/remote.py` commands timeout:
 `uv run` inside the container is slow (~30s) because it syncs the venv. For quick DB operations, use sqlite3 directly:
 
 ```bash
-uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/code_monet.db 'SELECT * FROM users;'"
+uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/codemonet/drawing_agent.db 'SELECT * FROM users;'"
 ```
 
 ## Missing tools in slim image

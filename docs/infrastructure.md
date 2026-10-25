@@ -117,7 +117,7 @@ uv run python scripts/remote.py shell "command"
 **Note:** Commands that start Python inside the container can be slow (~30s) due to `uv run` overhead. For direct database access, use sqlite3 on the host:
 
 ```bash
-uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/code_monet.db '.tables'"
+uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/codemonet/drawing_agent.db '.tables'"
 ```
 
 ## SSH Access (if needed)
@@ -144,3 +144,9 @@ Managed by Terraform in [compute/infrastructure/github_actions.tf](https://githu
 | `AWS_SECRET_ACCESS_KEY` | IAM user secret key for ECR push |
 
 Add at: https://github.com/dmfenton/CodeMonet/settings/secrets/actions
+
+CodeMonet runtime state is mounted from `/home/ec2-user/data/codemonet` only.
+Platform owns the one-time database/workspace move and its rollback; see
+`platform.dmfenton.net/ops/scripts/isolate-codemonet-data.py`. Historical shared
+logs and backups remain outside the app mount. New application logs are collected
+from the private directory by the Platform-owned CloudWatch agent.
