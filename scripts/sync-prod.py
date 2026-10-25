@@ -24,8 +24,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 from remote import run_command
 
 # Configuration
-REMOTE_DB_PATH = "/home/ec2-user/data/code_monet.db"
-REMOTE_WORKSPACE_BASE = "/home/ec2-user/data/agent_workspace/users"
+REMOTE_DB_PATH = "/home/ec2-user/data/codemonet/drawing_agent.db"
+REMOTE_WORKSPACE_BASE = "/home/ec2-user/data/codemonet/agent_workspace/users"
 LOCAL_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "server", "data")
 LOCAL_DB_PATH = os.path.join(LOCAL_DATA_DIR, "code_monet.db")
 LOCAL_WORKSPACE_DIR = os.path.join(LOCAL_DATA_DIR, "agent_workspace", "users")

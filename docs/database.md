@@ -8,8 +8,8 @@
 ## Database Location
 
 - Dev: `server/data/code_monet.db`
-- Prod (container): `/app/data/code_monet.db`
-- Prod (host): `/home/ec2-user/data/code_monet.db` (on EBS volume)
+- Prod (container): `/app/data/drawing_agent.db`
+- Prod (host): `/home/ec2-user/data/codemonet/drawing_agent.db` (on EBS volume)
 
 ## Migrations
 
