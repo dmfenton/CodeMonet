@@ -396,25 +396,6 @@ def options_for_og_image(
     )
 
 
-def options_for_thumbnail(
-    drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
-    width: int = 800,
-    height: int = 600,
-) -> RenderOptions:
-    """Options for gallery thumbnails.
-
-    - Uses saved canvas dimensions
-    - White background
-    """
-    return RenderOptions(
-        width=width,
-        height=height,
-        background_color="#FFFFFF",
-        drawing_style=drawing_style,
-        expand_brushes=False,
-    )
-
-
 def options_for_share_preview(
     drawing_style: DrawingStyleType = DrawingStyleType.PLOTTER,
     width: int = 800,

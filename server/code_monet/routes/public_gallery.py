@@ -13,7 +13,8 @@ from fastapi.responses import Response
 
 from code_monet.config import settings
 from code_monet.db import get_session, repository
-from code_monet.rendering import options_for_og_image, options_for_thumbnail, render_strokes_async
+from code_monet.rendering import options_for_og_image, render_strokes_async
+from code_monet.routes.canvas import get_user_state
 from code_monet.types import DrawingStyleType, Path
 from code_monet.workspace.assets import version_asset
 from code_monet.workspace.gallery import (
@@ -29,6 +30,7 @@ _UUID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+_PIECE_ID_PATTERN = re.compile(r"^piece_(\d+)$")
 
 
 def _raster_image(workspace_base: FilePath, user_id: str, data: dict[str, Any]) -> str | None:
@@ -208,19 +210,29 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
 
 @router.get("/public/gallery/{user_id}/{piece_id}/thumbnail.png")
 async def get_public_piece_thumbnail(user_id: str, piece_id: str) -> Response:
-    """Get thumbnail PNG for a gallery piece.
+    """Get the persisted gallery thumbnail for a public piece.
 
-    Renders gallery piece strokes to PNG using the saved canvas dimensions.
-    Only returns image if user has opted into public gallery.
+    Serves the same small thumbnail the owner's gallery uses, rendered once at
+    save time (or on first request for older pieces), instead of re-rendering
+    the full canvas on every request.
     """
-    strokes, drawing_style, width, height, raster = await _load_public_piece(user_id, piece_id)
+    if not _UUID_PATTERN.match(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    match = _PIECE_ID_PATTERN.match(piece_id)
+    if not match:
+        raise HTTPException(status_code=400, detail="Invalid piece_id")
 
-    options = replace(options_for_thumbnail(drawing_style, width, height), base_image=raster)
-    result = await render_strokes_async(strokes, options)
-    assert isinstance(result, bytes)
+    async with get_session() as session:
+        user = await repository.get_user_by_id(session, user_id)
+        if not user or not user.gallery_public:
+            raise HTTPException(status_code=404, detail="Gallery not found")
 
+    state = await get_user_state(user)
+    png_bytes = await state.gallery_thumbnail(int(match.group(1)))
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Piece not found")
     return Response(
-        content=result,
+        content=png_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=604800"},  # 7 days
     )

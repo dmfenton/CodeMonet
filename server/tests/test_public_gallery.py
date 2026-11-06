@@ -217,3 +217,59 @@ class TestPublicGalleryStrokes:
         # but DB lookup is case-sensitive so user won't be found
         assert response.status_code == 404
         assert response.json()["detail"] == "Gallery not found"
+
+
+class TestPublicGalleryThumbnail:
+    """GET /public/gallery/{user_id}/{piece_id}/thumbnail.png serves the persisted thumbnail."""
+
+    @pytest.fixture
+    def state(self):
+        state = MagicMock()
+        state.gallery_thumbnail = AsyncMock(return_value=b"\x89PNG-thumb")
+        return state
+
+    @pytest.fixture
+    def client(self, state):
+        public_user = MagicMock(id=TEST_USER_ID, gallery_public=True)
+        private_user = MagicMock(id=TEST_USER_ID_PRIVATE, gallery_public=False)
+        users = {TEST_USER_ID: public_user, TEST_USER_ID_PRIVATE: private_user}
+        with (
+            patch("code_monet.routes.public_gallery.repository") as mock_repo,
+            patch("code_monet.routes.public_gallery.get_session") as mock_get_session,
+            patch(
+                "code_monet.routes.public_gallery.get_user_state",
+                AsyncMock(return_value=state),
+            ),
+        ):
+            mock_repo.get_user_by_id = AsyncMock(side_effect=lambda _s, uid: users.get(uid))
+            mock_context = MagicMock()
+            mock_context.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_context.__aexit__ = AsyncMock(return_value=None)
+            mock_get_session.return_value = mock_context
+
+            from code_monet.main import app
+
+            yield TestClient(app)
+
+    def test_serves_persisted_thumbnail(self, client, state) -> None:
+        response = client.get(f"/public/gallery/{TEST_USER_ID}/piece_000012/thumbnail.png")
+        assert response.status_code == 200
+        assert response.content == b"\x89PNG-thumb"
+        assert response.headers["content-type"] == "image/png"
+        assert "max-age=604800" in response.headers["cache-control"]
+        state.gallery_thumbnail.assert_awaited_once_with(12)
+
+    def test_private_gallery_is_not_found(self, client, state) -> None:
+        response = client.get(f"/public/gallery/{TEST_USER_ID_PRIVATE}/piece_000001/thumbnail.png")
+        assert response.status_code == 404
+        state.gallery_thumbnail.assert_not_awaited()
+
+    def test_missing_piece_is_not_found(self, client, state) -> None:
+        state.gallery_thumbnail.return_value = None
+        response = client.get(f"/public/gallery/{TEST_USER_ID}/piece_000099/thumbnail.png")
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("piece_id", ["piece_abc", "..", "piece_1x"])
+    def test_rejects_malformed_piece_id(self, client, piece_id) -> None:
+        response = client.get(f"/public/gallery/{TEST_USER_ID}/{piece_id}/thumbnail.png")
+        assert response.status_code in (400, 404)

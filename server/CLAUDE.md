@@ -231,7 +231,6 @@ Use preset factories for common scenarios:
 from code_monet.rendering import (
     options_for_agent_view,    # Agent sees canvas with human highlights
     options_for_og_image,      # 1200x630 social sharing
-    options_for_thumbnail,     # 800x600 gallery thumbnail
     options_for_share_preview, # 800x600 optimized PNG
 )
 
