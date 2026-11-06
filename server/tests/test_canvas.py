@@ -10,7 +10,6 @@ from code_monet.rendering import (
     hex_to_rgba,
     options_for_og_image,
     options_for_share_preview,
-    options_for_thumbnail,
     render_strokes,
 )
 from code_monet.types import DrawingStyleType, Path, PathType, Point
@@ -296,13 +295,6 @@ class TestRenderOptions:
         """OG image options for paint mode uses actual colors."""
         options = options_for_og_image(DrawingStyleType.PAINT)
         assert options.plotter_stroke_override is None  # No override
-
-    def test_options_for_thumbnail(self) -> None:
-        """Thumbnail options should be standard canvas size."""
-        options = options_for_thumbnail()
-        assert options.width == 800
-        assert options.height == 600
-        assert options.background_color == "#FFFFFF"
 
     def test_options_for_share_preview(self) -> None:
         """Share preview options should optimize PNG."""

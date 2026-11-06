@@ -13,14 +13,17 @@ from fastapi.responses import Response
 
 from code_monet.config import settings
 from code_monet.db import get_session, repository
-from code_monet.rendering import options_for_og_image, options_for_thumbnail, render_strokes_async
+from code_monet.rendering import options_for_og_image, render_strokes_async
 from code_monet.types import DrawingStyleType, Path
 from code_monet.workspace.assets import version_asset
 from code_monet.workspace.gallery import (
+    gallery_thumbnail,
     parse_drawing_style,
+    parse_piece_id,
     piece_detail_fields,
     piece_stroke_count,
 )
+from code_monet.workspace.persistence import get_user_dir
 
 router = APIRouter()
 
@@ -208,19 +211,28 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
 
 @router.get("/public/gallery/{user_id}/{piece_id}/thumbnail.png")
 async def get_public_piece_thumbnail(user_id: str, piece_id: str) -> Response:
-    """Get thumbnail PNG for a gallery piece.
+    """Get the persisted gallery thumbnail for a public piece.
 
-    Renders gallery piece strokes to PNG using the saved canvas dimensions.
-    Only returns image if user has opted into public gallery.
+    Serves the same small thumbnail the owner's gallery uses: rendered at save
+    time, or on first request for older pieces, and re-rendered only when the
+    piece JSON is newer. Reads just the gallery directory, never workspace.json.
     """
-    strokes, drawing_style, width, height, raster = await _load_public_piece(user_id, piece_id)
+    if not _UUID_PATTERN.match(user_id):
+        raise HTTPException(status_code=400, detail="Invalid user_id")
+    piece_number = parse_piece_id(piece_id)
+    if piece_number is None:
+        raise HTTPException(status_code=400, detail="Invalid piece_id")
 
-    options = replace(options_for_thumbnail(drawing_style, width, height), base_image=raster)
-    result = await render_strokes_async(strokes, options)
-    assert isinstance(result, bytes)
+    async with get_session() as session:
+        user = await repository.get_user_by_id(session, user_id)
+        if not user or not user.gallery_public:
+            raise HTTPException(status_code=404, detail="Gallery not found")
 
+    png_bytes = await gallery_thumbnail(get_user_dir(str(user.id)), piece_number)
+    if png_bytes is None:
+        raise HTTPException(status_code=404, detail="Piece not found")
     return Response(
-        content=result,
+        content=png_bytes,
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=604800"},  # 7 days
     )

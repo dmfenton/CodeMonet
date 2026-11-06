@@ -1,6 +1,5 @@
 """User gallery endpoints."""
 
-import re
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException
@@ -10,7 +9,7 @@ from code_monet.auth.dependencies import CurrentUser
 from code_monet.db import get_session, repository
 from code_monet.routes.canvas import get_user_state
 from code_monet.types import get_style_config
-from code_monet.workspace.gallery import parse_gallery_piece, piece_detail_fields
+from code_monet.workspace.gallery import parse_gallery_piece, parse_piece_id, piece_detail_fields
 
 router = APIRouter()
 
@@ -59,12 +58,9 @@ async def get_gallery_thumbnail(piece_id: str, user: CurrentUser) -> Response:
     Returns:
         PNG image of the piece with long cache headers.
     """
-    # Validate and parse piece_id (e.g., "piece_000001" -> 1)
-    match = re.match(r"^piece_(\d+)$", piece_id)
-    if not match:
+    piece_number = parse_piece_id(piece_id)
+    if piece_number is None:
         raise HTTPException(status_code=400, detail="Invalid piece_id format")
-
-    piece_number = int(match.group(1))
 
     state = await get_user_state(user)
     png_bytes = await state.gallery_thumbnail(piece_number)
