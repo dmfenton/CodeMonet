@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The public gallery loads quickly: tiles serve the small thumbnail saved with each piece instead of re-rendering the full canvas on every request (previously 0.5–4.6 s and up to 650 KB per tile).
+
 ## [1.44.0] - 2026-09-28
 
 ### Changed

@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import re
 import uuid
+import weakref
 from pathlib import Path as FilePath
 from typing import Any, TypedDict
 
 import aiofiles
 import aiofiles.os
 
+from code_monet.rendering import RenderOptions, render_strokes_async
 from code_monet.types import DrawingStyleType, GalleryEntry, PaintingVersion, Path, SavedCanvas
+from code_monet.workspace.assets import version_asset
 
 logger = logging.getLogger(__name__)
 
@@ -282,3 +287,92 @@ async def read_gallery_piece_json(
                 logger.warning(f"Failed to read gallery piece {piece_number}: {e}")
                 return None
     return None
+
+
+_PIECE_ID_PATTERN = re.compile(r"piece_([0-9]+)")
+THUMBNAIL_MAX_SIDE = 640
+
+# One lock per (user dir, piece), shared by every WorkspaceState instance and
+# the public route, so a resave and a thumbnail render never interleave and
+# concurrent first requests render once. Weak values drop idle locks.
+_thumbnail_locks: weakref.WeakValueDictionary[tuple[str, int], asyncio.Lock] = (
+    weakref.WeakValueDictionary()
+)
+
+
+def parse_piece_id(piece_id: str) -> int | None:
+    """Piece number from an id like "piece_000012", or None if malformed."""
+    match = _PIECE_ID_PATTERN.fullmatch(piece_id)
+    return int(match.group(1)) if match else None
+
+
+def gallery_thumbnail_lock(user_dir: FilePath, piece_number: int) -> asyncio.Lock:
+    """The lock guarding a piece's JSON rewrite and its thumbnail sidecar."""
+    key = (str(user_dir.resolve()), piece_number)
+    lock = _thumbnail_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _thumbnail_locks[key] = lock
+    return lock
+
+
+async def gallery_thumbnail(user_dir: FilePath, piece_number: int) -> bytes | None:
+    """Small persisted thumbnail for a gallery piece, rendered on first use.
+
+    The thumbnail is re-rendered when the piece JSON is newer than it.
+    """
+    async with gallery_thumbnail_lock(user_dir, piece_number):
+        return await _gallery_thumbnail_unlocked(user_dir, piece_number)
+
+
+async def _gallery_thumbnail_unlocked(user_dir: FilePath, piece_number: int) -> bytes | None:
+    gallery_dir = user_dir / "gallery"
+    data_path = gallery_dir / f"piece_{piece_number:06d}.json"
+    if not await aiofiles.os.path.exists(data_path):
+        data_path = gallery_dir / f"piece_{piece_number:03d}.json"
+    if not await aiofiles.os.path.exists(data_path):
+        return None
+    thumbnail_path = gallery_dir / f"piece_{piece_number:06d}.thumb.png"
+    if await aiofiles.os.path.exists(thumbnail_path):
+        thumbnail_stat, data_stat = await asyncio.gather(
+            aiofiles.os.stat(thumbnail_path), aiofiles.os.stat(data_path)
+        )
+        if thumbnail_stat.st_mtime_ns >= data_stat.st_mtime_ns:
+            async with aiofiles.open(thumbnail_path, "rb") as thumbnail_file:
+                return await thumbnail_file.read()
+
+    data = await read_gallery_piece_json(gallery_dir, piece_number)
+    if data is None:
+        return None
+    strokes, style, width, height = parse_gallery_piece(data)
+    if width <= 0 or height <= 0:
+        return None
+    token = data.get("image_token")
+    raster = version_asset(user_dir, token, "final.png") if isinstance(token, str) else None
+    if not strokes and raster is None:
+        return None
+
+    scale = min(1, THUMBNAIL_MAX_SIDE / max(width, height))
+    result = await render_strokes_async(
+        strokes,
+        RenderOptions(
+            width=max(1, round(width * scale)),
+            height=max(1, round(height * scale)),
+            drawing_style=style,
+            scale_from=(width, height),
+            base_image=str(raster) if raster else None,
+        ),
+    )
+    assert isinstance(result, bytes)
+
+    # A unique temporary name keeps simultaneous first requests for an old
+    # piece from racing over the same temporary file.
+    temporary_path = thumbnail_path.with_name(f"{thumbnail_path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        async with aiofiles.open(temporary_path, "wb") as thumbnail_file:
+            await thumbnail_file.write(result)
+        await aiofiles.os.replace(temporary_path, thumbnail_path)
+    finally:
+        if await aiofiles.os.path.exists(temporary_path):
+            await aiofiles.os.remove(temporary_path)
+    return result

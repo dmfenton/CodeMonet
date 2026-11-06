@@ -1,5 +1,6 @@
 """Tests for the public gallery API endpoints."""
 
+import io
 import json
 import tempfile
 from pathlib import Path
@@ -220,56 +221,96 @@ class TestPublicGalleryStrokes:
 
 
 class TestPublicGalleryThumbnail:
-    """GET /public/gallery/{user_id}/{piece_id}/thumbnail.png serves the persisted thumbnail."""
+    """GET /public/gallery/{user_id}/{piece_id}/thumbnail.png against a real workspace."""
 
     @pytest.fixture
-    def state(self):
-        state = MagicMock()
-        state.gallery_thumbnail = AsyncMock(return_value=b"\x89PNG-thumb")
-        return state
+    def workspace(self, tmp_path, monkeypatch):
+        from code_monet.config import settings
+
+        monkeypatch.setattr(settings, "workspace_base_dir", str(tmp_path))
+        gallery = tmp_path / TEST_USER_ID / "gallery"
+        gallery.mkdir(parents=True)
+        line = {"type": "line", "points": [{"x": 0, "y": 0}, {"x": 1600, "y": 1200}]}
+        for name, number in (("piece_000012.json", 12), ("piece_003.json", 3)):
+            (gallery / name).write_text(
+                json.dumps(
+                    {"piece_number": number, "strokes": [line], "width": 1600, "height": 1200}
+                )
+            )
+        return gallery
 
     @pytest.fixture
-    def client(self, state):
+    def db(self):
         public_user = MagicMock(id=TEST_USER_ID, gallery_public=True)
         private_user = MagicMock(id=TEST_USER_ID_PRIVATE, gallery_public=False)
         users = {TEST_USER_ID: public_user, TEST_USER_ID_PRIVATE: private_user}
         with (
             patch("code_monet.routes.public_gallery.repository") as mock_repo,
             patch("code_monet.routes.public_gallery.get_session") as mock_get_session,
-            patch(
-                "code_monet.routes.public_gallery.get_user_state",
-                AsyncMock(return_value=state),
-            ),
         ):
             mock_repo.get_user_by_id = AsyncMock(side_effect=lambda _s, uid: users.get(uid))
             mock_context = MagicMock()
             mock_context.__aenter__ = AsyncMock(return_value=MagicMock())
             mock_context.__aexit__ = AsyncMock(return_value=None)
             mock_get_session.return_value = mock_context
+            yield mock_repo
 
-            from code_monet.main import app
+    @pytest.fixture
+    def client(self, db):  # noqa: ARG002 - db patches must be active for requests
+        from code_monet.main import app
 
-            yield TestClient(app)
+        return TestClient(app)
 
-    def test_serves_persisted_thumbnail(self, client, state) -> None:
-        response = client.get(f"/public/gallery/{TEST_USER_ID}/piece_000012/thumbnail.png")
+    def _url(self, user_id: str, piece_id: str) -> str:
+        return f"/public/gallery/{user_id}/{piece_id}/thumbnail.png"
+
+    def test_renders_small_thumbnail_once_then_serves_persisted_file(
+        self, client, workspace
+    ) -> None:
+        from PIL import Image
+
+        first = client.get(self._url(TEST_USER_ID, "piece_000012"))
+        assert first.status_code == 200
+        assert first.headers["content-type"] == "image/png"
+        assert "max-age=604800" in first.headers["cache-control"]
+        assert Image.open(io.BytesIO(first.content)).size == (640, 480)
+        thumbnail = workspace / "piece_000012.thumb.png"
+        assert thumbnail.read_bytes() == first.content
+
+        with patch("code_monet.workspace.gallery.render_strokes_async") as render:
+            second = client.get(self._url(TEST_USER_ID, "piece_000012"))
+        render.assert_not_called()
+        assert second.content == first.content
+
+    def test_does_not_load_workspace_state(self, client, workspace) -> None:
+        with patch("code_monet.workspace.WorkspaceState.load_for_user") as load:
+            response = client.get(self._url(TEST_USER_ID, "piece_000012"))
         assert response.status_code == 200
-        assert response.content == b"\x89PNG-thumb"
-        assert response.headers["content-type"] == "image/png"
-        assert "max-age=604800" in response.headers["cache-control"]
-        state.gallery_thumbnail.assert_awaited_once_with(12)
+        load.assert_not_called()
+        assert not (workspace.parent / "workspace.json").exists()
 
-    def test_private_gallery_is_not_found(self, client, state) -> None:
-        response = client.get(f"/public/gallery/{TEST_USER_ID_PRIVATE}/piece_000001/thumbnail.png")
-        assert response.status_code == 404
-        state.gallery_thumbnail.assert_not_awaited()
+    @pytest.mark.usefixtures("workspace")
+    def test_serves_legacy_three_digit_piece(self, client) -> None:
+        response = client.get(self._url(TEST_USER_ID, "piece_000003"))
+        assert response.status_code == 200
 
-    def test_missing_piece_is_not_found(self, client, state) -> None:
-        state.gallery_thumbnail.return_value = None
-        response = client.get(f"/public/gallery/{TEST_USER_ID}/piece_000099/thumbnail.png")
+    @pytest.mark.usefixtures("workspace")
+    def test_private_gallery_is_not_found(self, client) -> None:
+        response = client.get(self._url(TEST_USER_ID_PRIVATE, "piece_000012"))
         assert response.status_code == 404
 
-    @pytest.mark.parametrize("piece_id", ["piece_abc", "..", "piece_1x"])
-    def test_rejects_malformed_piece_id(self, client, piece_id) -> None:
-        response = client.get(f"/public/gallery/{TEST_USER_ID}/{piece_id}/thumbnail.png")
-        assert response.status_code in (400, 404)
+    @pytest.mark.usefixtures("workspace")
+    def test_missing_piece_is_not_found(self, client) -> None:
+        response = client.get(self._url(TEST_USER_ID, "piece_000099"))
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("piece_id", ["piece_abc", "piece_1x", "piece_", "thumb_1"])
+    def test_rejects_malformed_piece_id(self, client, db, piece_id) -> None:
+        response = client.get(self._url(TEST_USER_ID, piece_id))
+        assert response.status_code == 400
+        db.get_user_by_id.assert_not_called()
+
+    def test_rejects_invalid_user_id(self, client, db) -> None:
+        response = client.get(self._url("not-a-uuid", "piece_000012"))
+        assert response.status_code == 400
+        db.get_user_by_id.assert_not_called()

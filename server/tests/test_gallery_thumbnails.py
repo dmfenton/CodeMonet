@@ -43,7 +43,8 @@ async def test_saved_piece_prepares_small_thumbnail_and_reuses_it(tmp_path: Path
     thumbnail_path = state._gallery_dir / "piece_000000.thumb.png"
     assert thumbnail_path.exists()
     with patch(
-        "code_monet.workspace.render_strokes_async", side_effect=AssertionError("rerendered")
+        "code_monet.workspace.gallery.render_strokes_async",
+        side_effect=AssertionError("rerendered"),
     ):
         data = await state.gallery_thumbnail(0)
     assert data == thumbnail_path.read_bytes()
@@ -73,7 +74,8 @@ async def test_older_piece_is_cached_after_first_request(tmp_path: Path) -> None
 
     first = await state.gallery_thumbnail(1)
     with patch(
-        "code_monet.workspace.render_strokes_async", side_effect=AssertionError("rerendered")
+        "code_monet.workspace.gallery.render_strokes_async",
+        side_effect=AssertionError("rerendered"),
     ):
         second = await state.gallery_thumbnail(1)
     assert first == second
@@ -155,7 +157,7 @@ async def test_resave_invalidates_sidecars_even_when_their_mtimes_are_newer(
 
     await state.add_strokes([stroke])
     state.current_piece_title = "New title"
-    with patch("code_monet.workspace.render_strokes_async", return_value=b"new"):
+    with patch("code_monet.workspace.gallery.render_strokes_async", return_value=b"new"):
         await state.save_to_gallery()
 
     assert thumbnail.read_bytes() == b"new"
@@ -179,7 +181,7 @@ async def test_resave_waits_for_same_piece_thumbnail_render(tmp_path: Path) -> N
             await finish_render.wait()
         return b"old" if len(strokes) == 1 else b"new"
 
-    with patch("code_monet.workspace.render_strokes_async", side_effect=render):
+    with patch("code_monet.workspace.gallery.render_strokes_async", side_effect=render):
         old_request = asyncio.create_task(state.gallery_thumbnail(0))
         await rendering.wait()
         await state.add_strokes([stroke])
