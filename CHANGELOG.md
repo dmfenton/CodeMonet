@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.3] - 2026-11-06
+
+v1.44.2 was tagged but never deployed: its release image failed the HIGH/CRITICAL vulnerability gate. This release ships v1.44.2's changes with the fix below.
+
+### Security
+
+- Upgrade `dnspython` to 2.9.2 and `pyasn1` to 0.6.5 (denial-of-service advisories CVE-2026-114605 and CVE-2026-119194 through CVE-2026-119197).
+
 ## [1.44.2] - 2026-11-06
 
 Also rolls up v1.44.1 (dependency security refresh and CodeMonet's isolated data directory, deployed 2026-10-25), which had no changelog section.
@@ -1308,7 +1316,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.3...HEAD
+[1.44.3]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...v1.44.3
 [1.44.2]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...v1.44.2
 [1.44.0]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...v1.43.0
