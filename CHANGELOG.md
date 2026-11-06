@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.2] - 2026-11-06
+
+Also rolls up v1.44.1 (dependency security refresh and CodeMonet's isolated data directory, deployed 2026-10-25), which had no changelog section.
+
 ### Fixed
 
 - The public gallery loads quickly: tiles serve the small thumbnail saved with each piece instead of re-rendering the full canvas on every request (previously 0.5–4.6 s and up to 650 KB per tile).
@@ -1304,7 +1308,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...HEAD
+[1.44.2]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...v1.44.2
 [1.44.0]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...v1.44.0
 [1.43.0]: https://github.com/dmfenton/CodeMonet/compare/v1.42.0...v1.43.0
 [1.42.0]: https://github.com/dmfenton/CodeMonet/compare/v1.41.0...v1.42.0
