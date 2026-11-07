@@ -7,6 +7,7 @@ from fastapi.responses import Response
 
 from code_monet.auth.dependencies import CurrentUser
 from code_monet.db import get_session, repository
+from code_monet.prerender import prerender_scheduler
 from code_monet.routes.canvas import get_user_state
 from code_monet.types import get_style_config
 from code_monet.workspace.gallery import parse_gallery_piece, parse_piece_id, piece_detail_fields
@@ -94,4 +95,6 @@ async def update_gallery_settings(
         if not success:
             raise HTTPException(status_code=404, detail="User not found")
         await session.commit()
-        return {"gallery_public": gallery_public}
+    # The public site lists exactly the public galleries.
+    prerender_scheduler.request()
+    return {"gallery_public": gallery_public}

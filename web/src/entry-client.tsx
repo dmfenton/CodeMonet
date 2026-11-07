@@ -1,10 +1,11 @@
 /**
- * Client-side entry point for SSR hydration.
- * This file hydrates the server-rendered HTML with React.
+ * Client-side entry point.
+ * Hydrates pre-rendered (or dev server-rendered) markup; renders from scratch
+ * when nginx served the bare SPA shell (any route that is not pre-rendered).
  */
 
 import { StrictMode } from 'react';
-import { hydrateRoot } from 'react-dom/client';
+import { createRoot, hydrateRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './context/AuthContext';
@@ -22,8 +23,8 @@ declare global {
 
 const initialData = window.__INITIAL_DATA__;
 
-hydrateRoot(
-  document.getElementById('root')!,
+const container = document.getElementById('root')!;
+const app = (
   <StrictMode>
     <HelmetProvider>
       <BrowserRouter>
@@ -34,3 +35,9 @@ hydrateRoot(
     </HelmetProvider>
   </StrictMode>
 );
+
+if (container.firstElementChild) {
+  hydrateRoot(container, app);
+} else {
+  createRoot(container).render(app);
+}

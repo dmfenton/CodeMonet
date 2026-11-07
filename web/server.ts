@@ -1,8 +1,9 @@
 /**
- * SSR Express server for Code Monet web app.
- *
- * In development: Uses Vite's middleware for HMR and on-demand compilation.
- * In production: Serves pre-built static assets with SSR rendering.
+ * Development server for the Code Monet web app: Vite middleware with HMR,
+ * the /api and /ws proxies, and server rendering of every page with the same
+ * renderPage() that pre-renders production's public pages
+ * (src/prerender.ts, run by the Python server). Production has no Node server:
+ * nginx serves the static build and the pre-rendered pages.
  */
 
 import fs from 'node:fs';
@@ -11,87 +12,53 @@ import type { Socket } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import compression from 'compression';
-import sirv from 'sirv';
-import type { ViteDevServer } from 'vite';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import { createServer as createViteServer } from 'vite';
+import type { GalleryPieceDetail, PublicGalleryPiece } from '@code-monet/shared';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const isProduction = process.env.NODE_ENV === 'production';
 const port = process.env.PORT || 5173;
 
 // Backend API URL for SSR data fetching
 const API_URL = process.env.API_URL || 'http://localhost:8000';
 
-interface SSRModule {
-  render: (
-    url: string,
-    initialData?: Record<string, unknown>
-  ) => { html: string; helmet: HelmetServerState };
-}
+type EntryServer = typeof import('./src/entry-server');
 
-interface HelmetServerState {
-  title: { toString: () => string };
-  meta: { toString: () => string };
-  link: { toString: () => string };
-  script: { toString: () => string };
-}
-
-interface GalleryPiece {
-  id: string;
-  user_id: string;
-  piece_number: number;
-  stroke_count: number;
-  created_at: string;
-  title?: string;
-}
-
-/** Public piece detail; fields past created_at are additive and may be absent. */
-interface PieceStrokes {
-  id: string;
-  strokes: unknown[];
-  piece_number: number;
-  created_at: string;
-  canvas_width?: number;
-  canvas_height?: number;
-  title?: string | null;
-  prompt?: string | null;
-  stroke_count?: number;
-}
-
-/**
- * Safely stringify JSON for embedding in HTML script tags.
- * Escapes characters that could break out of script context or cause parsing issues.
- */
-function safeJsonStringify(data: unknown): string {
-  return JSON.stringify(data)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
-}
-
-async function fetchGalleryPieces(limit = 6): Promise<GalleryPiece[]> {
+async function fetchJson<T>(url: string): Promise<T | null> {
   try {
-    const response = await fetch(`${API_URL}/public/gallery?limit=${limit}`);
-    if (response.ok) {
-      return await response.json();
-    }
+    const response = await fetch(url);
+    if (response.ok) return (await response.json()) as T;
   } catch (error) {
-    console.error('Failed to fetch gallery pieces for SSR:', error);
-  }
-  return [];
-}
-
-async function fetchPieceStrokes(userId: string, pieceId: string): Promise<PieceStrokes | null> {
-  try {
-    const response = await fetch(`${API_URL}/public/gallery/${userId}/${pieceId}/strokes`);
-    if (response.ok) {
-      return await response.json();
-    }
-  } catch (error) {
-    console.error('Failed to fetch piece strokes for SSR:', error);
+    console.error(`SSR data fetch failed for ${url}:`, error);
   }
   return null;
+}
+
+async function pageData(
+  url: string,
+  entry: EntryServer
+): Promise<Parameters<EntryServer['renderPage']>[2]> {
+  if (url === '/' || url.startsWith('/?')) {
+    const pieces = await fetchJson<PublicGalleryPiece[]>(
+      `${API_URL}/public/gallery?limit=${entry.HOMEPAGE_PIECES}`
+    );
+    return { galleryPieces: pieces ?? [] };
+  }
+  if (url === '/gallery' || url.startsWith('/gallery?')) {
+    const pieces = await fetchJson<PublicGalleryPiece[]>(
+      `${API_URL}/public/gallery?limit=${entry.GALLERY_PIECES}`
+    );
+    return { galleryPieces: pieces ?? [] };
+  }
+  const match = url.match(/^\/gallery\/([^/]+)\/([^/?]+)/);
+  if (match) {
+    const [, userId, pieceId] = match;
+    const detail = await fetchJson<GalleryPieceDetail>(
+      `${API_URL}/public/gallery/${userId}/${pieceId}/strokes`
+    );
+    if (detail) return entry.pieceData(userId, detail);
+  }
+  return {};
 }
 
 async function createServer(): Promise<void> {
@@ -99,198 +66,55 @@ async function createServer(): Promise<void> {
   // One http server for pages, the /ws proxy's upgrades and Vite's HMR socket.
   const server = http.createServer(app);
 
-  let vite: ViteDevServer | undefined;
-  let template: string;
-  let ssrModule: SSRModule;
-  /** Dev only: WebSocket upgrade handler for /ws (attached to the listening server). */
-  let upgradeWs: ((req: IncomingMessage, socket: Socket, head: Buffer) => void) | undefined;
-
-  if (!isProduction) {
-    // Development mode. Our proxies mount BEFORE Vite's middlewares: in
-    // middlewareMode Vite has no http server to take WebSocket upgrades, so its
-    // own server.proxy (vite.config.ts, for the standalone `vite` dev server)
-    // must never see /api or /ws here.
-    const { createProxyMiddleware } = await import('http-proxy-middleware');
-    app.use(
-      '/api',
-      createProxyMiddleware({
-        target: API_URL,
-        changeOrigin: true,
-        pathRewrite: { '^/api': '' },
-      })
-    );
-    const wsProxy = createProxyMiddleware({
-      target: API_URL.replace(/^http/, 'ws'),
-      ws: true,
-      pathFilter: '/ws',
-    });
-    app.use(wsProxy);
-    upgradeWs = wsProxy.upgrade;
-
-    const { createServer: createViteServer } = await import('vite');
-    vite = await createViteServer({
-      // HMR shares this server (no separate port 24678 to collide across worktrees);
-      // Vite only answers its own 'vite-hmr' upgrades, the /ws proxy the rest.
-      server: { middlewareMode: true, hmr: { server } },
-      appType: 'custom',
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Production mode: serve static assets
-    app.use(compression());
-    app.use(sirv(path.join(__dirname, 'dist/client'), { extensions: [] }));
-  }
-
-  // Health check endpoint for load balancers and container orchestration
-  app.get('/health', (req, res) => {
-    res.status(200).json({
-      status: 'healthy',
-      version: process.env.VERSION || 'dev',
-      timestamp: new Date().toISOString(),
-    });
+  // Our proxies mount BEFORE Vite's middlewares: in middlewareMode Vite has no
+  // http server to take WebSocket upgrades, so its own server.proxy
+  // (vite.config.ts, for the standalone `vite` dev server) must never see /api
+  // or /ws here.
+  app.use(
+    '/api',
+    createProxyMiddleware({
+      target: API_URL,
+      changeOrigin: true,
+      pathRewrite: { '^/api': '' },
+    })
+  );
+  const wsProxy = createProxyMiddleware({
+    target: API_URL.replace(/^http/, 'ws'),
+    ws: true,
+    pathFilter: '/ws',
   });
+  app.use(wsProxy);
+  const upgradeWs: (req: IncomingMessage, socket: Socket, head: Buffer) => void = wsProxy.upgrade;
 
-  // SEO sitemap — robots.txt already advertises this URL. Includes the
-  // static public routes plus every gallery piece we can enumerate via
-  // the same /public/gallery endpoint the homepage uses for SSR.
-  app.get('/sitemap.xml', async (_req, res) => {
-    const base = 'https://monet.dmfenton.net';
-    const pieces = await fetchGalleryPieces(200);
-    const entries = [
-      { loc: `${base}/`, changefreq: 'daily', priority: '1.0' },
-      { loc: `${base}/gallery`, changefreq: 'hourly', priority: '0.9' },
-      ...pieces.map((p) => ({
-        loc: `${base}/gallery/${p.user_id}/${p.id}`,
-        lastmod: p.created_at,
-        changefreq: 'monthly',
-        priority: '0.6',
-      })),
-    ];
-    const body =
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
-      entries
-        .map((e) => {
-          const lastmod = 'lastmod' in e && e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : '';
-          return `<url><loc>${e.loc}</loc>${lastmod}<changefreq>${e.changefreq}</changefreq><priority>${e.priority}</priority></url>`;
-        })
-        .join('') +
-      '</urlset>';
-    res
-      .status(200)
-      .set({
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Cache-Control': 'public, max-age=300',
-      })
-      .end(body);
+  const vite = await createViteServer({
+    // HMR shares this server (no separate port 24678 to collide across worktrees);
+    // Vite only answers its own 'vite-hmr' upgrades, the /ws proxy the rest.
+    server: { middlewareMode: true, hmr: { server } },
+    appType: 'custom',
   });
+  app.use(vite.middlewares);
 
-  // SSR handler for all routes (Express 5 catch-all syntax)
+  // Server-render every other page (Express 5 catch-all syntax)
   app.use(async (req, res, next) => {
     const url = req.originalUrl;
-
-    // Skip API and WebSocket routes
     if (url.startsWith('/api') || url.startsWith('/ws')) {
       return next();
     }
-
     try {
-      // Load template
-      if (!isProduction) {
-        template = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8');
-        template = await vite!.transformIndexHtml(url, template);
-        ssrModule = (await vite!.ssrLoadModule('/src/entry-server.tsx')) as SSRModule;
-      } else {
-        // In production, use cached template
-        if (!template) {
-          template = fs.readFileSync(path.join(__dirname, 'dist/client/index.html'), 'utf-8');
-        }
-        if (!ssrModule) {
-          ssrModule = (await import('./dist/server/entry-server.js')) as SSRModule;
-        }
-      }
-
-      // Fetch SSR data based on route
-      let initialData: Record<string, unknown> = {};
-
-      if (url === '/' || url.startsWith('/?')) {
-        // Homepage: "From the gallery" shows the latest pieces
-        const galleryPieces = await fetchGalleryPieces(4);
-        initialData = { galleryPieces };
-      } else if (url === '/gallery' || url.startsWith('/gallery?')) {
-        // Gallery page: fetch more pieces
-        const galleryPieces = await fetchGalleryPieces(50);
-        initialData = { galleryPieces };
-      } else if (url.match(/^\/gallery\/[^/]+\/[^/]+/)) {
-        // Individual piece page
-        const match = url.match(/^\/gallery\/([^/]+)\/([^/?]+)/);
-        if (match) {
-          const [, userId, pieceId] = match;
-          const pieceStrokes = await fetchPieceStrokes(userId, pieceId);
-          if (pieceStrokes) {
-            initialData = {
-              galleryPiece: {
-                id: pieceStrokes.id,
-                user_id: userId,
-                piece_number: pieceStrokes.piece_number,
-                stroke_count: pieceStrokes.stroke_count ?? pieceStrokes.strokes?.length ?? 0,
-                width: pieceStrokes.canvas_width,
-                height: pieceStrokes.canvas_height,
-                created_at: pieceStrokes.created_at,
-                ...(pieceStrokes.title ? { title: pieceStrokes.title } : {}),
-                ...(pieceStrokes.prompt ? { prompt: pieceStrokes.prompt } : {}),
-              },
-              pieceStrokes,
-            };
-          }
-        }
-      }
-
-      // Tag the data with the path it was rendered for; the client ignores it
-      // after navigating elsewhere (routes.tsx).
-      initialData = { ...initialData, path: url.split('?')[0] };
-
-      // Render the app
-      const { html: appHtml, helmet } = ssrModule.render(url, initialData);
-
-      // Inject rendered content into template
-      let html = template
-        .replace('<!--ssr-outlet-->', appHtml)
-        .replace(
-          '<!--ssr-initial-data-->',
-          `<script>window.__INITIAL_DATA__ = ${safeJsonStringify(initialData)}</script>`
-        );
-
-      // Inject helmet tags
-      if (helmet) {
-        html = html
-          .replace('<!--helmet-title-->', helmet.title.toString())
-          .replace('<!--helmet-meta-->', helmet.meta.toString())
-          .replace('<!--helmet-link-->', helmet.link.toString())
-          .replace('<!--helmet-script-->', helmet.script.toString());
-      }
-
+      let template = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf-8');
+      template = await vite.transformIndexHtml(url, template);
+      const entry = (await vite.ssrLoadModule('/src/entry-server.tsx')) as EntryServer;
+      const html = entry.renderPage(template, url, await pageData(url, entry));
       res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
     } catch (e) {
-      if (!isProduction && vite) {
-        vite.ssrFixStacktrace(e as Error);
-      }
-      console.error('SSR Error:', e);
-
-      // In production, serve fallback with 500 status for monitoring
-      if (isProduction) {
-        console.error('SSR Error (serving client fallback):', e);
-        const fallback = fs.readFileSync(path.join(__dirname, 'dist/client/index.html'), 'utf-8');
-        res.status(500).set({ 'Content-Type': 'text/html' }).end(fallback);
-      } else {
-        next(e);
-      }
+      vite.ssrFixStacktrace(e as Error);
+      next(e);
     }
   });
 
-  if (upgradeWs) server.on('upgrade', upgradeWs);
+  server.on('upgrade', upgradeWs);
   server.listen(port, () => {
-    console.log(`SSR server running at http://localhost:${port}`);
+    console.log(`Dev server running at http://localhost:${port}`);
   });
 }
 

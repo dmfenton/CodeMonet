@@ -15,6 +15,7 @@ import { GalleryPiecePage } from './pages/GalleryPiecePage';
 import { ReplayPage } from './pages/ReplayPage';
 import type { SSRData } from './entry-server';
 import { ssrDataFor } from './ssrData';
+import { safeJsonStringify } from './safeJson';
 
 interface AppRoutesProps {
   initialData?: unknown;
@@ -72,7 +73,7 @@ function HomepageRoute({ initialData }: { initialData?: SSRData }): React.ReactE
         <link rel="canonical" href="https://monet.dmfenton.net/" />
 
         <script type="application/ld+json">
-          {JSON.stringify({
+          {safeJsonStringify({
             '@context': 'https://schema.org',
             '@graph': [
               {
@@ -136,7 +137,7 @@ function GalleryRoute({ initialData }: { initialData?: SSRData }): React.ReactEl
         <link rel="canonical" href="https://monet.dmfenton.net/gallery" />
 
         <script type="application/ld+json">
-          {JSON.stringify({
+          {safeJsonStringify({
             '@context': 'https://schema.org',
             '@type': 'CollectionPage',
             '@id': 'https://monet.dmfenton.net/gallery#page',
@@ -211,7 +212,7 @@ function GalleryPieceRoute({ initialData }: { initialData?: SSRData }): React.Re
 
         {/* JSON-LD structured data for artwork */}
         <script type="application/ld+json">
-          {JSON.stringify({
+          {safeJsonStringify({
             '@context': 'https://schema.org',
             '@type': 'VisualArtwork',
             name: title,

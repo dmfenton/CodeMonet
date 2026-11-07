@@ -96,27 +96,20 @@ async def _load_public_piece(
         raise HTTPException(status_code=500, detail=f"Failed to load piece: {e}") from e
 
 
-@router.get("/public/gallery")
-async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict[str, Any]]:
-    """Get public gallery showcasing artwork from users who opted in.
+async def public_piece_records() -> list[tuple[str, str, dict[str, Any]]]:
+    """(user_id, piece_id, piece JSON) for every readable piece in a public gallery.
 
-    Returns pieces for the homepage - no authentication required.
-    Shows artwork from all users who have set gallery_public=True.
+    The public listing, the sitemap and the pre-rendered site all read this one
+    scan; an unreadable piece is skipped rather than breaking the others.
     """
-    pieces: list[dict[str, Any]] = []
     workspace_base = FilePath(settings.workspace_base_dir).resolve()
-
     if not workspace_base.exists():
         return []
 
-    # Get all users with public galleries
     async with get_session() as session:
         public_users = await repository.list_users_with_public_gallery(session)
 
-    if not public_users:
-        return []
-
-    # Load gallery pieces from all public users
+    records: list[tuple[str, str, dict[str, Any]]] = []
     for user in public_users:
         gallery_dir = workspace_base / str(user.id) / "gallery"
         if not gallery_dir.exists():
@@ -129,28 +122,71 @@ async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict
             try:
                 async with aiofiles.open(gallery_dir / entry_name) as f:
                     data = json.loads(await f.read())
-                piece_entry: dict[str, Any] = {
-                    "id": f"piece_{data.get('piece_number', 0):06d}",
-                    "user_id": str(user.id),
-                    "piece_number": data.get("piece_number", 0),
-                    "stroke_count": piece_stroke_count(data),
-                    "width": data.get("width", 800),
-                    "height": data.get("height", 600),
-                    "created_at": data.get("created_at", ""),
-                    "drawing_style": parse_drawing_style(
-                        data.get("drawing_style", "plotter")
-                    ).value,
-                }
-                if data.get("title"):
-                    piece_entry["title"] = data["title"]
-                pieces.append(piece_entry)
-            except (OSError, ValueError, TypeError, AttributeError):
+                if not isinstance(data, dict):
+                    continue
+                records.append((str(user.id), f"piece_{data.get('piece_number', 0):06d}", data))
+            except (OSError, ValueError, TypeError):
                 continue  # One unreadable piece must not break the listing
+    return records
 
-    # Sort by created_at descending (most recent first across all users)
+
+def public_gallery_entry(user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    """One piece of the public gallery listing."""
+    piece_entry: dict[str, Any] = {
+        "id": f"piece_{data.get('piece_number', 0):06d}",
+        "user_id": user_id,
+        "piece_number": data.get("piece_number", 0),
+        "stroke_count": piece_stroke_count(data),
+        "width": data.get("width", 800),
+        "height": data.get("height", 600),
+        "created_at": data.get("created_at", ""),
+        "drawing_style": parse_drawing_style(data.get("drawing_style", "plotter")).value,
+    }
+    if data.get("title"):
+        piece_entry["title"] = data["title"]
+    return piece_entry
+
+
+def public_piece_detail(user_id: str, piece_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    """The public detail of one piece, as GET .../{piece_id}/strokes returns it."""
+    workspace_base = FilePath(settings.workspace_base_dir).resolve()
+    raster = _raster_image(workspace_base, user_id, data)
+    return {
+        **piece_detail_fields(data, user_id, raster=raster is not None),
+        "id": piece_id,
+        "format": "raster" if raster else "strokes",
+        "image_url": (
+            f"/painting-assets/{user_id}/{data['image_token']}/final.png" if raster else None
+        ),
+        "strokes": data.get("strokes", []),
+        "piece_number": data.get("piece_number", 0),
+        "canvas_width": data.get("width", 800),
+        "canvas_height": data.get("height", 600),
+        "drawing_style": parse_drawing_style(data.get("drawing_style", "plotter")).value,
+        "created_at": data.get("created_at", ""),
+    }
+
+
+async def list_public_pieces() -> list[dict[str, Any]]:
+    """Every public piece, most recent first across all users."""
+    pieces: list[dict[str, Any]] = []
+    for user_id, _piece_id, data in await public_piece_records():
+        try:
+            pieces.append(public_gallery_entry(user_id, data))
+        except (TypeError, ValueError, AttributeError):
+            continue  # One malformed piece must not break the listing
     pieces.sort(key=lambda p: p.get("created_at", ""), reverse=True)
+    return pieces
 
-    return pieces[:limit]
+
+@router.get("/public/gallery")
+async def get_public_gallery(limit: int = Query(default=12, le=50)) -> list[dict[str, Any]]:
+    """Get public gallery showcasing artwork from users who opted in.
+
+    Returns pieces for the homepage - no authentication required.
+    Shows artwork from all users who have set gallery_public=True.
+    """
+    return (await list_public_pieces())[:limit]
 
 
 @router.get("/public/gallery/{user_id}/{piece_id}/strokes")
@@ -190,21 +226,7 @@ async def get_public_piece_strokes(user_id: str, piece_id: str) -> dict[str, Any
 
     try:
         data = json.loads(piece_file.read_text())
-        raster = _raster_image(workspace_base, user_id, data)
-        return {
-            **piece_detail_fields(data, user_id, raster=raster is not None),
-            "id": piece_id,
-            "format": "raster" if raster else "strokes",
-            "image_url": (
-                f"/painting-assets/{user_id}/{data['image_token']}/final.png" if raster else None
-            ),
-            "strokes": data.get("strokes", []),
-            "piece_number": data.get("piece_number", 0),
-            "canvas_width": data.get("width", 800),
-            "canvas_height": data.get("height", 600),
-            "drawing_style": parse_drawing_style(data.get("drawing_style", "plotter")).value,
-            "created_at": data.get("created_at", ""),
-        }
+        return public_piece_detail(user_id, piece_id, data)
     except (json.JSONDecodeError, OSError) as e:
         raise HTTPException(status_code=500, detail=f"Failed to load piece: {e}") from e
 

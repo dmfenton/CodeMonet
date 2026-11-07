@@ -105,6 +105,18 @@ class Settings(BaseSettings):
     dev_mode: bool = True  # Set to False in production; enables live reload
     max_connections_per_user: int = 0  # 0 = unlimited
 
+    # Idle sleep: the production entrypoint (code_monet.serve) exits cleanly
+    # after this many minutes without a WebSocket or a non-health HTTP request.
+    # The host's waker starts the stopped container on the next request. 0 disables.
+    idle_exit_minutes: float = 15
+
+    # Pre-rendered public site: page heads and the sitemap, served by nginx
+    # without the server. The bundle is the web build's dist/prerender.
+    prerender_dir: str = "data/prerender"
+    prerender_bundle_dir: str = "../web/dist/prerender"
+    prerender_node: str = "node"
+    prerender_timeout_seconds: float = 60
+
     # Agent
     agent_interval: int = 60  # UNUSED - kept for backwards compat, agent only runs on explicit wake
     agent_workspace: str = "data/agent_workspace"  # Inside mounted volume for persistence
