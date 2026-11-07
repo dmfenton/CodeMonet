@@ -54,7 +54,11 @@ jobs:
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 15
     needs: changes
-    if: github.event_name != 'pull_request' || needs.changes.outputs.python == 'true'
+    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (needs.changes.outputs.python == 'true' &&
+        github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v6
       - name: Resolve platform pin
@@ -74,12 +78,11 @@ jobs:
 
   repository:
     name: Repository and secret scan
-    # Uses a Docker socket to run Trivy: trusted pool only, and skipped on
-    # pull_request since the isolated PR pool has no Docker daemon and PR
-    # code must never reach the trusted pool (see ci.yml's docker job).
-    runs-on: [self-hosted, codemonet-docker, lilserver]
+    # Runs Trivy through a Docker daemon, which the isolated PR pool lacks, so
+    # pull requests use a disposable GitHub-hosted runner (no secrets are read);
+    # pushes and the weekly schedule keep the trusted pool.
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 15
-    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v6
         with:
