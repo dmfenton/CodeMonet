@@ -43,6 +43,12 @@ COPY server/alembic/ alembic/
 COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
 COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude
+# The public site's page heads are rendered by the web build's own bundle
+# (see code_monet/prerender.py). It is built before this image (CI and the
+# release run `npm run build -w web`) so its template references exactly the
+# asset hashes nginx serves from the same build.
+COPY --from=claude-cli /usr/local/bin/node /usr/local/bin/node
+COPY web/dist/prerender/ /app/web/dist/prerender/
 
 # Alpine installs the SDK source distribution, which has no bundled CLI.
 # Verify the SDK resolves the separately locked musl executable.
@@ -56,7 +62,8 @@ RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 # bash: the Claude CLI's Bash tool refuses to run without bash or zsh.
 # Remove the unused system package installer, then create the non-root runtime user.
 RUN apk upgrade --no-cache \
-    && apk add --no-cache bash \
+    && apk add --no-cache bash libstdc++ \
+    && node --version \
     && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
         /usr/local/lib/python3.12/site-packages/setuptools* \
         /usr/local/lib/python3.12/site-packages/wheel* \
@@ -82,5 +89,5 @@ ENV PATH="/app/server/.venv/bin:${PATH}"
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
 
-# Run uvicorn directly (no reload in production)
-CMD ["/app/server/.venv/bin/uvicorn", "code_monet.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Production entrypoint: uvicorn without reload, stopping cleanly (exit 0) when idle.
+CMD ["/app/server/.venv/bin/python", "-m", "code_monet.serve"]

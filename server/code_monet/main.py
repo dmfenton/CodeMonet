@@ -17,7 +17,9 @@ from code_monet.anthropic_wif import anthropic_wif_configuration
 from code_monet.auth import auth_router, dependencies
 from code_monet.auth.platform import IdentityUnavailableError
 from code_monet.config import settings
+from code_monet.idle import ActivityMiddleware, exit_when_idle, idle_tracker
 from code_monet.logging_config import setup_dev_logging, setup_production_logging
+from code_monet.prerender import prerender_scheduler
 from code_monet.registry import ActiveWorkspace, workspace_registry
 from code_monet.routes import create_api_router
 from code_monet.share import share_router
@@ -57,8 +59,21 @@ async def run_migrations() -> None:
     logger.info("Database migrations completed")
 
 
+def start_idle_exit(app: FastAPI) -> None:
+    """Stop the server once idle, when the entrypoint can stop it (code_monet.serve)."""
+    request_exit = getattr(app.state, "request_exit", None)
+    if request_exit is None or settings.idle_exit_minutes <= 0:
+        logger.info("Idle exit disabled")
+        return
+    timeout = settings.idle_exit_minutes * 60
+    shutdown_manager.register_task(
+        asyncio.create_task(exit_when_idle(idle_tracker, timeout, request_exit))
+    )
+    logger.info(f"Idle exit after {timeout:.0f}s without client activity")
+
+
 @asynccontextmanager
-async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
+async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     """Application lifespan handler with graceful shutdown."""
     logger.info("=== Server startup initiated ===")
 
@@ -85,6 +100,10 @@ async def lifespan(_app: FastAPI):  # type: ignore[no-untyped-def]
     else:
         logger.info("Dev mode: skipping custom signal handlers (uvicorn handles reload)")
 
+    # Every start (deploy or wake) refreshes the pre-rendered public site.
+    prerender_scheduler.request()
+    start_idle_exit(app)
+
     logger.info("=== Server startup completed (multi-user mode) ===")
 
     yield
@@ -103,6 +122,9 @@ app = FastAPI(
 
 # Initialize OpenTelemetry tracing
 setup_tracing(app)
+
+# Every request and WebSocket except /health keeps the server awake.
+app.add_middleware(ActivityMiddleware, tracker=idle_tracker)
 
 # CORS configuration
 # Since we use JWT tokens (not cookies), we don't need allow_credentials=True

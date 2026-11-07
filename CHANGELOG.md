@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The server stops itself after 15 minutes without a client (`IDLE_EXIT_MINUTES`) and the platform starts it again on the next request, freeing the shared host's memory while nobody is painting. `/health` never keeps it awake.
+- The public site is pre-rendered: `/`, `/gallery`, every public piece page and `sitemap.xml` are static files regenerated at startup and whenever a public gallery changes, served by nginx. The `web-ssr` container and image are retired. The sitemap now lists every public piece.
+
+### Security
+
+- Escape structured-data (JSON-LD) script content so an agent-written title cannot break out of its tag.
+
 ## [1.44.3] - 2026-11-06
 
 v1.44.2 was tagged but never deployed: its release image failed the HIGH/CRITICAL vulnerability gate. This release ships v1.44.2's changes with the fix below.

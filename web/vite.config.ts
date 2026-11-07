@@ -7,7 +7,7 @@ const version = process.env.VERSION || 'dev';
 // backend on a non-default port.
 const devApiUrl = process.env.API_URL || 'http://localhost:8000';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     {
@@ -21,11 +21,15 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(version),
   },
   build: {
-    // SSR builds need different entry points
+    // The pre-render bundle needs only its template, not the public assets.
+    copyPublicDir: mode !== 'prerender',
+    // The client build's entry; `--ssr src/prerender.ts` overrides it.
     rollupOptions: {
       input: {
         main: './index.html',
       },
+      // The pre-render bundle runs with plain `node` next to no package.json.
+      ...(mode === 'prerender' ? { output: { entryFileNames: 'prerender.mjs' } } : {}),
     },
   },
   server: {
@@ -44,7 +48,8 @@ export default defineConfig({
   },
   // SSR configuration
   ssr: {
-    // Dependencies that should be bundled for SSR
-    noExternal: ['react-helmet-async'],
+    // The pre-render bundle is self-contained (the server image has node but no
+    // node_modules); the dev SSR server bundles only react-helmet-async.
+    noExternal: mode === 'prerender' ? true : ['react-helmet-async'],
   },
-});
+}));

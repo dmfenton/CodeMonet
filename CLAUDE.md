@@ -581,7 +581,7 @@ cd server && uv run python ../scripts/sync-prod.py --db-only   # Database only
 cd server && uv run python ../scripts/sync-prod.py --ws-only   # Workspace only
 ```
 
-See [docs/infrastructure.md](docs/infrastructure.md) for full details on Terraform, ECR, SES, and SSR architecture.
+See [docs/infrastructure.md](docs/infrastructure.md) for the release flow, sleep-on-idle (the server stops itself when unused; the platform's waker restarts it) and the pre-rendered public site that replaced SSR.
 
 ---
 

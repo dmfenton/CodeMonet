@@ -441,6 +441,9 @@ app.include_router(create_api_router())
 | `rate_limiter.py` | Rate limiting utility |
 | `tracing.py` | OpenTelemetry setup |
 | `shutdown.py` | Graceful shutdown handling |
+| `idle.py` | Sleep-on-idle: activity tracking and the idle exit |
+| `serve.py` | Production entrypoint (uvicorn the idle watcher can stop) |
+| `prerender.py` | Pre-rendered public site (pages + sitemap for nginx) |
 | `registry.py` | User orchestrator registry |
 | `cli.py` | CLI commands (invite, user, workspace) |
 
