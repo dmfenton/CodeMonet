@@ -6,11 +6,23 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+# Pull-request code never runs on the persistent trusted pools that also serve
+# releases: PRs use the disposable one-job codemonet-pr pool, or GitHub-hosted
+# runners where a job needs Docker or Xcode. Pushes to main keep the trusted pools.
+# Jobs that read repository secrets (the platform deploy key) never run for fork
+# PRs, on any runner; CI Success fails such a PR instead of passing it unchecked.
 jobs:
   changes:
     name: Detect Changes
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 10
+    # paths-filter lists PR files through the API, which needs pull-requests: read.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       server: ${{ steps.filter.outputs.server }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -47,7 +59,11 @@ jobs:
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 20
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
+    if: >-
+      needs.changes.outputs.server == 'true' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v6
@@ -176,15 +192,16 @@ jobs:
 
   docker:
     name: Docker Build
-    # Needs a Docker daemon: trusted pool only. The isolated PR pool has no
-    # Docker socket and pull-request code must never reach the trusted pool,
-    # so this is skipped entirely on pull_request (matches the platform
-    # runtime-image scan pattern: docker-daemon jobs run on trusted main code
-    # only; PR validation stays inside the unprivileged container).
-    runs-on: [self-hosted, codemonet-docker, lilserver]
+    # Needs a Docker daemon, which the isolated PR pool lacks, so pull requests
+    # use a disposable GitHub-hosted runner; pushes to main keep the trusted pool.
+    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 20
     needs: [changes, server]
-    if: needs.changes.outputs.server == 'true' && github.event_name != 'pull_request'
+    if: >-
+      needs.changes.outputs.server == 'true' &&
+      (github.event_name != 'pull_request' ||
+        github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v6
@@ -249,15 +266,17 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    # Physical laptop runner, not isolable like the Linux PR pool: fork PRs
-    # must never run here. Same-repo PRs and pushes are trusted.
-    runs-on: [self-hosted, codemonet-ios, laptop]
+    # Pull requests run on a disposable GitHub-hosted Mac: PR code must never
+    # touch the persistent laptop runner that also signs TestFlight builds.
+    # Pushes to main keep the laptop runner.
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["macos-latest"]' || '["self-hosted","codemonet-ios","laptop"]') }}
     # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
     # budget below, since a legitimately-held lock (e.g. a concurrent
     # testflight.yml build-ios run) can make this job wait most of that
     # budget before swift test / xcodebuild ever start.
     timeout-minutes: 90
     needs: changes
+    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
     if: >-
       needs.changes.outputs.ios == 'true' &&
       (github.event_name != 'pull_request' ||
@@ -290,6 +309,10 @@ jobs:
         working-directory: ios/MonetKit
         run: swift test
 
+      - name: Install XcodeGen on hosted Mac
+        if: github.event_name == 'pull_request'
+        run: brew install xcodegen
+
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
@@ -317,8 +340,18 @@ jobs:
     if: always()
     steps:
       - name: Check job results
+        env:
+          FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          SERVER_CHANGED: ${{ needs.changes.outputs.server }}
+          IOS_CHANGED: ${{ needs.changes.outputs.ios }}
         run: |
           [[ "${{ needs.changes.result }}" == "success" ]] || exit 1
+          # Secret-reading jobs are skipped for fork PRs; do not count that as a pass.
+          if [[ "$FORK_PR" == "true" && ( "$SERVER_CHANGED" == "true" || "$IOS_CHANGED" == "true" ) ]]; then
+            echo "Fork PR changes server or iOS code, whose checks need repository secrets and do not run for forks." >&2
+            echo "A maintainer must validate it from a branch in this repository." >&2
+            exit 1
+          fi
           for result in \
             "${{ needs.server.result }}" \
             "${{ needs.app.result }}" \
