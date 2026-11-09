@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.4] - 2026-11-09
+
 ### Changed
 
 - The server stops itself after 15 minutes without a client (`IDLE_EXIT_MINUTES`) and the platform starts it again on the next request, freeing the shared host's memory while nobody is painting. `/health` never keeps it awake.
@@ -1325,7 +1327,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.3...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.4...HEAD
+[1.44.4]: https://github.com/dmfenton/CodeMonet/compare/v1.44.3...v1.44.4
 [1.44.3]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...v1.44.3
 [1.44.2]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...v1.44.2
 [1.44.0]: https://github.com/dmfenton/CodeMonet/compare/v1.43.0...v1.44.0
