@@ -2,11 +2,22 @@
 
 ## Overview
 
-Production uses OpenTelemetry with AWS X-Ray for distributed tracing:
+**Production tracing is disabled** (since 2026-11, for cost). `dmfenton/platform.dmfenton.net`
+`ops/deploy/release-assets/codemonet-compose.yml` sets `OTEL_ENABLED=false` on `drawing-agent`, so
+the server exports no spans and `POST /traces` accepts client spans but records none
+(`{"received": 0}`). Use CloudWatch logs (`diagnose.py logs`) for production debugging.
+
+The instrumentation remains and can be re-enabled:
 
 - **App**: Instrumented with opentelemetry-python (FastAPI, SQLAlchemy, logging)
-- **Collector**: ADOT Collector sidecar receives OTLP, exports to X-Ray
+- **Collector**: the platform `otel-collector` (`ops/deploy/otel-config.yaml`) receives OTLP and
+  exports to X-Ray; it currently has a Chef-only pipeline that drops other services' spans
 - **Console**: View traces in AWS X-Ray console
+
+To re-enable in production, restore a CodeMonet pipeline in the platform collector config, set
+`OTEL_ENABLED: "true"` and `OTEL_EXPORTER_ENDPOINT: http://otel-collector:4318` in
+`codemonet-compose.yml`, then redeploy CodeMonet (the platform config release does not recreate
+`drawing-agent`).
 
 ## Diagnose CLI
 
@@ -89,7 +100,7 @@ uv run python scripts/diagnose.py trace <trace_id>
 ## Environment Variables
 
 ```bash
-# Enable tracing (production only, disabled in dev)
+# Enable tracing (default false; currently false in production too)
 OTEL_ENABLED=true
 
 # Collector endpoint (set automatically in docker-compose)
