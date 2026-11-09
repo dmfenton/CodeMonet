@@ -51,7 +51,7 @@ The agent generates **path commands** (SVG paths, cubic beziers, polylines) rath
 | ECR        | Container registry with lifecycle policies           |
 | Fenton Platform | Shared identity, PKCE magic links, RS256 tokens |
 | Route 53   | DNS management                                       |
-| X-Ray      | Distributed tracing with client span correlation     |
+| X-Ray      | Tracing instrumented; disabled in production         |
 | CloudWatch | Alarms and monitoring                                |
 
 **CI/CD pipeline**:

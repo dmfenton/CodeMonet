@@ -7,6 +7,9 @@ argument-hint: <errors|status|logs|trace ID>
 
 Query production observability: X-Ray traces and CloudWatch logs.
 
+Production tracing is currently disabled (`OTEL_ENABLED=false`, see `docs/observability.md`),
+so trace commands return nothing for `drawing-agent`. Use `logs` for production debugging.
+
 ## Arguments
 
 `$ARGUMENTS` can be:
@@ -267,7 +270,7 @@ Logs are structured JSON in production:
 
 ### No traces found
 
-- Check that OTEL_ENABLED=true in production
+- Production tracing is disabled by default; it must be re-enabled first (see `docs/observability.md`)
 - Verify ADOT collector is running: `docker ps | grep otel`
 - Check collector logs: `docker logs otel-collector`
 
