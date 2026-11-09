@@ -509,6 +509,12 @@ class WorkspaceState:
             logger.warning("Could not prepare gallery thumbnail for %s: %s", saved_id, exc)
 
         await self.save()
+
+        # A saved piece may be public: refresh the pre-rendered site. Imported
+        # here because the pre-renderer reads galleries through this package.
+        from code_monet.prerender import prerender_scheduler
+
+        prerender_scheduler.request()
         return saved_id
 
     async def new_canvas(

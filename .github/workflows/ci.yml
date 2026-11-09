@@ -217,8 +217,26 @@ jobs:
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/platform.dmfenton.net
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      # The image carries the web build's pre-render bundle (web/dist/prerender).
+      - name: Build web
+        run: |
+          npm ci
+          npm run build -w shared
+          npm run build -w web
+
       - name: Build Docker image
         run: docker build -t code-monet-server:ci -f server/Dockerfile .
+
+      - name: Verify the image pre-renders the public site
+        run: |
+          printf '%s' '{"pieces":[],"details":{}}' |
+            docker run --rm -i --entrypoint node code-monet-server:ci /app/web/dist/prerender/prerender.mjs |
+            grep -F '"path":"/gallery"' >/dev/null
 
       # Production passes relative data paths (compute's codemonet.env); they
       # must land on the /app/data volume, not in the image's filesystem.

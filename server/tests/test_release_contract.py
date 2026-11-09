@@ -12,7 +12,7 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     runtime = dockerfile.split("FROM python:3.12-alpine@sha256:", maxsplit=2)[2]
 
     assert "COPY --from=ghcr.io/astral-sh/uv" not in runtime
-    assert 'CMD ["/app/server/.venv/bin/uvicorn",' in runtime
+    assert 'CMD ["/app/server/.venv/bin/python", "-m", "code_monet.serve"]' in runtime
     assert "RUN apk upgrade --no-cache" in runtime
     assert "/usr/local/bin/pip*" in runtime
     assert "/usr/local/bin/wheel" in runtime
@@ -25,20 +25,21 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
     assert '"uv run python -m alembic upgrade head"' not in remote
 
-    web_dockerfile = (ROOT / "web/Dockerfile").read_text()
-    web_runtime = web_dockerfile.split("FROM node:24.18.0-alpine@sha256:", maxsplit=2)[2]
-    assert "RUN apk upgrade --no-cache" in web_runtime
-    assert (
-        "rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx"
-        in web_runtime
-    )
+    # The pre-render bundle needs only the node binary: no npm, no node_modules.
+    assert "COPY --from=claude-cli /usr/local/bin/node /usr/local/bin/node" in runtime
+    assert "node_modules" not in runtime
+    assert "/usr/local/bin/npm" not in runtime
+    # web-ssr is retired: nginx serves the static build and pre-rendered pages.
+    assert not (ROOT / "web/Dockerfile").exists()
 
 
 def test_release_deploys_unique_artifact_from_exact_source() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
     assert workflow.count('--parameters "ImageTag=$ARTIFACT_TAG"') == 2
-    assert workflow.count(":$ARTIFACT_TAG") >= 6
+    # One image (drawing-agent): tagged, pushed and recorded by its artifact tag.
+    assert workflow.count(":$ARTIFACT_TAG") >= 3
+    assert "web-ssr:" not in workflow and "ECR_SSR_REPOSITORY" not in workflow
     assert "artifact_tag=v${VERSION}-${GITHUB_SHA}-run" in workflow
     assert "Require exact main release source" in workflow
     assert 'git rev-parse HEAD)" == "$(git rev-parse origin/main)' in workflow

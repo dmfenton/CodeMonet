@@ -14,7 +14,6 @@ on:
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: drawing-agent
-  ECR_SSR_REPOSITORY: web-ssr
 
 concurrency:
   group: codemonet-production
@@ -159,43 +158,15 @@ jobs:
 
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$ARTIFACT_TAG" >> $GITHUB_OUTPUT
 
-      - name: Build, tag, and push SSR image to Amazon ECR
-        id: build-ssr
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          VERSION: ${{ steps.version.outputs.version }}
-          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
-        run: |
-          # Build the SSR image
-          docker build \
-            --build-arg VERSION="$VERSION" \
-            -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG \
-            -t $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION \
-            -f web/Dockerfile \
-            .
-          docker tag $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION $ECR_REGISTRY/$ECR_SSR_REPOSITORY:latest
-
-          docker run --rm \
-            --volume /var/run/docker.sock:/var/run/docker.sock \
-            aquasec/trivy@sha256:cffe3f5161a47a6823fbd23d985795b3ed72a4c806da4c4df16266c02accdd6f image \
-            --exit-code 1 --no-progress --scanners vuln,secret --severity HIGH,CRITICAL \
-            $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
-
-          # Push both tags
-          docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION
-          docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG
-          docker push $ECR_REGISTRY/$ECR_SSR_REPOSITORY:latest
-
-          echo "image=$ECR_REGISTRY/$ECR_SSR_REPOSITORY:$ARTIFACT_TAG" >> $GITHUB_OUTPUT
-
       - name: Sync web build to S3
-        # nginx.conf, docker-compose.prod.yml, start-services.sh, otel-config.yaml
-        # are owned by dmfenton/compute and uploaded by its deploy-nginx workflow.
-        # This step only pushes CodeMonet's SSR client/server assets.
+        # nginx.conf and the platform compose files are owned by
+        # dmfenton/platform.dmfenton.net. This step only pushes the static web
+        # build nginx serves. The pre-render bundle ships inside the backend
+        # image instead (built above from this same web/dist).
         run: |
           BUCKET="compute-deploy-573988763875"
           echo "Syncing web build to s3://${BUCKET}/deploy/web/"
-          aws s3 sync web/dist/ "s3://${BUCKET}/deploy/web/" --delete
+          aws s3 sync web/dist/ "s3://${BUCKET}/deploy/web/" --delete --exclude 'prerender/*'
 
       - name: Run database migrations
         env:
@@ -284,11 +255,6 @@ jobs:
             ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:v${{ steps.version.outputs.version }}
             ```
 
-            **Web SSR Server:**
-            ```
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_SSR_REPOSITORY }}:v${{ steps.version.outputs.version }}
-            ```
-
             ## Changes
 
             ${{ steps.changelog.outputs.changelog }}
@@ -356,31 +322,32 @@ jobs:
         run: |
           echo "Verifying v$VERSION is running..."
 
-          # Wait up to 3 minutes for both backend and SSR to be healthy
-          # (drawing-agent takes ~60-90s to come up after a recreate)
+          # The backend answers with the new version, and nginx serves the
+          # gallery page the new backend pre-rendered at startup (web-ssr is
+          # retired). drawing-agent takes ~60-90s to come up after a recreate.
           for i in {1..36}; do
             sleep 5
 
-            # Check backend version
             RESPONSE=$(curl -sf https://monet.dmfenton.net/api/version 2>/dev/null || echo '{}')
             DEPLOYED_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
 
-            # Check SSR health
-            SSR_RESPONSE=$(curl -sf https://monet.dmfenton.net/ssr-health 2>/dev/null || echo '{}')
-            SSR_STATUS=$(echo "$SSR_RESPONSE" | jq -r '.status // empty')
+            GALLERY_HEAD=no
+            if curl -sf https://monet.dmfenton.net/gallery 2>/dev/null | grep -Fq '<title>Gallery - Code Monet</title>'; then
+              GALLERY_HEAD=yes
+            fi
 
-            if [ "$DEPLOYED_VERSION" = "$VERSION" ] && [ "$SSR_STATUS" = "healthy" ]; then
+            if [ "$DEPLOYED_VERSION" = "$VERSION" ] && [ "$GALLERY_HEAD" = yes ]; then
               echo "✅ Backend deployed: v$VERSION"
-              echo "✅ SSR status: $SSR_STATUS"
+              echo "✅ Pre-rendered gallery served"
               exit 0
             fi
 
-            echo "Attempt $i/36: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), SSR='${SSR_STATUS:-unknown}' (want 'healthy')"
+            echo "Attempt $i/36: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), pre-rendered gallery=$GALLERY_HEAD"
           done
 
           echo "❌ Deployment verification failed after 3 minutes"
           echo "Expected backend: $VERSION, got: $DEPLOYED_VERSION"
-          echo "Expected SSR: healthy, got: $SSR_STATUS"
+          echo "Expected the pre-rendered gallery page, got: $GALLERY_HEAD"
           exit 1
 
       - name: Summary
@@ -391,6 +358,5 @@ jobs:
           echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: v$VERSION" >> $GITHUB_STEP_SUMMARY
           echo "- **Backend Image**: \`$ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **SSR Image**: \`$ECR_REGISTRY/$ECR_SSR_REPOSITORY:v$VERSION\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment**: ✅ Verified running at https://monet.dmfenton.net/api/version" >> $GITHUB_STEP_SUMMARY
           echo "- **iOS**: TestFlight build triggered" >> $GITHUB_STEP_SUMMARY
