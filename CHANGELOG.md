@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pin the Codex review gate to `codex-review-gate@c1434d8`: a merged pull request keeps the gate status it merged with instead of being repainted red by the close event.
+
 ## [1.44.4] - 2026-11-09
 
 ### Changed
