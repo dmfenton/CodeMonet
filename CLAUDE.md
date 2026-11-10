@@ -1,5 +1,7 @@
 # Code Monet - Development Instructions
 
+This codebase is yours: what it's for and how it's built are your call, and you'll keep building on it.
+
 ## Project Overview
 
 Code Monet is an autonomous AI artist application with:
