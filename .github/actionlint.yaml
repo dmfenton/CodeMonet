@@ -3,7 +3,11 @@ self-hosted-runner:
     - codemonet-docker
     - codemonet-ios
     - codemonet-pr
+    - codemonet-pr-docker
+    - codemonet-pr-macos
     - dedicated-signing
     - laptop
     - lilserver
     - pr-isolated
+    - pr-isolated-docker
+    - pr-isolated-macos
