@@ -30,7 +30,7 @@ async def handle_imagine(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
     Returns:
         Tool result with the generated image and file path
     """
-    from code_monet.config import settings
+    from code_monet import google_vertex
 
     prompt = args.get("prompt", "")
     name = args.get("name", "")
@@ -41,12 +41,12 @@ async def handle_imagine(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
             "is_error": True,
         }
 
-    if not settings.google_api_key:
+    if not google_vertex.gemini_available():
         return {
             "content": [
                 {
                     "type": "text",
-                    "text": "Error: Image generation not available. GOOGLE_API_KEY not configured.",
+                    "text": "Error: Image generation not available. No Gemini credential is configured.",
                 }
             ],
             "is_error": True,
@@ -60,11 +60,9 @@ async def handle_imagine(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
         }
 
     try:
-        from google import genai
         from PIL import Image
 
-        # Initialize client with API key
-        client = genai.Client(api_key=settings.google_api_key)
+        client = google_vertex.gemini_client()
 
         # Generate image using Nano Banana (Flash model)
         logger.info(f"Generating image with prompt: {prompt[:100]}...")

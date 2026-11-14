@@ -168,7 +168,7 @@ OPENAI_DRAWING_TOOLS: list[dict[str, Any]] = [
     {
         "type": "function",
         "name": "imagine",
-        "description": "Generate a reference image if GOOGLE_API_KEY is configured.",
+        "description": "Generate a reference image if Gemini is configured.",
         "parameters": {
             "type": "object",
             "properties": {

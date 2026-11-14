@@ -68,8 +68,18 @@ class Settings(BaseSettings):
     # Optional OpenAI backend. Set AGENT_PROVIDER=openai and OPENAI_API_KEY to use it.
     openai_api_key: str = _ssm("openai_api_key")
 
-    # Image generation (Nano Banana / Google Gemini)
-    google_api_key: str = _ssm("google_api_key")  # Optional - enables imagine tool
+    # Image generation (Nano Banana / Google Gemini). Production is keyless: the host
+    # projects a Google-audience AWS identity token and Gemini runs on Vertex AI
+    # through the fenton-aws workload identity pool (Platform ops/gcp). Local
+    # development may set GOOGLE_API_KEY instead. Neither set disables imagine.
+    google_identity_token_file: str = ""
+    google_sts_audience: str = (
+        "//iam.googleapis.com/projects/786983249817/locations/global/"
+        "workloadIdentityPools/fenton-aws/providers/aws-outbound"
+    )
+    vertex_project: str = "scientific-axle-606"
+    vertex_location: str = "global"
+    google_api_key: str = ""
 
     # Database
     database_url: str = _ssm("database_url", "sqlite+aiosqlite:///./data/code_monet.db")

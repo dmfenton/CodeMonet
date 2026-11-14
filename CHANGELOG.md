@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `imagine` calls Gemini on Vertex AI with no Google key in production: the host projects a Google-audience AWS identity token (`GOOGLE_IDENTITY_TOKEN_FILE`), exchanged through the Fenton workload identity pool. `GOOGLE_API_KEY` remains a local development fallback and is no longer read from SSM.
+
 ### Fixed
 
 - Pin the Codex review gate to `codex-review-gate@9317e21`: a merged pull request keeps the gate status it merged with instead of being repainted red by the close event, and open pull requests are no longer failed each time `main` advances.
