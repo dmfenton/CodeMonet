@@ -78,10 +78,10 @@ jobs:
 
   repository:
     name: Repository and secret scan
-    # Runs Trivy through a Docker daemon, which the isolated PR pool lacks, so
-    # pull requests use a disposable GitHub-hosted runner (no secrets are read);
+    # Runs Trivy through a Docker daemon, so pull requests use the isolated PR
+    # pool with Docker nested in the throwaway container (no secrets are read);
     # pushes and the weekly schedule keep the trusted pool.
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated-docker","codemonet-pr-docker"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6

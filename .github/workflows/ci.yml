@@ -10,8 +10,10 @@ permissions:
   contents: read
 
 # Pull-request code never runs on the persistent trusted pools that also serve
-# releases: PRs use the disposable one-job codemonet-pr pool, or GitHub-hosted
-# runners where a job needs Docker or Xcode. Pushes to main keep the trusted pools.
+# releases: PRs use the disposable one-job codemonet-pr pool, or its isolated
+# codemonet-pr-docker pool where a job needs Docker. Apple code is never built
+# for a pull request: the author's machine checks it before the PR opens, and
+# Xcode Cloud builds only releases. Pushes to main keep the trusted pools.
 # Jobs that read repository secrets (the platform deploy key) never run for fork
 # PRs, on any runner; CI Success fails such a PR instead of passing it unchecked.
 jobs:
@@ -192,10 +194,11 @@ jobs:
 
   docker:
     name: Docker Build
-    # Needs a Docker daemon, which the isolated PR pool lacks, so pull requests
-    # use a disposable GitHub-hosted runner; pushes to main keep the trusted pool.
+    # Needs a Docker daemon, so pull requests use the isolated PR pool with Docker
+    # nested in the throwaway container (never the host socket); pushes to main
+    # keep the trusted pool.
     # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated-docker","codemonet-pr-docker"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 20
     needs: [changes, server]
     if: >-
@@ -284,21 +287,18 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    # Pull requests run on a disposable GitHub-hosted Mac: PR code must never
-    # touch the persistent laptop runner that also signs TestFlight builds.
-    # Pushes to main keep the laptop runner.
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["macos-latest"]' || '["self-hosted","codemonet-ios","laptop"]') }}
+    # Pushes to main only. PR code must never touch the persistent laptop runner
+    # that also signs TestFlight builds; the author's machine checks iOS changes
+    # before a PR opens.
+    runs-on: [self-hosted, codemonet-ios, laptop]
     # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
     # budget below, since a legitimately-held lock (e.g. a concurrent
     # testflight.yml build-ios run) can make this job wait most of that
     # budget before swift test / xcodebuild ever start.
     timeout-minutes: 90
     needs: changes
-    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
-    if: >-
-      needs.changes.outputs.ios == 'true' &&
-      (github.event_name != 'pull_request' ||
-        github.event.pull_request.head.repo.full_name == github.repository)
+    # Reads FENTON_PLATFORM_DEPLOY_KEY; never runs for a pull request.
+    if: needs.changes.outputs.ios == 'true' && github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v6
@@ -327,9 +327,13 @@ jobs:
         working-directory: ios/MonetKit
         run: swift test
 
-      - name: Install XcodeGen on hosted Mac
-        if: github.event_name == 'pull_request'
-        run: brew install xcodegen
+      # Self-hosted Macs are persistent and have no passwordless sudo: tools
+      # are preinstalled, never installed by a job.
+      - name: Verify toolchain
+        run: |
+          for tool in xcodegen; do
+            command -v "$tool" >/dev/null || { echo "missing on runner: $tool — brew install it"; exit 1; }
+          done
 
       - name: Generate Xcode project
         working-directory: ios
