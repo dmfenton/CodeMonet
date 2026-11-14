@@ -12,7 +12,7 @@ def test_testflight_delegates_signing_to_platform_action() -> None:
         workflow.count("uses: ./vendor/platform.dmfenton.net/.github/actions/isolated-ios-signing")
         == 2
     )
-    assert "dmfenton/platform.dmfenton.net/.github/actions" not in workflow
+    assert "dmfenton/platform/.github/actions" not in workflow
     assert "apple-actions/import-codesign-certs" not in workflow
     assert "security create-keychain" not in workflow
     assert 'ENV.fetch("FENTON_IOS_SIGNER_PATH")' in fastfile
