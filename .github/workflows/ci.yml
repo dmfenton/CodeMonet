@@ -11,8 +11,9 @@ permissions:
 
 # Pull-request code never runs on the persistent trusted pools that also serve
 # releases: PRs use the disposable one-job codemonet-pr pool, or its isolated
-# codemonet-pr-docker and codemonet-pr-macos pools where a job needs Docker or
-# Xcode. Pushes to main keep the trusted pools.
+# codemonet-pr-docker pool where a job needs Docker. The iOS build for a pull
+# request runs in Xcode Cloud, never on a self-hosted Mac. Pushes to main keep
+# the trusted pools.
 # Jobs that read repository secrets (the platform deploy key) never run for fork
 # PRs, on any runner; CI Success fails such a PR instead of passing it unchecked.
 jobs:
@@ -286,21 +287,18 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    # Pull requests run on the isolated one-job macOS pool (unprivileged account,
-    # no signing material): PR code must never touch the persistent laptop runner
-    # that also signs TestFlight builds. Pushes to main keep the laptop runner.
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated-macos","codemonet-pr-macos"]' || '["self-hosted","codemonet-ios","laptop"]') }}
+    # Pushes to main only. PR code must never touch the persistent laptop runner
+    # that also signs TestFlight builds, so a pull request's iOS check is the
+    # Xcode Cloud build, not this job.
+    runs-on: [self-hosted, codemonet-ios, laptop]
     # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
     # budget below, since a legitimately-held lock (e.g. a concurrent
     # testflight.yml build-ios run) can make this job wait most of that
     # budget before swift test / xcodebuild ever start.
     timeout-minutes: 90
     needs: changes
-    # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
-    if: >-
-      needs.changes.outputs.ios == 'true' &&
-      (github.event_name != 'pull_request' ||
-        github.event.pull_request.head.repo.full_name == github.repository)
+    # Reads FENTON_PLATFORM_DEPLOY_KEY; never runs for a pull request.
+    if: needs.changes.outputs.ios == 'true' && github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v6
