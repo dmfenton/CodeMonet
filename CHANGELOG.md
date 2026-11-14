@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.5] - 2026-11-14
+
 ### Changed
 
 - `imagine` calls Gemini on Vertex AI with no Google key in production: the host projects a Google-audience AWS identity token (`GOOGLE_IDENTITY_TOKEN_FILE`), exchanged through the Fenton workload identity pool. `GOOGLE_API_KEY` remains a local development fallback and is no longer read from SSM.
@@ -1335,7 +1337,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.4...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.5...HEAD
+[1.44.5]: https://github.com/dmfenton/CodeMonet/compare/v1.44.4...v1.44.5
 [1.44.4]: https://github.com/dmfenton/CodeMonet/compare/v1.44.3...v1.44.4
 [1.44.3]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...v1.44.3
 [1.44.2]: https://github.com/dmfenton/CodeMonet/compare/v1.44.0...v1.44.2
