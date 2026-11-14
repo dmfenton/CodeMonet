@@ -11,9 +11,9 @@ permissions:
 
 # Pull-request code never runs on the persistent trusted pools that also serve
 # releases: PRs use the disposable one-job codemonet-pr pool, or its isolated
-# codemonet-pr-docker pool where a job needs Docker. The iOS build for a pull
-# request runs in Xcode Cloud, never on a self-hosted Mac. Pushes to main keep
-# the trusted pools.
+# codemonet-pr-docker pool where a job needs Docker. Apple code is never built
+# for a pull request: the author's machine checks it before the PR opens, and
+# Xcode Cloud builds only releases. Pushes to main keep the trusted pools.
 # Jobs that read repository secrets (the platform deploy key) never run for fork
 # PRs, on any runner; CI Success fails such a PR instead of passing it unchecked.
 jobs:
@@ -288,8 +288,8 @@ jobs:
   ios:
     name: iOS (Swift)
     # Pushes to main only. PR code must never touch the persistent laptop runner
-    # that also signs TestFlight builds, so a pull request's iOS check is the
-    # Xcode Cloud build, not this job.
+    # that also signs TestFlight builds; the author's machine checks iOS changes
+    # before a PR opens.
     runs-on: [self-hosted, codemonet-ios, laptop]
     # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
     # budget below, since a legitimately-held lock (e.g. a concurrent
