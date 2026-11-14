@@ -225,7 +225,7 @@ Generate a reference image using AI (Google Gemini). Use for visual inspiration,
 
 **Timeout:** 60 seconds.
 
-**Requirements:** `GOOGLE_API_KEY` environment variable must be set.
+**Requirements:** a Gemini credential. Production is keyless: `GOOGLE_IDENTITY_TOKEN_FILE` points at the host-rotated AWS identity token, which is exchanged through Google workload identity federation for Vertex AI. Local development can set `GOOGLE_API_KEY` instead.
 
 ---
 
