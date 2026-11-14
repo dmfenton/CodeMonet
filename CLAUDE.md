@@ -95,8 +95,8 @@ See [docs/claude-sandbox.md](docs/claude-sandbox.md) for Claude Code sandbox con
 
 1. Create a feature branch
 2. Make commits on the branch
-3. Push the branch and create a PR with `gh pr create`
-4. Wait for review/approval before merging
+3. Push the branch and open the PR with `/pr`, which requests the Codex review
+4. Merge once CI Success and the Codex review gate pass
 
 This ensures code review happens and keeps the workflow consistent.
 
@@ -656,7 +656,7 @@ The required `Codex review gate` status comes from the pinned
 which caps review at two Codex rounds per PR. Follow its procedure:
 
 - Never merge a pull request until the `Codex review gate` check passes on its current head.
-- Request the first review only after implementation and local checks are complete: comment `@codex review <!-- codex-request-generation:<full head SHA>:<full base SHA> -->`. Allow only one request per head SHA; never request after trivial pushes.
+- Open PRs with `/pr` (`.claude/commands/pr.md`). Once implementation and local checks are complete, mark the PR ready and request the review immediately with `python3 scripts/request-review.py <PR> --request`; never post `@codex review` by hand. The script allows one request per head and refuses a third round.
 - Address every Codex review comment, regardless of severity: fix it (or reply why not), reply on the thread, and resolve it. P0/P1 findings block the gate; P2/P3 findings are advisory to the gate but still get a reply.
 - If the first review reports P0/P1 findings, fix them together, push, and request one final review for the new head. A review with no blocking finding is already the final round.
 - After the final round, fix any blocking findings, reply to and resolve each thread, rerun the local checks, and dispatch the gate with `gh workflow run codex-p1-gate.yml -f pr_number=<n>`. Never request a third review. The gate accepts a head that descends from the final reviewed commit with no unresolved blocking Codex thread, including later base-branch merges; the base advancing after the final review is a warning, not a block.
