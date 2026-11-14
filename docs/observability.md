@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Production tracing is disabled** (since 2026-11, for cost). `dmfenton/platform.dmfenton.net`
+**Production tracing is disabled** (since 2026-11, for cost). `dmfenton/platform`
 `ops/deploy/release-assets/codemonet-compose.yml` sets `OTEL_ENABLED=false` on `drawing-agent`, so
 the server exports no spans and `POST /traces` accepts client spans but records none
 (`{"received": 0}`). Use CloudWatch logs (`diagnose.py logs`) for production debugging.

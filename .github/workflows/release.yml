@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
-          repository: dmfenton/platform.dmfenton.net
+          repository: dmfenton/platform
           ref: ${{ steps.platform.outputs.sha }}
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/platform.dmfenton.net
@@ -160,7 +160,7 @@ jobs:
 
       - name: Sync web build to S3
         # nginx.conf and the platform compose files are owned by
-        # dmfenton/platform.dmfenton.net. This step only pushes the static web
+        # dmfenton/platform. This step only pushes the static web
         # build nginx serves. The pre-render bundle ships inside the backend
         # image instead (built above from this same web/dist).
         run: |
