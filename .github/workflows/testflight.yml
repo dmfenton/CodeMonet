@@ -120,7 +120,7 @@ jobs:
       - name: Checkout Fenton platform
         uses: actions/checkout@v6
         with:
-          repository: dmfenton/platform.dmfenton.net
+          repository: dmfenton/platform
           ref: ${{ steps.platform.outputs.sha }}
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/platform.dmfenton.net

@@ -31,7 +31,7 @@ fi
 
 platform_source="$(dirname "$main")/platform.dmfenton.net"
 platform_target="$root/vendor/platform.dmfenton.net"
-platform_url="https://github.com/dmfenton/platform.dmfenton.net.git"
+platform_url="https://github.com/dmfenton/platform.git"
 platform_pin="$(tr -d '[:space:]' <"$root/fenton-platform.lock")"
 
 if [[ ! "$platform_pin" =~ ^[0-9a-f]{40}$ ]]; then
