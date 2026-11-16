@@ -20,7 +20,8 @@ jobs:
   publish:
     # Push to main / workflow_dispatch only: AWS OIDC + SSM needs the trusted pool.
     runs-on: [self-hosted, codemonet-docker, lilserver]
-    timeout-minutes: 10
+    # Above the script's 25-minute activation polling budget plus checkout and credentials.
+    timeout-minutes: 40
     environment: codemonet-production
     permissions:
       contents: read
