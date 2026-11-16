@@ -209,7 +209,9 @@ jobs:
     # Reads FENTON_PLATFORM_DEPLOY_KEY: never for fork PRs.
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated-docker","codemonet-pr-docker"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 20
-    needs: [changes, server]
+    # Independent of the Server job: both gate merge through CI Success, so the image
+    # builds alongside the Python suite instead of after it.
+    needs: changes
     if: >-
       needs.changes.outputs.server == 'true' &&
       (github.event_name != 'pull_request' ||

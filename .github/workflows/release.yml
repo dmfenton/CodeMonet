@@ -24,6 +24,7 @@ jobs:
     # Tag push only (never pull_request): docker build/push + AWS OIDC + SSM
     # deploy needs the trusted pool's Docker daemon and credentials.
     runs-on: [self-hosted, codemonet-docker, lilserver]
+    timeout-minutes: 45
     environment: codemonet-production
     permissions:
       contents: write
