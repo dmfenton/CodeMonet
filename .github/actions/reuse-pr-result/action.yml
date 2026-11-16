@@ -1,0 +1,27 @@
+name: Reuse pull request result
+description: >-
+  On a push to main, report reused=true only when the merged pull request already
+  passed the same workflow on a byte-identical tree. Any doubt reports false.
+
+inputs:
+  token:
+    description: Token with actions:read, contents:read and pull-requests:read
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  reused:
+    description: "'true' when the push may skip the work its pull request already passed"
+    value: ${{ steps.decide.outputs.reused }}
+  source_run:
+    description: URL of the pull request run being reused, or empty
+    value: ${{ steps.decide.outputs.source_run }}
+
+runs:
+  using: composite
+  steps:
+    - id: decide
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.token }}
+      run: python3 -I "$GITHUB_ACTION_PATH/reuse_pr_result.py"
