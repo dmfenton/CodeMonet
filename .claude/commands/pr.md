@@ -120,7 +120,9 @@ requested explicitly, right after the PR is ready.
    `reviewThreads` shows zero unresolved Codex threads (in a Claude cloud session, read
    `gh api repos/<owner>/<repo>/pulls/<PR>/ccr/review_threads`). Merging is not deploying.
 
-The gate publishes "Exact-head Codex review is not ready" for every failure, including an open
+While a review is still owed (none completed yet, or the final round after blocking findings),
+the gate shows `pending` ("Waiting for a Codex review ...") and the job passes; pending still
+blocks merge. The gate publishes "Exact-head Codex review is not ready" for every real failure, including an open
 P0/P1 thread or a non-`main` base. Open the status link and read the run log for the real reason
 before acting. Dependabot PRs go through the gate like any other PR: request the review with the script and merge once the gate and CI pass. Runs Dependabot itself triggers get no gate job (and no write token), so a Dependabot head shows no gate status until its review completes.
 
