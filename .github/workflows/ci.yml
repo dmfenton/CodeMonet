@@ -22,15 +22,24 @@ jobs:
     runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
     timeout-minutes: 10
     # paths-filter lists PR files through the API, which needs pull-requests: read.
+    # reuse-pr-result also reads the merged pull request's runs (actions: read).
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
-      server: ${{ steps.filter.outputs.server }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      # A push whose merged pull request already passed this workflow on the identical
+      # tree skips the jobs that pull request ran. iOS runs only on push, so it keeps
+      # its own filter.
+      server: ${{ steps.reuse.outputs.reused != 'true' && steps.filter.outputs.server || 'false' }}
+      frontend: ${{ steps.reuse.outputs.reused != 'true' && steps.filter.outputs.frontend || 'false' }}
       ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@v6
+      # Vendored from dmfenton/platform: a public repository cannot use a private action.
+      - id: reuse
+        if: github.event_name == 'push'
+        uses: ./.github/actions/reuse-pr-result
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
