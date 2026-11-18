@@ -29,6 +29,7 @@ jobs:
               - 'package-lock.json'
               - 'shared/package.json'
               - 'web/package.json'
+              - '.github/workflows/security.yml'
             python:
               - 'server/pyproject.toml'
               - 'server/uv.lock'
@@ -47,7 +48,11 @@ jobs:
         with:
           node-version: '24'
       - run: npm ci
-      - run: npm audit --audit-level=low
+      # Runtime dependencies only, like the Python audit (`uv export --no-dev`).
+      # Dev tooling (Vite, ESLint, test runners) never ships; Dependabot still
+      # proposes its updates. Owner decision 2026-11-17, after picomatch
+      # GHSA-fc5q-39xc-vjpf had no patched release and only dev tooling used it.
+      - run: npm audit --omit=dev --audit-level=low
 
   python-dependencies:
     name: Python dependency audit
