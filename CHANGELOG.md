@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.44.6] - 2026-11-20
+
+### Fixed
+
+- Web pageviews are recorded in Umami again (in fact for the first time): `web/index.html` used a website ID Umami never had, so every `/api/send` was rejected with "Website not found". It now uses Code Monet's registered website ID.
+
 ## [1.44.5] - 2026-11-14
 
 ### Changed
@@ -1337,7 +1343,8 @@ Releases 1.39.4 through 1.40.1 were tagged without changelog sections; these ent
 - Canvas rasterization for agent vision
 - React Native mobile app with Expo
 
-[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.5...HEAD
+[Unreleased]: https://github.com/dmfenton/CodeMonet/compare/v1.44.6...HEAD
+[1.44.6]: https://github.com/dmfenton/CodeMonet/compare/v1.44.5...v1.44.6
 [1.44.5]: https://github.com/dmfenton/CodeMonet/compare/v1.44.4...v1.44.5
 [1.44.4]: https://github.com/dmfenton/CodeMonet/compare/v1.44.3...v1.44.4
 [1.44.3]: https://github.com/dmfenton/CodeMonet/compare/v1.44.2...v1.44.3
