@@ -298,30 +298,18 @@ jobs:
 
   ios:
     name: iOS (Swift)
-    # Pushes to main only. PR code must never touch the persistent laptop runner
-    # that also signs TestFlight builds; the author's machine checks iOS changes
-    # before a PR opens.
-    runs-on: [self-hosted, codemonet-ios, laptop]
-    # Lock-wait budget (45m) + build headroom (45m): must exceed the wait
-    # budget below, since a legitimately-held lock (e.g. a concurrent
-    # testflight.yml build-ios run) can make this job wait most of that
-    # budget before swift test / xcodebuild ever start.
-    timeout-minutes: 90
+    # GitHub-hosted macOS: this repository is public, so these minutes are free,
+    # and each run gets a fresh VM, so it needs no shared macOS lock and never
+    # touches Daniel's laptop. Pushes to main only: the author's machine checks
+    # iOS changes before a PR opens, and the job reads the Platform deploy key.
+    runs-on: macos-26
+    timeout-minutes: 45
     needs: changes
     # Reads FENTON_PLATFORM_DEPLOY_KEY; never runs for a pull request.
     if: needs.changes.outputs.ios == 'true' && github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Acquire shared macOS CI lock
-        env:
-          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        # wait_seconds=2700 (45m, leaves >=45m of the 90m job timeout for
-        # the actual build). stale_seconds=9000 (150m): longer than any
-        # job that can hold this lock (build-ios's own 150m timeout), so a
-        # live job's lock is never mistaken for an abandoned one.
-        run: .github/scripts/macos-ci-lock.sh acquire "$LOCK_OWNER" 2700 9000
 
       - name: Resolve platform pin
         id: platform
@@ -333,18 +321,20 @@ jobs:
           ref: ${{ steps.platform.outputs.sha }}
           ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
           path: vendor/platform.dmfenton.net
+          persist-credentials: false
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
 
       - name: Run MonetKit tests
         working-directory: ios/MonetKit
         run: swift test
 
-      # Self-hosted Macs are persistent and have no passwordless sudo: tools
-      # are preinstalled, never installed by a job.
-      - name: Verify toolchain
-        run: |
-          for tool in xcodegen; do
-            command -v "$tool" >/dev/null || { echo "missing on runner: $tool — brew install it"; exit 1; }
-          done
+      # Hosted runners are fresh VMs, so the job installs its own tools.
+      - name: Install XcodeGen
+        run: brew install xcodegen
 
       - name: Generate Xcode project
         working-directory: ios
@@ -353,16 +343,11 @@ jobs:
       - name: Build app (iOS Simulator, unsigned)
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild -project CodeMonet.xcodeproj -scheme CodeMonet \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData-ci-ios" \
             build CODE_SIGNING_ALLOWED=NO
-
-      - name: Release shared macOS CI lock
-        if: always()
-        env:
-          LOCK_OWNER: ${{ github.repository }}:${{ github.run_id }}:${{ github.job }}
-        run: .github/scripts/macos-ci-lock.sh release "$LOCK_OWNER"
 
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
