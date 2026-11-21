@@ -24,6 +24,8 @@ git log Main..HEAD --oneline
 
 Verify:
 
+- `make test` passed once on the final content (see "Local test cadence" in
+  `CLAUDE.md`; don't rerun it for a docs-only change)
 - If `server/` changed: `make sandbox-e2e` and `make sandbox-tests` pass (paint
   programs run confined only on Linux, so macOS test runs cannot catch sandbox
   failures)

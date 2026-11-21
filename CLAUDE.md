@@ -465,7 +465,25 @@ Web studio (port 5173, `/studio`):
 - Web: Vitest (`web/src/test/`)
 - Native iOS: `swift test` in `ios/MonetKit` (see `ios/ARCHITECTURE.md`)
 - All new features need tests
-- Run `make test` before committing (server + web + MonetKit)
+- Run `make test` (server + web + MonetKit) once, when the change is complete and before opening
+  the PR; not before every commit
+
+### Local test cadence
+
+Claude and Codex agents share one 8-core laptop with Daniel and the Tasks intake jobs. On
+2026-11-19 and 20, full suites and Xcode builds from several worktrees at once held it above 85%
+CPU for over an hour a day and timed out the Tasks Reminders helper.
+
+- While developing, run only focused tests for what you changed (`uv run pytest tests/test_x.py`
+  or `-k`, one Vitest file, `swift test --filter`) plus that component's lint and type check.
+- Run `make test` once before the PR, and again only after a code change (a review fix or a merge
+  from `main`). Do not rerun anything after a docs-only or comment-only edit, or to re-read a
+  result you already have. CI reruns the affected jobs on every push, except iOS, which
+  CI runs only on `main`.
+- Never run suites, Docker image builds or Xcode builds in parallel or in several worktrees at
+  once. On the laptop `make test`, `make ios-build`, `make ios-test`, `make ios-kit-test` and the
+  sandbox targets queue behind `~/.local/bin/heavy-run` (dmfenton/machine): one heavy run at a
+  time at utility priority. If it reports waiting, wait; never kill another agent's run.
 
 ## Integration & E2E Tests
 

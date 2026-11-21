@@ -1,4 +1,4 @@
-.PHONY: install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk sandbox-e2e sandbox-tests test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
+.PHONY: test-all sandbox-e2e-run sandbox-tests-run install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk sandbox-e2e sandbox-tests test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
 
 # Install all dependencies
 install:
@@ -68,8 +68,17 @@ dev-web:
 dev-stop:
 	@./scripts/kill-dev.sh
 
-# Run all tests: server + web + native MonetKit
-test: test-server test-web test-ios-kit
+# On the laptop, whole suites, Docker image builds and Xcode builds queue behind heavy-run
+# (dmfenton/machine): one heavy run at a time across worktrees and agents, at utility priority.
+# CI and cloud sessions have no heavy-run and run the commands directly.
+HEAVY_RUN := $(if $(HEAVY_RUN_HELD),,$(wildcard $(HOME)/.local/bin/heavy-run))
+heavy = $(if $(HEAVY_RUN),$(HEAVY_RUN) --label codemonet-$@ --,)
+
+# Run all tests once, before opening a PR: server + web + native MonetKit
+test:
+	$(heavy) $(MAKE) test-all
+
+test-all: test-server test-web test-ios-kit
 
 test-server:
 	cd server && uv run pytest
@@ -82,13 +91,13 @@ ios-generate:
 	cd ios && $(MAKE) generate
 
 ios-build:
-	cd ios && $(MAKE) build
+	cd ios && $(heavy) $(MAKE) build
 
 ios-test:
-	cd ios && $(MAKE) test-app
+	cd ios && $(heavy) $(MAKE) test-app
 
 ios-kit-test:
-	cd ios && $(MAKE) test-kit
+	cd ios && $(heavy) $(MAKE) test-kit
 
 test-ios-kit: ios-kit-test
 
@@ -106,6 +115,9 @@ test-replay:
 
 # Agent sandbox end to end in the server image (mock Anthropic API, no credentials)
 sandbox-e2e:
+	$(heavy) $(MAKE) sandbox-e2e-run
+
+sandbox-e2e-run:
 	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
 	docker run --rm -i --user 1000 -e DEV_MODE=true -e SECRET_CANARY=must-not-leak \
 		--tmpfs /data:uid=1000 --entrypoint /app/server/.venv/bin/python \
@@ -113,6 +125,9 @@ sandbox-e2e:
 
 # Painting tests under the Linux sandbox (on macOS paint programs run unconfined)
 sandbox-tests:
+	$(heavy) $(MAKE) sandbox-tests-run
+
+sandbox-tests-run:
 	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
 	docker run --rm --user 0 -e DEV_MODE=true --entrypoint sh \
 		-v "$(CURDIR)/server/tests:/src-tests:ro" -v "$(CURDIR)/server/docker:/src-docker:ro" \
