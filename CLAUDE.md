@@ -478,7 +478,8 @@ CPU for over an hour a day and timed out the Tasks Reminders helper.
   or `-k`, one Vitest file, `swift test --filter`) plus that component's lint and type check.
 - Run `make test` once before the PR, and again only after a code change (a review fix or a merge
   from `main`). Do not rerun anything after a docs-only or comment-only edit, or to re-read a
-  result you already have. CI reruns the affected jobs on every push.
+  result you already have. CI reruns the affected jobs on every push, except iOS, which
+  CI runs only on `main`.
 - Never run suites, Docker image builds or Xcode builds in parallel or in several worktrees at
   once. On the laptop `make test`, `make ios-build`, `make ios-test`, `make ios-kit-test` and the
   sandbox targets queue behind `~/.local/bin/heavy-run` (dmfenton/machine): one heavy run at a

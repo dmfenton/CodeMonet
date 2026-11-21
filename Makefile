@@ -1,4 +1,4 @@
-.PHONY: test-all install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk sandbox-e2e sandbox-tests test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
+.PHONY: test-all sandbox-e2e-run sandbox-tests-run install dev-web dev-stop server server-bg server-logs server-stop server-restart web test test-web test-ios-kit test-e2e test-e2e-sdk sandbox-e2e sandbox-tests test-record-fixture test-replay lint format typecheck clean cli cli-turn cli-status build-shared ios-generate ios-build ios-test ios-kit-test
 
 # Install all dependencies
 install:
@@ -115,14 +115,20 @@ test-replay:
 
 # Agent sandbox end to end in the server image (mock Anthropic API, no credentials)
 sandbox-e2e:
-	$(heavy) docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
+	$(heavy) $(MAKE) sandbox-e2e-run
+
+sandbox-e2e-run:
+	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
 	docker run --rm -i --user 1000 -e DEV_MODE=true -e SECRET_CANARY=must-not-leak \
 		--tmpfs /data:uid=1000 --entrypoint /app/server/.venv/bin/python \
 		code-monet-server:sandbox-e2e - < server/docker/sandbox_e2e.py
 
 # Painting tests under the Linux sandbox (on macOS paint programs run unconfined)
 sandbox-tests:
-	$(heavy) docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
+	$(heavy) $(MAKE) sandbox-tests-run
+
+sandbox-tests-run:
+	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
 	docker run --rm --user 0 -e DEV_MODE=true --entrypoint sh \
 		-v "$(CURDIR)/server/tests:/src-tests:ro" -v "$(CURDIR)/server/docker:/src-docker:ro" \
 		code-monet-server:sandbox-e2e /src-docker/sandbox_tests.sh
