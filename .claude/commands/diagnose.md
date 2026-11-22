@@ -193,14 +193,14 @@ Convenience scripts for common operations:
 ### Production
 
 ```bash
-./scripts/logs-prod.sh         # Recent from CloudWatch (30 min)
-./scripts/logs-prod.sh errors  # Error logs only
-./scripts/logs-prod.sh auth    # Authentication logs
-./scripts/logs-prod.sh agent   # Agent activity logs
-./scripts/logs-prod.sh ws      # WebSocket logs
-./scripts/logs-prod.sh user 42 # Logs for user ID 42
-./scripts/logs-prod.sh search "magic link"  # Search logs
-./scripts/logs-prod.sh status  # Service health check
+cd server
+uv run python ../scripts/diagnose.py logs 30 --md            # Recent from CloudWatch
+uv run python ../scripts/diagnose.py logs-errors 60 --md     # Error logs only
+uv run python ../scripts/diagnose.py logs 60 --category auth --md   # auth | agent | websocket
+uv run python ../scripts/diagnose.py logs-user 42 60 --md    # Logs for user ID 42
+uv run python ../scripts/diagnose.py logs-search "magic link" 60 --md
+uv run python ../scripts/diagnose.py status --md             # Service health
+box logs drawing-agent --tail 50                             # Raw container output (Platform box)
 ```
 
 ## Local Development

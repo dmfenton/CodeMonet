@@ -21,10 +21,6 @@ def test_runtime_image_has_no_build_package_managers() -> None:
     assert "subprocess.run([cli, '--version'], check=True)" in runtime
     assert 'ENV PATH="/app/server/.venv/bin:${PATH}"' in runtime
 
-    remote = (ROOT / "scripts/remote.py").read_text()
-    assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
-    assert '"uv run python -m alembic upgrade head"' not in remote
-
     # The pre-render bundle needs only the node binary: no npm, no node_modules.
     assert "COPY --from=claude-cli /usr/local/bin/node /usr/local/bin/node" in runtime
     assert "node_modules" not in runtime

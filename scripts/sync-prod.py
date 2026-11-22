@@ -2,7 +2,10 @@
 """Sync production database and workspace to local dev environment.
 
 Handles the SSM 24KB output limit by automatically chunking file transfers
-via base64-encoded segments.
+via base64-encoded segments. Every remote command goes through Platform's `box run`
+(dmfenton/platform `ops/scripts/box`), so `box` must be on PATH. Its receipts and
+traces hold production data, so they go to a private temporary directory that is
+deleted when the sync ends.
 
 Usage:
     uv run python scripts/sync-prod.py           # Full sync (DB + workspace)
@@ -12,16 +15,12 @@ Usage:
 
 import base64
 import os
+import shlex
 import shutil
 import sqlite3
 import subprocess
 import sys
 import tempfile
-import shlex
-
-# Reuse remote.py's SSM infrastructure
-sys.path.insert(0, os.path.dirname(__file__))
-from remote import run_command
 
 # Configuration
 REMOTE_DB_PATH = "/home/ec2-user/data/codemonet/drawing_agent.db"
@@ -35,10 +34,38 @@ TARGET_EMAIL = "dmfenton@gmail.com"
 CHUNK_SIZE = 17000
 
 
+BOX_STATE_DIR = tempfile.mkdtemp(prefix="codemonet-sync-prod-")
+
+
+def run_command(command: str, timeout: int = 60) -> tuple[int, str, str]:
+    """Run one command on the box through Platform's `box run`; returns (code, stdout, stderr)."""
+    box = shutil.which("box")
+    if box is None:
+        raise RuntimeError("box is not on PATH; install it from dmfenton/platform ops/scripts")
+    result = subprocess.run(
+        [
+            box,
+            "run",
+            "--command",
+            command,
+            "--comment",
+            "codemonet sync-prod",
+            "--wait",
+            str(timeout),
+            "--state-dir",
+            BOX_STATE_DIR,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode, result.stdout, result.stderr
+
+
 def print_step(msg: str):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {msg}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def get_remote_file_size(path: str) -> int:
@@ -59,12 +86,16 @@ def download_chunked(remote_path: str, local_path: str):
     for i in range(num_chunks):
         offset = i * CHUNK_SIZE
         count = min(CHUNK_SIZE, file_size - offset)
-        print(f"  Downloading chunk {i+1}/{num_chunks} (offset={offset}, size={count})...", end=" ", flush=True)
+        print(
+            f"  Downloading chunk {i + 1}/{num_chunks} (offset={offset}, size={count})...",
+            end=" ",
+            flush=True,
+        )
 
         cmd = f"tail -c +{offset + 1} {shlex.quote(remote_path)} | head -c {count} | base64"
         code, stdout, stderr = run_command(cmd, timeout=60)
         if code != 0:
-            raise RuntimeError(f"Failed to download chunk {i+1}: {stderr}")
+            raise RuntimeError(f"Failed to download chunk {i + 1}: {stderr}")
 
         chunk_b64 = stdout.strip()
         chunk_bytes = base64.b64decode(chunk_b64)
@@ -186,6 +217,13 @@ def verify():
 
 
 def main():
+    try:
+        sync()
+    finally:
+        shutil.rmtree(BOX_STATE_DIR, ignore_errors=True)
+
+
+def sync():
     sync_db = "--ws-only" not in sys.argv
     sync_ws = "--db-only" not in sys.argv
 
