@@ -41,7 +41,10 @@ platform :ios do
       clean: true,
       skip_codesigning: true,
       skip_package_ipa: true,
-      xcargs: "MARKETING_VERSION=#{ENV.fetch('APP_VERSION')} CURRENT_PROJECT_VERSION=#{ENV.fetch('APP_BUILD_NUMBER')}",
+      # Build exactly the committed Package.resolved, fetching the private Platform package
+      # with system git, which carries the job's deploy-key access (scripts/ci/platform-git-access.sh).
+      disable_package_automatic_updates: true,
+      xcargs: "-scmProvider system MARKETING_VERSION=#{ENV.fetch('APP_VERSION')} CURRENT_PROJECT_VERSION=#{ENV.fetch('APP_BUILD_NUMBER')}",
     )
 
     manifest_path = File.join(app_root, "build/CodeMonet-signing.json")

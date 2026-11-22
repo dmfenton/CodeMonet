@@ -34,7 +34,6 @@ jobs:
               - 'server/pyproject.toml'
               - 'server/uv.lock'
               - 'scripts/audit-python-dependencies.sh'
-              - 'fenton-platform.lock'
 
   javascript-dependencies:
     name: JavaScript dependency audit
@@ -66,15 +65,11 @@ jobs:
         github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       - uses: actions/checkout@v6
-      - name: Resolve platform pin
-        id: platform
-        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
-        with:
-          repository: dmfenton/platform
-          ref: ${{ steps.platform.outputs.sha }}
-          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
-          path: vendor/platform.dmfenton.net
+      # Tagged Platform libraries (server/uv.lock, Swift packages): fetched with the deploy key.
+      - name: Platform git access
+        env:
+          KEY: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+        run: bash scripts/ci/platform-git-access.sh
       - uses: astral-sh/setup-uv@v8.3.2
       - run: uv python install 3.12
       - run: uv sync --frozen --extra dev

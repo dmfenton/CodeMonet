@@ -31,7 +31,7 @@ let package = Package(
         // The shared Fenton platform package. MonetNetworking builds its
         // REST client on top of FentonMobileCore.MobileAPIClient rather than
         // rolling its own HTTP plumbing — see net-auth spec §3, §6.
-        .package(path: "../../vendor/platform.dmfenton.net/swift"),
+        .package(url: "https://github.com/dmfenton/platform.git", from: "1.0.0"),
     ],
     targets: [
         .target(name: "MonetProtocol"),
@@ -42,7 +42,7 @@ let package = Package(
             name: "MonetNetworking",
             dependencies: [
                 "MonetProtocol",
-                .product(name: "FentonMobileCore", package: "swift"),
+                .product(name: "FentonMobileCore", package: "platform"),
             ]
         ),
         .executableTarget(

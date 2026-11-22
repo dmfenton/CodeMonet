@@ -36,21 +36,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve platform pin
-        id: platform
-        run: echo "sha=$(tr -d '[:space:]' < fenton-platform.lock)" >> "$GITHUB_OUTPUT"
-
       - name: Require exact main release source
         run: |
           git fetch origin main --no-tags
           [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]]
 
-      - uses: actions/checkout@v6
-        with:
-          repository: dmfenton/platform
-          ref: ${{ steps.platform.outputs.sha }}
-          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
-          path: vendor/platform.dmfenton.net
+      # Tagged Platform libraries (server/uv.lock, Swift packages): fetched with the deploy key.
+      - name: Platform git access
+        env:
+          KEY: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+        run: bash scripts/ci/platform-git-access.sh
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -136,14 +131,12 @@ jobs:
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           # Build the image with version info
-          docker build \
+          scripts/docker-build.sh \
             --build-arg APP_VERSION="$VERSION" \
             --build-arg APP_COMMIT="$COMMIT_SHA" \
             --build-arg APP_BUILD_TIME="$BUILD_TIME" \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:$ARTIFACT_TAG \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION \
-            -f server/Dockerfile \
-            .
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:v$VERSION $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
           docker run --rm \

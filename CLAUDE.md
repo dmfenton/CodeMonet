@@ -63,6 +63,16 @@ rm -rf node_modules web/node_modules shared/node_modules package-lock.json
 npm install
 ```
 
+### Shared Platform libraries
+
+`fenton-platform` (server) and `FentonPlatform` (iOS) come from a Platform release tag
+(`vX.Y.Z`, see dmfenton/platform `docs/consuming-platform.md`); `server/uv.lock` and the
+`Package.resolved` files record the exact commit. To move to a new release, change the tag in
+`server/pyproject.toml`, `ios/project.yml` and `ios/MonetKit/Package.swift`, re-lock (`uv lock`,
+`xcodebuild -resolvePackageDependencies`), and open one PR. Build the server image with
+`scripts/docker-build.sh`, which hands the build that exact commit. CI reaches the private Platform
+repository with `scripts/ci/platform-git-access.sh`.
+
 ### Python Server Setup
 
 The server uses `uv` for dependency management (not npm).
@@ -132,7 +142,7 @@ CI jobs only run when relevant code changes:
 | Server (Python)    | `server/**`                                      |
 | Frontend (web)     | `web/**`, `shared/**`, `package*.json`            |
 | Replay Tests       | `web/**`, `shared/**`, `package*.json`            |
-| iOS (Swift)        | `ios/**`, `fenton-platform.lock`                  |
+| iOS (Swift)        | `ios/**`                                          |
 | Docker Build       | `server/**` (after Server job passes)            |
 
 The "CI Success" job consolidates results - it passes if all jobs either pass or are appropriately skipped.
@@ -692,5 +702,5 @@ which caps review at two Codex rounds per PR. Follow its procedure:
   after their owned command exits. Device/app data is retained; never erase/delete for cleanup.
 - `scripts/simulator.sh status` reports owners/queue; `cleanup` reconciles only abandoned managed
   leases after their child jobs exit. Never stop intake agents, native services or unrelated jobs.
-- `fenton-simulator.lock` pins local tooling independently of the production Platform pin.
-  Set `FENTON_PLATFORM_SOURCE` only when the authorized local Platform clone is elsewhere.
+- `scripts/simulator.sh` runs the pool tool installed once per Mac by dmfenton/machine
+  (`~/.local/bin/fenton-simulator`, the newest Platform release); there is no per-repo pin.

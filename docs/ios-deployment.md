@@ -15,8 +15,8 @@ git push origin v1.0.0
 ```
 
 Or manually trigger via GitHub Actions -> TestFlight Deploy -> Run workflow.
-The build is skipped if the tag introduces no changes under `ios/` or
-`fenton-platform.lock` (pass `force: true` to override).
+The build is skipped if the tag introduces no changes under `ios/` (Platform
+release bumps change `ios/` through `Package.resolved`; pass `force: true` to override).
 
 ## How It Works
 
