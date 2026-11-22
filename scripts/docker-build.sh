@@ -19,4 +19,13 @@ trap 'rm -rf -- "$src"' EXIT
 git init -q "$src"
 git -C "$src" fetch -q --tags "$url" "$commits"
 git -C "$src" cat-file -e "$commits^{commit}"
+# The base is Platform's private shared runtime in ECR (server/Dockerfile's pinned digest). Use a
+# local copy, else pull it, logging in to ECR with this machine's or job's AWS identity first.
+runtime="$(sed -n 's/^ARG FENTON_RUNTIME_IMAGE=//p' "$root/server/Dockerfile")"
+if ! docker image inspect "$runtime" >/dev/null 2>&1 && ! docker pull -q "$runtime" >/dev/null 2>&1; then
+  registry="${runtime%%/*}"
+  region="$(cut -d. -f4 <<<"$registry")"
+  aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry" >/dev/null
+  docker pull -q "$runtime" >/dev/null
+fi
 docker build --build-context platform-src="$src" -f "$root/server/Dockerfile" "$@" "$root"
