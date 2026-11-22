@@ -19,4 +19,4 @@ trap 'rm -rf -- "$src"' EXIT
 git init -q "$src"
 git -C "$src" fetch -q --tags "$url" "$commits"
 git -C "$src" cat-file -e "$commits^{commit}"
-exec docker build --build-context platform-src="$src" -f "$root/server/Dockerfile" "$@" "$root"
+docker build --build-context platform-src="$src" -f "$root/server/Dockerfile" "$@" "$root"
