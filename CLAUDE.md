@@ -494,6 +494,10 @@ CPU for over an hour a day and timed out the Tasks Reminders helper.
   once. On the laptop `make test`, `make ios-build`, `make ios-test`, `make ios-kit-test` and the
   sandbox targets queue behind `~/.local/bin/heavy-run` (dmfenton/machine): one heavy run at a
   time at utility priority. If it reports waiting, wait; never kill another agent's run.
+- `make test` and that queueing go through Platform's repo kit (`scripts/fenton-repo.sh`,
+  installed per Mac by dmfenton/machine as `~/.local/bin/fenton-repo`). It skips `make test` when
+  this exact content already passed on the branch or only docs changed since;
+  `make test FORCE=1` reruns it.
 
 ## Integration & E2E Tests
 
