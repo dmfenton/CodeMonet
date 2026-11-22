@@ -12,14 +12,21 @@ WORKDIR /app/server
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.32@sha256:df4cae8f3a96d175e2e5f992e597550000edbe78fdc2594d5cd8de1a217f504c /uv /uvx /bin/
 
-RUN apk add --no-cache build-base
+RUN apk add --no-cache build-base git
 
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
-COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 
-RUN uv sync --frozen --no-dev --no-cache
+# The tagged Platform libraries uv.lock records come from the `platform-src` build context that
+# scripts/docker-build.sh fetches; uv still checks the exact commit. Nothing private is fetched here.
+RUN --mount=type=bind,from=platform-src,target=/platform-src \
+    GIT_CONFIG_COUNT=2 \
+    GIT_CONFIG_KEY_0=url.file:///platform-src.insteadOf \
+    GIT_CONFIG_VALUE_0=https://github.com/dmfenton/platform.git \
+    GIT_CONFIG_KEY_1=safe.directory \
+    GIT_CONFIG_VALUE_1=* \
+    uv sync --frozen --no-dev --no-cache
 
 FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
 
@@ -40,7 +47,6 @@ WORKDIR /app/server
 COPY server/pyproject.toml server/uv.lock server/alembic.ini ./
 COPY server/code_monet/ code_monet/
 COPY server/alembic/ alembic/
-COPY vendor/platform.dmfenton.net/python /app/vendor/platform.dmfenton.net/python
 COPY --from=build /app/server/.venv ./.venv
 COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude
 # The public site's page heads are rendered by the web build's own bundle

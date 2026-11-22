@@ -118,7 +118,7 @@ sandbox-e2e:
 	$(heavy) $(MAKE) sandbox-e2e-run
 
 sandbox-e2e-run:
-	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
+	scripts/docker-build.sh -t code-monet-server:sandbox-e2e
 	docker run --rm -i --user 1000 -e DEV_MODE=true -e SECRET_CANARY=must-not-leak \
 		--tmpfs /data:uid=1000 --entrypoint /app/server/.venv/bin/python \
 		code-monet-server:sandbox-e2e - < server/docker/sandbox_e2e.py
@@ -128,7 +128,7 @@ sandbox-tests:
 	$(heavy) $(MAKE) sandbox-tests-run
 
 sandbox-tests-run:
-	docker build -f server/Dockerfile -t code-monet-server:sandbox-e2e .
+	scripts/docker-build.sh -t code-monet-server:sandbox-e2e
 	docker run --rm --user 0 -e DEV_MODE=true --entrypoint sh \
 		-v "$(CURDIR)/server/tests:/src-tests:ro" -v "$(CURDIR)/server/docker:/src-docker:ro" \
 		code-monet-server:sandbox-e2e /src-docker/sandbox_tests.sh

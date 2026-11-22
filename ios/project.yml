@@ -29,7 +29,8 @@ configFiles:
 
 packages:
   FentonPlatform:
-    path: ../vendor/platform.dmfenton.net/swift
+    url: https://github.com/dmfenton/platform.git
+    from: 1.0.0
   MonetKit:
     path: ./MonetKit
 

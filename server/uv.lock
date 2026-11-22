@@ -630,7 +630,7 @@ requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.159" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "fenton-platform", directory = "../vendor/platform.dmfenton.net/python" },
+    { name = "fenton-platform", git = "https://github.com/dmfenton/platform.git?subdirectory=python&tag=v1.0.0" },
     { name = "google-genai", specifier = ">=1.52.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
@@ -917,20 +917,9 @@ wheels = [
 [[package]]
 name = "fenton-platform"
 version = "0.1.0"
-source = { directory = "../vendor/platform.dmfenton.net/python" }
+source = { git = "https://github.com/dmfenton/platform.git?subdirectory=python&tag=v1.0.0#75fcb5c0770be4de3dcefa33251157a3ef5dfe13" }
 dependencies = [
     { name = "cryptography" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "cryptography", specifier = ">=50,<51" }]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", extras = ["toml"], specifier = ">=7.10" },
-    { name = "mypy", specifier = ">=1.17" },
-    { name = "pytest", specifier = ">=8.4" },
-    { name = "ruff", specifier = ">=0.12" },
 ]
 
 [[package]]

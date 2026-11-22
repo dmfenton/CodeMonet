@@ -33,7 +33,7 @@ and work only inside your `ownedPaths`.
                        │  (executable)  │    │
                        └────────────────┘    │
                                               │
-   FentonPlatform (vendor/platform.dmfenton.net/swift)
+   FentonPlatform (github.com/dmfenton/platform, release tag)
      FentonMobileCore  ◄───────────────────────┘ (MonetNetworking, Services/AuthService)
      FentonDesignSystem ◄── CodeMonet/DesignSystem
 ```
@@ -48,7 +48,8 @@ packages below.
 The `CodeMonet` Xcode app target (`ios/CodeMonet`) is the only place UIKit/
 SwiftUI/CoreGraphics-as-a-live-renderer-surface code lives. It depends on
 every `MonetKit` product plus `FentonDesignSystem`/`FentonMobileCore` from
-the vendored `FentonPlatform` package.
+the `FentonPlatform` package, fetched by URL at a Platform release tag
+(`Package.resolved` records the exact revision).
 
 | Target | What it is | Depends on |
 |---|---|---|

@@ -23,8 +23,8 @@ after the resource-server boundary succeeds. WebSocket authentication uses the s
 - Password, local magic-link, local code-verification, and app-local refresh endpoints return 404.
 - The local HS256 token implementation remains development-only for fixtures and explicit dev
   tokens.
-- The platform pin in `fenton-platform.lock` is checked out at the exact commit for CI and image
-  builds.
+- Platform libraries come from a Platform release tag; `server/uv.lock` and the Swift
+  `Package.resolved` files record the exact commit that CI and image builds use.
 - The iOS universal link path is `/auth/callback*` for bundle `net.dmfenton.sketchpad`.
 
 ## Configuration

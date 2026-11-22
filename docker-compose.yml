@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: server/Dockerfile
+      # Platform libraries come from a local fetch of the commit server/uv.lock records;
+      # scripts/docker-build.sh prepares it. For compose, point PLATFORM_SRC at such a fetch.
+      additional_contexts:
+        platform-src: ${PLATFORM_SRC:?build the image with scripts/docker-build.sh, or set PLATFORM_SRC}
     ports:
       - '8000:8000'
     environment:

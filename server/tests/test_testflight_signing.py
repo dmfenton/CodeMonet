@@ -7,11 +7,8 @@ def test_testflight_delegates_signing_to_platform_action() -> None:
     workflow = (ROOT / ".github/workflows/testflight.yml").read_text()
     fastfile = (ROOT / "ios/fastlane/Fastfile").read_text()
 
-    # Public repo: the private platform action is used from the lock-pinned checkout.
-    assert (
-        workflow.count("uses: ./vendor/platform.dmfenton.net/.github/actions/isolated-ios-signing")
-        == 2
-    )
+    # Public repo: the private platform action is used from a SHA-pinned checkout.
+    assert workflow.count("uses: ./.platform-actions/.github/actions/isolated-ios-signing") == 2
     assert "dmfenton/platform/.github/actions" not in workflow
     assert "apple-actions/import-codesign-certs" not in workflow
     assert "security create-keychain" not in workflow
