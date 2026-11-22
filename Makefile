@@ -69,14 +69,20 @@ dev-stop:
 	@./scripts/kill-dev.sh
 
 # On the laptop, whole suites, Docker image builds and Xcode builds queue behind heavy-run
-# (dmfenton/machine): one heavy run at a time across worktrees and agents, at utility priority.
-# CI and cloud sessions have no heavy-run and run the commands directly.
-HEAVY_RUN := $(if $(HEAVY_RUN_HELD),,$(wildcard $(HOME)/.local/bin/heavy-run))
-heavy = $(if $(HEAVY_RUN),$(HEAVY_RUN) --label codemonet-$@ --,)
+# (dmfenton/machine): one heavy run at a time across worktrees and agents, at utility priority,
+# through Platform's repo kit (scripts/fenton-repo.sh). CI and cloud sessions have no heavy-run
+# and run the commands directly.
+FENTON_REPO := sh $(CURDIR)/scripts/fenton-repo.sh
+heavy = $(FENTON_REPO) heavy --label codemonet-$@ --
 
-# Run all tests once, before opening a PR: server + web + native MonetKit
+# Run all tests once, before opening a PR: server + web + native MonetKit. The repo kit skips the
+# run when this exact content already passed on this branch, and after a docs-only change;
+# `make test FORCE=1` runs it anyway.
 test:
-	$(heavy) $(MAKE) test-all
+	$(FENTON_REPO) gate --name make-test --key test --label codemonet-test $(if $(FORCE),--force) \
+		--docs '*.md' --docs '!server/*' --docs '!web/*' --docs '!shared/*' --docs '!ios/*' \
+		--docs '*/README.md' --docs '*/CLAUDE.md' --docs '*/AGENTS.md' --docs '*/ARCHITECTURE.md' \
+		-- sh -c '[ "$$FENTON_GATE_SCOPE" = docs ] || $(MAKE) test-all'
 
 test-all: test-server test-web test-ios-kit
 
