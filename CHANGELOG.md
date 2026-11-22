@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The server image starts from Platform's shared Python runtime (`fenton-python-runtime`, pinned by digest) instead of its own `python:3.12-alpine` base, in both the build and runtime stages, so every Fenton API shares one Platform-built and scanned Python base. Releases still apply current Alpine updates on top. `scripts/docker-build.sh` pulls the base (logging in to ECR when needed), and the CI image job reads it through a pull-only role.
 - The release runs its database migration and deploy through Platform's shared release step (platform#513, `scripts/ci/platform-release.sh`) instead of its own SSM polling loops. Image scanning, public verification and home-host publishing are unchanged.
 
 ## [1.44.6] - 2026-11-20

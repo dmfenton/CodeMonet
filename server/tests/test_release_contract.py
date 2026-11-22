@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -5,17 +6,23 @@ ROOT = Path(__file__).parents[2]
 
 def test_runtime_image_has_no_build_package_managers() -> None:
     dockerfile = (ROOT / "server/Dockerfile").read_text()
-    assert dockerfile.count("FROM python:3.12-alpine@sha256:") == 2
+    assert re.search(
+        r"ARG FENTON_RUNTIME_IMAGE=573988763875\.dkr\.ecr\.us-east-1\.amazonaws\.com/"
+        r"fenton-python-runtime@sha256:[0-9a-f]{64}\n",
+        dockerfile,
+    )
+    assert "FROM python:" not in dockerfile
+    assert "FROM ${FENTON_RUNTIME_IMAGE} AS build\n" in dockerfile
     assert "FROM node:24.18.0-alpine@sha256:" in dockerfile
     assert "COPY server/claude-cli/package*.json ./" in dockerfile
     assert "npm ci --omit=dev --ignore-scripts" in dockerfile
-    runtime = dockerfile.split("FROM python:3.12-alpine@sha256:", maxsplit=2)[2]
+    runtime = dockerfile.split("FROM ${FENTON_RUNTIME_IMAGE}\n", maxsplit=1)[1]
 
     assert "COPY --from=ghcr.io/astral-sh/uv" not in runtime
     assert 'CMD ["/app/server/.venv/bin/python", "-m", "code_monet.serve"]' in runtime
     assert "RUN apk upgrade --no-cache" in runtime
-    assert "/usr/local/bin/pip*" in runtime
-    assert "/usr/local/bin/wheel" in runtime
+    assert "! command -v pip" in runtime
+    assert "! command -v wheel" in runtime
     assert "COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude" in runtime
     assert "SubprocessCLITransport('', ClaudeAgentOptions())._find_cli()" in runtime
     assert "subprocess.run([cli, '--version'], check=True)" in runtime
