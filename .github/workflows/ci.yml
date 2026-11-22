@@ -49,7 +49,6 @@ jobs:
               - 'shared/src/auth/platform.ts'
               - 'fenton-platform.tenant.json'
               - 'scripts/worktree-bootstrap.sh'
-              - 'scripts/publish-tenant-manifest.sh'
               - 'scripts/docker-build.sh'
               - 'scripts/ci/platform-git-access.sh'
               - '.github/workflows/**'
