@@ -33,17 +33,9 @@ updates:
       - dependency-name: '*'
         update-types: ['version-update:semver-major']
 
-  - package-ecosystem: uv
-    directory: /server
-    patterns: ["*"]
-    multi-ecosystem-group: weekly-runtime
-    groups:
-      security:
-        applies-to: security-updates
-        patterns: ["*"]
-    ignore:
-      - dependency-name: '*'
-        update-types: ['version-update:semver-major']
+  # No uv entry: server/ locks Platform's private release tag, which Dependabot cannot fetch.
+  # The lock moves by hand; security.yml audits it weekly (dmfenton/platform tools/repo-kit
+  # README, "Dependency policy").
 
   - package-ecosystem: docker
     directories:

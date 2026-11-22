@@ -1,3 +1,4 @@
+# Managed by dmfenton/platform tools/repo-kit: change the template there and sync; never edit this copy.
 name: Codex review gate
 run-name: 'Codex review gate PR #${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || 0 }}'
 
@@ -15,6 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
+        description: Pull request number to audit
         required: true
         type: string
 
@@ -47,5 +49,6 @@ jobs:
       # Runs that execute this file as defined on main go to the persistent control lane
       # on lilserver; every other run (pull_request_review*, a branch dispatch, a stacked
       # pull request's base) to the one-job isolated pool. The lane's job-started hook
-      # refuses anything else (dmfenton/platform ops/ci/README.md, "Control lane").
+      # refuses anything else (dmfenton/platform ops/ci/README.md, "Control lane"). A
+      # repository with no control pool yet routes every run to its isolated pool.
       runner_labels_json: ${{ (endsWith(github.workflow_ref, '@refs/heads/main') && contains(fromJSON('["pull_request_target","issue_comment","schedule","workflow_dispatch"]'), github.event_name)) && '["self-hosted","pr-control","codemonet-control"]' || '["self-hosted","pr-isolated","codemonet-pr"]' }}
