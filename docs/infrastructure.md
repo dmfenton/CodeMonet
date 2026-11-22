@@ -112,36 +112,21 @@ To change shared infra, open a PR against compute and follow its [RUNBOOK](https
 
 ## Remote Server Management (SSM)
 
-Use `scripts/remote.py` to manage the server via AWS SSM (no SSH needed):
+Use Platform's `box` CLI (`ops/scripts/box` in dmfenton/platform; see its `ops/scripts/README.md`
+and the `ssm-operations` skill). There is no SSH and no CodeMonet-specific SSM script.
 
 ```bash
-# View container logs
-uv run python scripts/remote.py logs
-
-# Restart container
-uv run python scripts/remote.py restart
-
-# Run migrations
-uv run python scripts/remote.py migrate
-
-# Create invite code
-uv run python scripts/remote.py create-invite
-
-# Create user directly
-uv run python scripts/remote.py create-user EMAIL [PASSWORD]
-
-# Run command in container
-uv run python scripts/remote.py exec "command"
-
-# Run command on host
-uv run python scripts/remote.py shell "command"
+box logs drawing-agent                          # last 200 lines of docker logs
+box logs drawing-agent --follow                 # stream
+box logs drawing-agent --since 6h --grep ERROR  # CloudWatch, current container
+box run --command 'docker restart drawing-agent'
+box run --command 'docker exec drawing-agent /app/server/.venv/bin/python -m code_monet.cli invite create'
+box shell
 ```
 
-**Note:** Commands that start Python inside the container can be slow (~30s) due to `uv run` overhead. For direct database access, use sqlite3 on the host:
-
-```bash
-uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/codemonet/drawing_agent.db '.tables'"
-```
+Migrations run in each release (Platform's `migrate-codemonet.sh`). The agent sleeps when idle, so
+start it (or open the site) before a `docker exec`. For app-level traces and log queries use
+`scripts/diagnose.py` (X-Ray and the `/drawing-agent/app` log groups).
 
 ## SSH Access (if needed)
 

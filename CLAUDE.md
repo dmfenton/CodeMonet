@@ -595,12 +595,12 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Use `scripts/remote.py` to manage the server via SSM:
+Reach the server with Platform's `box` CLI (dmfenton/platform `ops/scripts/box`, `ssm-operations`
+skill); migrations run in each release:
 
 ```bash
-uv run python scripts/remote.py logs       # View container logs
-uv run python scripts/remote.py restart    # Restart container
-uv run python scripts/remote.py migrate    # Run migrations
+box logs drawing-agent                          # Container logs (--follow, or --since/--grep for CloudWatch)
+box run --command 'docker restart drawing-agent'
 ```
 
 Sync production data to local dev (database + workspace):
