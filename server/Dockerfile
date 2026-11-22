@@ -2,7 +2,7 @@
 # Python 3.12 Alpine base every Fenton API starts from. The build stage uses the same image, so
 # the copied virtual environment links against the exact interpreter that runs it. Pulling it
 # needs ECR read access (scripts/docker-build.sh logs in when the image is not local).
-ARG FENTON_RUNTIME_IMAGE=573988763875.dkr.ecr.us-east-1.amazonaws.com/fenton-python-runtime@sha256:09301bf953a179b5add26339506ca7ad07178ed252afc1e189e28a80f8308c3c
+ARG FENTON_RUNTIME_IMAGE=573988763875.dkr.ecr.us-east-1.amazonaws.com/fenton-python-runtime@sha256:92d5d68a07d8de5f89dc8647d96444d27fbc95b5906734a50d28bd72dc9c0f25
 FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS claude-cli
 
 WORKDIR /opt/claude
