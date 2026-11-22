@@ -35,7 +35,7 @@ This triggers `.github/workflows/release.yml` which:
 5. Creates GitHub Release with changelog
 6. Deploys to EC2 via SSM (`Compute-DeployCodeMonet`): recreates `drawing-agent`, health-gates it, proves it has no AWS path, then warms nginx's public cache
 7. Verifies `/api/version` reports the new version and nginx serves the pre-rendered `/gallery`
-8. Writes the same artifact tag to `/fenton-home/prod/release/codemonet_migrate` and `codemonet_deploy`; the platform's home host (`ops/home-host`) runs that release only while it is the primary host
+8. Before step 7, writes the same artifact tag to `/fenton-home/prod/release/codemonet_migrate` and `codemonet_deploy`; the platform's home host (`ops/home-host`) runs that release only while it is the primary host
 
 The platform's operations release must ship first whenever this repo's release
 depends on a new edge or host contract (see the platform runbook).
