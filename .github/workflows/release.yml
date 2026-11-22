@@ -317,6 +317,25 @@ jobs:
             exit 1
           fi
 
+      # EC2's SSM deploy succeeded; the Mac mini home host (Platform
+      # ops/home-host, INSTALL.md step 8.3) pulls the same image and runs it
+      # only while it is the primary host. Publish before the public check
+      # below, which reaches whichever host is primary: after a cutover that
+      # check can only pass once the home host has this release. Migrate is
+      # published first so the host migrates before it deploys.
+      - name: Publish the release to the home host
+        env:
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_TAG" =~ ^v[0-9]+([.][0-9]+){2}([-.][A-Za-z0-9_.-]+)?$ ]]
+          for key in codemonet_migrate codemonet_deploy; do
+            aws ssm put-parameter --region "$AWS_REGION" \
+              --name "/fenton-home/prod/release/$key" \
+              --type String --overwrite --value "$ARTIFACT_TAG" >/dev/null
+          done
+          echo "Published $ARTIFACT_TAG to the home host"
+
       - name: Verify deployment
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -326,7 +345,9 @@ jobs:
           # The backend answers with the new version, and nginx serves the
           # gallery page the new backend pre-rendered at startup (web-ssr is
           # retired). drawing-agent takes ~60-90s to come up after a recreate.
-          for i in {1..36}; do
+          # When the home host is primary it first waits up to 2 minutes for
+          # its reconcile timer, so allow 6 minutes in all.
+          for i in {1..72}; do
             sleep 5
 
             RESPONSE=$(curl -sf https://monet.dmfenton.net/api/version 2>/dev/null || echo '{}')
@@ -343,10 +364,10 @@ jobs:
               exit 0
             fi
 
-            echo "Attempt $i/36: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), pre-rendered gallery=$GALLERY_HEAD"
+            echo "Attempt $i/72: Backend='${DEPLOYED_VERSION:-unknown}' (want '$VERSION'), pre-rendered gallery=$GALLERY_HEAD"
           done
 
-          echo "❌ Deployment verification failed after 3 minutes"
+          echo "❌ Deployment verification failed after 6 minutes"
           echo "Expected backend: $VERSION, got: $DEPLOYED_VERSION"
           echo "Expected the pre-rendered gallery page, got: $GALLERY_HEAD"
           exit 1
