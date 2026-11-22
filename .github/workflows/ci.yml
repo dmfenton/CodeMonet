@@ -211,7 +211,9 @@ jobs:
       needs.changes.outputs.server == 'true' &&
       (github.event_name != 'pull_request' ||
         github.event.pull_request.head.repo.full_name == github.repository)
-    # id-token: the pull-only role that reads Platform's shared Python runtime image.
+    # The pull-only role that reads Platform's shared Python runtime trusts only this environment.
+    environment: image-build
+    # id-token: that role's OIDC token.
     permissions:
       contents: read
       id-token: write
