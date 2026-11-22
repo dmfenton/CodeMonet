@@ -351,6 +351,23 @@ jobs:
           echo "Expected the pre-rendered gallery page, got: $GALLERY_HEAD"
           exit 1
 
+      # EC2 migrated and verified this release; the Mac mini home host
+      # (Platform ops/home-host, INSTALL.md step 8.3) pulls the same image and
+      # runs it only while it is the primary host. Migrate is published first
+      # so the host migrates before it deploys.
+      - name: Publish the release to the home host
+        env:
+          ARTIFACT_TAG: ${{ steps.version.outputs.artifact_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_TAG" =~ ^v[0-9]+([.][0-9]+){2}([-.][A-Za-z0-9_.-]+)?$ ]]
+          for key in codemonet_migrate codemonet_deploy; do
+            aws ssm put-parameter --region "$AWS_REGION" \
+              --name "/fenton-home/prod/release/$key" \
+              --type String --overwrite --value "$ARTIFACT_TAG" >/dev/null
+          done
+          echo "Published $ARTIFACT_TAG to the home host"
+
       - name: Summary
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
