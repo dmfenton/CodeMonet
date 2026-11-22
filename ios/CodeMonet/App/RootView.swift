@@ -179,7 +179,7 @@ enum MagicLinkDeepLinkError {
     static func message(for error: Error) -> String {
         if let authError = error as? AuthenticationClientError {
             switch authError {
-            case .invalidAuthorizationCode, .unauthorized:
+            case .invalidAuthorizationCode, .unauthorized, .registrationUnavailable:
                 return "Invalid or expired link"
             case .missingPendingAuthorization:
                 return "Sign-in request expired on this device"

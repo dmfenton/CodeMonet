@@ -105,7 +105,6 @@
 		669B99ED0E92CCD268014A1B /* GalleryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalleryView.swift; sourceTree = "<group>"; };
 		679612E25876041328C74819 /* MonetKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = MonetKit; path = MonetKit; sourceTree = SOURCE_ROOT; };
 		6995E17497D3051AA88805D7 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
-		6D9DD7C940CF0BFFCE37D191 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../vendor/platform.dmfenton.net/swift; sourceTree = SOURCE_ROOT; };
 		70ECE70CB197172E05C8E22B /* StudioPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioPresentationTests.swift; sourceTree = "<group>"; };
 		742F14BA4DE4303242B3F0F9 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 		7734D18A173A15DE0904EB0E /* StudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StudioView.swift; sourceTree = "<group>"; };
@@ -242,7 +241,6 @@
 			isa = PBXGroup;
 			children = (
 				679612E25876041328C74819 /* MonetKit */,
-				6D9DD7C940CF0BFFCE37D191 /* swift */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -499,7 +497,7 @@
 			mainGroup = 7AAC607E46D32D3F472591BD;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				3ABC7D8C4F909F2877F0D7C9 /* XCLocalSwiftPackageReference "../vendor/platform.dmfenton.net/swift" */,
+				439867ECE80F8AFA650E855C /* XCRemoteSwiftPackageReference "platform" */,
 				FCCE629A144A19E6CCA8E29C /* XCLocalSwiftPackageReference "MonetKit" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -932,15 +930,22 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		3ABC7D8C4F909F2877F0D7C9 /* XCLocalSwiftPackageReference "../vendor/platform.dmfenton.net/swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = ../vendor/platform.dmfenton.net/swift;
-		};
 		FCCE629A144A19E6CCA8E29C /* XCLocalSwiftPackageReference "MonetKit" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = MonetKit;
 		};
 /* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		439867ECE80F8AFA650E855C /* XCRemoteSwiftPackageReference "platform" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/dmfenton/platform.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		15B7043D6142FDEA8DD537B7 /* MonetStudio */ = {
@@ -957,6 +962,7 @@
 		};
 		65012A4E726A7B7A9C914DAC /* FentonDesignSystem */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 439867ECE80F8AFA650E855C /* XCRemoteSwiftPackageReference "platform" */;
 			productName = FentonDesignSystem;
 		};
 		97F3CD7501D5E62B871DB7CC /* MonetNetworking */ = {
@@ -965,6 +971,7 @@
 		};
 		D0CF2840DBD3FCF3EE28236E /* FentonMobileCore */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 439867ECE80F8AFA650E855C /* XCRemoteSwiftPackageReference "platform" */;
 			productName = FentonMobileCore;
 		};
 		E379AD9D8DC88148531D636A /* MonetRender */ = {
