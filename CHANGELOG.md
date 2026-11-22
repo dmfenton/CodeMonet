@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The release runs its database migration and deploy through Platform's shared release step (platform#513, `scripts/ci/platform-release.sh`) instead of its own SSM polling loops. Image scanning, public verification and home-host publishing are unchanged.
+
 ## [1.44.6] - 2026-11-20
 
 ### Fixed

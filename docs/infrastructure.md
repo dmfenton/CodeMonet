@@ -31,11 +31,15 @@ This triggers `.github/workflows/release.yml` which:
 1. Runs server tests
 2. Builds the web frontend (`web/dist/client` for nginx, `web/dist/prerender` for the backend image) and syncs the client build to S3
 3. Builds the backend Docker image (it carries `web/dist/prerender`) and pushes it to AWS ECR
-4. Runs database migrations via SSM
+4. Runs database migrations via SSM (`Compute-MigrateCodeMonet`)
 5. Creates GitHub Release with changelog
 6. Deploys to EC2 via SSM (`Compute-DeployCodeMonet`): recreates `drawing-agent`, health-gates it, proves it has no AWS path, then warms nginx's public cache
 7. Verifies `/api/version` reports the new version and nginx serves the pre-rendered `/gallery`
 8. Before step 7, writes the same artifact tag to `/fenton-home/prod/release/codemonet_migrate` and `codemonet_deploy`; the platform's home host (`ops/home-host`) runs that release only while it is the primary host
+
+Steps 4 and 6 run Platform's shared release step (its `deploy-release` action's script, fetched at
+the commit pinned in `scripts/ci/platform-release.sh`, since this public repository cannot use the
+private action directly).
 
 The platform's operations release must ship first whenever this repo's release
 depends on a new edge or host contract (see the platform runbook).
