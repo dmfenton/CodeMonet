@@ -9,7 +9,7 @@
 set -euo pipefail
 root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 url="https://github.com/dmfenton/platform.git"
-commits="$(grep -oE "git = \"${url}\?[^\"]*#[0-9a-f]{40}\"" "$root/server/uv.lock" | sed -E 's/.*#([0-9a-f]{40})"/\1/' | sort -u)"
+commits="$(grep -oE "git = \"${url}\?[^\"]*#[0-9a-f]{40}\"" "$root/server/uv.lock" | sed -E 's/.*#([0-9a-f]{40})"/\1/' | sort -u || true)"
 if [[ "$(printf '%s\n' "$commits" | grep -c .)" -ne 1 ]]; then
   echo "docker-build: server/uv.lock must record exactly one Platform commit, found: ${commits:-none}" >&2
   exit 1
