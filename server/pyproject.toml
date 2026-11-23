@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Autonomous AI artist that creates ink drawings"
 requires-python = ">=3.12"
 dependencies = [
-    "fenton-platform",
+    "fenton-platform[telemetry]",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "websockets>=16.1.1,<17",
@@ -32,15 +32,6 @@ dependencies = [
     "boto3>=1.35.0",
     # Image generation (Nano Banana / Google Gemini)
     "google-genai>=1.52.0",
-    # OpenTelemetry tracing
-    "opentelemetry-api>=1.20.0",
-    "opentelemetry-sdk>=1.20.0",
-    "opentelemetry-exporter-otlp>=1.20.0",
-    "opentelemetry-instrumentation-fastapi>=0.41b0",
-    "opentelemetry-instrumentation-sqlalchemy>=0.41b0",
-    "opentelemetry-instrumentation-logging>=0.41b0",
-    "opentelemetry-propagator-aws-xray>=1.0.0",
-    "opentelemetry-sdk-extension-aws>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -68,7 +59,7 @@ build-backend = "hatchling.build"
 packages = ["code_monet"]
 
 [tool.uv.sources]
-fenton-platform = { git = "https://github.com/dmfenton/platform.git", subdirectory = "python", tag = "v1.0.0" }
+fenton-platform = { git = "https://github.com/dmfenton/platform.git", subdirectory = "python", rev = "23102495db807d551b56a2ffdf4d38fabd8097ed" }
 
 [tool.ruff]
 target-version = "py312"
