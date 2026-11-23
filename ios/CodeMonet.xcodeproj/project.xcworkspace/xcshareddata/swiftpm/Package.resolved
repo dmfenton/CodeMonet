@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/dmfenton/platform.git",
       "state" : {
-        "revision" : "75fcb5c0770be4de3dcefa33251157a3ef5dfe13",
-        "version" : "1.0.0"
+        "revision" : "23102495db807d551b56a2ffdf4d38fabd8097ed",
+        "version" : "1.3.0"
       }
     }
   ],
