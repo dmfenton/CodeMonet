@@ -110,6 +110,11 @@ See [docs/claude-sandbox.md](docs/claude-sandbox.md) for Claude Code sandbox con
 
 This ensures code review happens and keeps the workflow consistent.
 
+Every PR keeps the agent docs true: when it changes how work is done here (a workflow, script,
+make target, release or validation step, CI placement, or a standing owner decision), update this
+file, the nearest `CLAUDE.md` or the doc that describes it in the same PR, and delete guidance that
+no longer holds. Reviewers flag a PR that leaves them stale.
+
 ### Branch Strategy
 
 - **`main`** is the source of truth. All features and fixes should be merged here via PRs.
@@ -142,7 +147,7 @@ CI jobs only run when relevant code changes:
 | Server (Python)    | `server/**`                                      |
 | Frontend (web)     | `web/**`, `shared/**`, `package*.json`            |
 | Replay Tests       | `web/**`, `shared/**`, `package*.json`            |
-| iOS (Swift)        | `ios/**`                                          |
+| iOS (Swift)        | `ios/**`, pushes to `main` only (GitHub-hosted `macos-26`; check iOS locally before a PR) |
 | Docker Build       | `server/**` (after Server job passes)            |
 
 The "CI Success" job consolidates results - it passes if all jobs either pass or are appropriately skipped.
@@ -696,7 +701,8 @@ which caps review at two Codex rounds per PR. Follow its procedure:
 
 ## Shared simulator lifecycle
 
-- Use `make -C ios test-app (MonetKit tests/build-only targets use no boot slot)` through the pinned `scripts/simulator.sh` helper.
+- Run simulator tests with `make -C ios test-app`, which leases a slot through `scripts/simulator.sh`;
+  MonetKit tests and build-only targets use no boot slot.
 - Two managed boot slots are shared across the whole Mac and all app worktrees; busy tests queue.
 - Do not create per-task devices, take the first booted user device, or run simulator tests outside
   a lease. Keep Xcode parallel simulator testing disabled. Generic builds and Swift package tests
