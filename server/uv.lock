@@ -622,7 +622,7 @@ requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.159" },
     { name = "email-validator", specifier = ">=2.3.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "fenton-platform", extras = ["telemetry"], git = "https://github.com/dmfenton/platform.git?subdirectory=python&rev=23102495db807d551b56a2ffdf4d38fabd8097ed" },
+    { name = "fenton-platform", extras = ["telemetry"], git = "https://github.com/dmfenton/platform.git?subdirectory=python&tag=v1.3.0" },
     { name = "google-genai", specifier = ">=1.52.0" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.13.0" },
@@ -901,7 +901,7 @@ wheels = [
 [[package]]
 name = "fenton-platform"
 version = "0.1.0"
-source = { git = "https://github.com/dmfenton/platform.git?subdirectory=python&rev=23102495db807d551b56a2ffdf4d38fabd8097ed#23102495db807d551b56a2ffdf4d38fabd8097ed" }
+source = { git = "https://github.com/dmfenton/platform.git?subdirectory=python&tag=v1.3.0#23102495db807d551b56a2ffdf4d38fabd8097ed" }
 dependencies = [
     { name = "cryptography" },
 ]

@@ -59,7 +59,7 @@ build-backend = "hatchling.build"
 packages = ["code_monet"]
 
 [tool.uv.sources]
-fenton-platform = { git = "https://github.com/dmfenton/platform.git", subdirectory = "python", rev = "23102495db807d551b56a2ffdf4d38fabd8097ed" }
+fenton-platform = { git = "https://github.com/dmfenton/platform.git", subdirectory = "python", tag = "v1.3.0" }
 
 [tool.ruff]
 target-version = "py312"
