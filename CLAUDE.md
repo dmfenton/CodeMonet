@@ -151,6 +151,9 @@ CI jobs only run when relevant code changes:
 | Docker Build       | `server/**` (after Server job passes)            |
 
 The "CI Success" job consolidates results - it passes if all jobs either pass or are appropriately skipped.
+"Detect Changes" and "CI Success" run on GitHub-hosted `ubuntu-latest` (free for this public
+repository): they only read the API and job results, and an isolated PR container took 1-7 minutes
+to boot for each of them.
 
 ## Development Servers
 
