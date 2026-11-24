@@ -28,6 +28,11 @@
 #   macos-ci-lock.sh acquire <owner> <wait_seconds> <stale_seconds>
 #   macos-ci-lock.sh release <owner>
 
+# Platform owns this protocol (dmfenton/platform .github/actions/macos-ci-lock), which the
+# private app repositories use. This public repository cannot use that action, so it keeps this
+# compatible copy: same directory and owner file, and a lock with no acquired_at (Platform's
+# holders record expires_at instead) is aged by the directory's mtime.
+
 set -euo pipefail
 
 LOCK_DIR="$HOME/.fenton-ci-macos.lock"

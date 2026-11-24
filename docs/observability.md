@@ -9,7 +9,7 @@ the server exports no spans and `POST /traces` accepts client spans but records 
 
 The instrumentation remains and can be re-enabled:
 
-- **App**: Instrumented with opentelemetry-python (FastAPI, SQLAlchemy, logging)
+- **App**: Traced through Platform's shared `configure_tracing` (FastAPI, httpx, SQLAlchemy, logging; X-Ray IDs)
 - **Collector**: the platform `otel-collector` (`ops/deploy/otel-config.yaml`) receives OTLP and
   exports to X-Ray; it currently has a Chef-only pipeline that drops other services' spans
 - **Console**: View traces in AWS X-Ray console

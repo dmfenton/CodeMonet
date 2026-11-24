@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
@@ -5,25 +6,27 @@ ROOT = Path(__file__).parents[2]
 
 def test_runtime_image_has_no_build_package_managers() -> None:
     dockerfile = (ROOT / "server/Dockerfile").read_text()
-    assert dockerfile.count("FROM python:3.12-alpine@sha256:") == 2
+    assert re.search(
+        r"ARG FENTON_RUNTIME_IMAGE=573988763875\.dkr\.ecr\.us-east-1\.amazonaws\.com/"
+        r"fenton-python-runtime@sha256:[0-9a-f]{64}\n",
+        dockerfile,
+    )
+    assert "FROM python:" not in dockerfile
+    assert "FROM ${FENTON_RUNTIME_IMAGE} AS build\n" in dockerfile
     assert "FROM node:24.18.0-alpine@sha256:" in dockerfile
     assert "COPY server/claude-cli/package*.json ./" in dockerfile
     assert "npm ci --omit=dev --ignore-scripts" in dockerfile
-    runtime = dockerfile.split("FROM python:3.12-alpine@sha256:", maxsplit=2)[2]
+    runtime = dockerfile.split("FROM ${FENTON_RUNTIME_IMAGE}\n", maxsplit=1)[1]
 
     assert "COPY --from=ghcr.io/astral-sh/uv" not in runtime
     assert 'CMD ["/app/server/.venv/bin/python", "-m", "code_monet.serve"]' in runtime
     assert "RUN apk upgrade --no-cache" in runtime
-    assert "/usr/local/bin/pip*" in runtime
-    assert "/usr/local/bin/wheel" in runtime
+    assert "! command -v pip" in runtime
+    assert "! command -v wheel" in runtime
     assert "COPY --from=claude-cli /opt/claude/claude /usr/local/bin/claude" in runtime
     assert "SubprocessCLITransport('', ClaudeAgentOptions())._find_cli()" in runtime
     assert "subprocess.run([cli, '--version'], check=True)" in runtime
     assert 'ENV PATH="/app/server/.venv/bin:${PATH}"' in runtime
-
-    remote = (ROOT / "scripts/remote.py").read_text()
-    assert '"/app/server/.venv/bin/python -m alembic upgrade head"' in remote
-    assert '"uv run python -m alembic upgrade head"' not in remote
 
     # The pre-render bundle needs only the node binary: no npm, no node_modules.
     assert "COPY --from=claude-cli /usr/local/bin/node /usr/local/bin/node" in runtime
@@ -36,7 +39,17 @@ def test_runtime_image_has_no_build_package_managers() -> None:
 def test_release_deploys_unique_artifact_from_exact_source() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text()
 
-    assert workflow.count('--parameters "ImageTag=$ARTIFACT_TAG"') == 2
+    # Migrate, then deploy, each through Platform's shared release step with the immutable tag.
+    parameters = """DEPLOY_PARAMETERS: '{"ImageTag":"${{ steps.version.outputs.artifact_tag }}"}'"""
+    assert workflow.count(parameters) == 2
+    assert workflow.count("run: bash scripts/ci/platform-release.sh") == 2
+    assert workflow.index("DEPLOY_DOCUMENT: Compute-MigrateCodeMonet") < workflow.index(
+        "DEPLOY_DOCUMENT: Compute-DeployCodeMonet"
+    )
+    assert "aws ssm send-command" not in workflow
+    helper = (ROOT / "scripts/ci/platform-release.sh").read_text()
+    assert ".github/actions/deploy-release/deploy_release.py" in helper
+    assert "PLATFORM_RELEASE_COMMIT=" in helper
     # One image (drawing-agent): tagged, pushed and recorded by its artifact tag.
     assert workflow.count(":$ARTIFACT_TAG") >= 3
     assert "web-ssr:" not in workflow and "ECR_SSR_REPOSITORY" not in workflow

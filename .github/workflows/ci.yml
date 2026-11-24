@@ -19,7 +19,9 @@ permissions:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    # A lightweight API-and-checkout job: GitHub-hosted starts in seconds, where an isolated
+    # PR container took 1-7 minutes to boot (2026-11-24), on every PR's critical path.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     # paths-filter lists PR files through the API, which needs pull-requests: read.
     # reuse-pr-result also reads the merged pull request's runs (actions: read).
@@ -49,7 +51,6 @@ jobs:
               - 'shared/src/auth/platform.ts'
               - 'fenton-platform.tenant.json'
               - 'scripts/worktree-bootstrap.sh'
-              - 'scripts/publish-tenant-manifest.sh'
               - 'scripts/docker-build.sh'
               - 'scripts/ci/platform-git-access.sh'
               - '.github/workflows/**'
@@ -211,6 +212,12 @@ jobs:
       needs.changes.outputs.server == 'true' &&
       (github.event_name != 'pull_request' ||
         github.event.pull_request.head.repo.full_name == github.repository)
+    # The pull-only role that reads Platform's shared Python runtime trusts only this environment.
+    environment: image-build
+    # id-token: that role's OIDC token.
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - uses: actions/checkout@v6
@@ -232,6 +239,27 @@ jobs:
           npm ci
           npm run build -w shared
           npm run build -w web
+
+      # server/Dockerfile starts from Platform's shared Python runtime in ECR; this role can only
+      # pull that one repository.
+      - name: Read access to the shared Python runtime
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::573988763875:role/github-actions-python-runtime-pull
+          aws-region: us-east-1
+
+      - name: Prepare isolated Docker credentials
+        run: |
+          docker_config="$RUNNER_TEMP/docker-config-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          install -d -m 0700 "$docker_config"
+          # Keep the runner's buildx plugin while the ECR login stays out of its shared config.
+          if [ -d "$HOME/.docker/cli-plugins" ]; then ln -s "$HOME/.docker/cli-plugins" "$docker_config/cli-plugins"; fi
+          printf 'DOCKER_CONFIG=%s\n' "$docker_config" >> "$GITHUB_ENV"
+
+      # The PR Docker pool has no AWS CLI, so log in with the action (as the release does);
+      # docker-build.sh then pulls the pinned runtime without needing `aws`.
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build Docker image
         run: scripts/docker-build.sh -t code-monet-server:ci
@@ -337,7 +365,8 @@ jobs:
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
     name: CI Success
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    # Reads only job results; a hosted runner starts at once instead of booting a container.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [changes, server, app, replay, docker, ios]
     if: always()

@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - 'fenton-platform.tenant.json'
-      - 'scripts/publish-tenant-manifest.sh'
       - '.github/workflows/publish-tenant-manifest.yml'
   workflow_dispatch:
 
@@ -20,7 +19,7 @@ jobs:
   publish:
     # Push to main / workflow_dispatch only: AWS OIDC + SSM needs the trusted pool.
     runs-on: [self-hosted, codemonet-docker, lilserver]
-    # Above the script's 25-minute activation polling budget plus checkout and credentials.
+    # Above the shared publisher's 25-minute activation budget plus checkout and credentials.
     timeout-minutes: 40
     environment: codemonet-production
     permissions:
@@ -34,9 +33,21 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::573988763875:role/github-actions-codemonet-release
           aws-region: us-east-1
+      # Platform owns the publisher (.github/actions/publish-tenant-manifest). This public
+      # repository cannot use actions from the private Platform repository, so it checks that
+      # one directory out at a pinned commit with the read-only deploy key and runs its script.
+      - name: Check out Platform's tenant manifest publisher
+        uses: actions/checkout@v6
+        with:
+          repository: dmfenton/platform
+          ref: 3eb101ae6737b3e832c49010a578bdc9cfda12fa # platform#519
+          ssh-key: ${{ secrets.FENTON_PLATFORM_DEPLOY_KEY }}
+          persist-credentials: false
+          path: .fenton-platform
+          sparse-checkout: .github/actions/publish-tenant-manifest
       - name: Publish and activate CodeMonet manifest
         env:
           AWS_REGION: us-east-1
           FENTON_PLATFORM_INSTANCE_ID: i-0819504ca9b2d967b
           GH_TOKEN: ${{ github.token }}
-        run: scripts/publish-tenant-manifest.sh codemonet
+        run: .fenton-platform/.github/actions/publish-tenant-manifest/publish-tenant-manifest.sh codemonet

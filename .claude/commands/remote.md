@@ -62,20 +62,13 @@ uv run python scripts/ws-client.py status
 
 ## Server Logs
 
-Use `scripts/remote.py` for production server management:
+Use Platform's `box` CLI for production server access:
 
 ```bash
-# View container logs
-uv run python scripts/remote.py logs
-
-# Restart container
-uv run python scripts/remote.py restart
-
-# Run command in container
-uv run python scripts/remote.py exec "command"
-
-# Run command on host
-uv run python scripts/remote.py shell "command"
+box logs drawing-agent                     # Container logs
+box run --command 'docker restart drawing-agent'
+box run --command 'docker exec drawing-agent <command>'
+box run --command '<host command>'
 ```
 
 For local dev, use the debug endpoint:

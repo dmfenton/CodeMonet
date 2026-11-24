@@ -110,6 +110,11 @@ See [docs/claude-sandbox.md](docs/claude-sandbox.md) for Claude Code sandbox con
 
 This ensures code review happens and keeps the workflow consistent.
 
+Every PR keeps the agent docs true: when it changes how work is done here (a workflow, script,
+make target, release or validation step, CI placement, or a standing owner decision), update this
+file, the nearest `CLAUDE.md` or the doc that describes it in the same PR, and delete guidance that
+no longer holds. Reviewers flag a PR that leaves them stale.
+
 ### Branch Strategy
 
 - **`main`** is the source of truth. All features and fixes should be merged here via PRs.
@@ -142,10 +147,13 @@ CI jobs only run when relevant code changes:
 | Server (Python)    | `server/**`                                      |
 | Frontend (web)     | `web/**`, `shared/**`, `package*.json`            |
 | Replay Tests       | `web/**`, `shared/**`, `package*.json`            |
-| iOS (Swift)        | `ios/**`                                          |
+| iOS (Swift)        | `ios/**`, pushes to `main` only (GitHub-hosted `macos-26`; check iOS locally before a PR) |
 | Docker Build       | `server/**` (after Server job passes)            |
 
 The "CI Success" job consolidates results - it passes if all jobs either pass or are appropriately skipped.
+"Detect Changes" and "CI Success" run on GitHub-hosted `ubuntu-latest` (free for this public
+repository): they only read the API and job results, and an isolated PR container took 1-7 minutes
+to boot for each of them.
 
 ## Development Servers
 
@@ -494,6 +502,10 @@ CPU for over an hour a day and timed out the Tasks Reminders helper.
   once. On the laptop `make test`, `make ios-build`, `make ios-test`, `make ios-kit-test` and the
   sandbox targets queue behind `~/.local/bin/heavy-run` (dmfenton/machine): one heavy run at a
   time at utility priority. If it reports waiting, wait; never kill another agent's run.
+- `make test` and that queueing go through Platform's repo kit (`scripts/fenton-repo.sh`,
+  installed per Mac by dmfenton/machine as `~/.local/bin/fenton-repo`). It skips `make test` when
+  this exact content already passed on the branch or only docs changed since;
+  `make test FORCE=1` reruns it.
 
 ## Integration & E2E Tests
 
@@ -595,12 +607,12 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Use `scripts/remote.py` to manage the server via SSM:
+Reach the server with Platform's `box` CLI (dmfenton/platform `ops/scripts/box`, `ssm-operations`
+skill); migrations run in each release:
 
 ```bash
-uv run python scripts/remote.py logs       # View container logs
-uv run python scripts/remote.py restart    # Restart container
-uv run python scripts/remote.py migrate    # Run migrations
+box logs drawing-agent                          # Container logs (--follow, or --since/--grep for CloudWatch)
+box run --command 'docker restart drawing-agent'
 ```
 
 Sync production data to local dev (database + workspace):
@@ -692,7 +704,8 @@ which caps review at two Codex rounds per PR. Follow its procedure:
 
 ## Shared simulator lifecycle
 
-- Use `make -C ios test-app (MonetKit tests/build-only targets use no boot slot)` through the pinned `scripts/simulator.sh` helper.
+- Run simulator tests with `make -C ios test-app`, which leases a slot through `scripts/simulator.sh`;
+  MonetKit tests and build-only targets use no boot slot.
 - Two managed boot slots are shared across the whole Mac and all app worktrees; busy tests queue.
 - Do not create per-task devices, take the first booted user device, or run simulator tests outside
   a lease. Keep Xcode parallel simulator testing disabled. Generic builds and Swift package tests

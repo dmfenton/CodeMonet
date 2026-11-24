@@ -1,3 +1,8 @@
+# Platform's shared Python runtime (python/Dockerfile.runtime), pinned by digest: the scanned
+# Python 3.12 Alpine base every Fenton API starts from. The build stage uses the same image, so
+# the copied virtual environment links against the exact interpreter that runs it. Pulling it
+# needs ECR read access (scripts/docker-build.sh logs in when the image is not local).
+ARG FENTON_RUNTIME_IMAGE=573988763875.dkr.ecr.us-east-1.amazonaws.com/fenton-python-runtime@sha256:92d5d68a07d8de5f89dc8647d96444d27fbc95b5906734a50d28bd72dc9c0f25
 FROM node:24.18.0-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS claude-cli
 
 WORKDIR /opt/claude
@@ -6,7 +11,7 @@ RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
     && cp node_modules/@anthropic-ai/claude-code-linux-*-musl/claude ./claude \
     && ./claude --version
 
-FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df AS build
+FROM ${FENTON_RUNTIME_IMAGE} AS build
 
 WORKDIR /app/server
 
@@ -26,9 +31,10 @@ RUN --mount=type=bind,from=platform-src,target=/platform-src \
     GIT_CONFIG_VALUE_0=https://github.com/dmfenton/platform.git \
     GIT_CONFIG_KEY_1=safe.directory \
     GIT_CONFIG_VALUE_1=* \
+    UV_PYTHON=/usr/local/bin/python3.12 UV_PYTHON_DOWNLOADS=never \
     uv sync --frozen --no-dev --no-cache
 
-FROM python:3.12-alpine@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df
+FROM ${FENTON_RUNTIME_IMAGE}
 
 # Build args for version info
 ARG APP_VERSION=dev
@@ -66,14 +72,11 @@ RUN .venv/bin/python -c "import subprocess; from claude_agent_sdk import ClaudeA
 RUN mkdir -p /app/data/logs && ln -s /app/data /app/server/data
 
 # bash: the Claude CLI's Bash tool refuses to run without bash or zsh.
-# Remove the unused system package installer, then create the non-root runtime user.
+# The runtime already removed pip, setuptools and wheel; prove nothing reinstalled them, then
+# create the non-root runtime user.
 RUN apk upgrade --no-cache \
     && apk add --no-cache bash libstdc++ \
     && node --version \
-    && rm -rf /usr/local/lib/python3.12/site-packages/pip* \
-        /usr/local/lib/python3.12/site-packages/setuptools* \
-        /usr/local/lib/python3.12/site-packages/wheel* \
-        /usr/local/bin/pip* /usr/local/bin/wheel \
     && test ! -e /usr/local/bin/uv \
     && ! command -v pip \
     && ! command -v wheel \

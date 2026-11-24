@@ -31,11 +31,15 @@ This triggers `.github/workflows/release.yml` which:
 1. Runs server tests
 2. Builds the web frontend (`web/dist/client` for nginx, `web/dist/prerender` for the backend image) and syncs the client build to S3
 3. Builds the backend Docker image (it carries `web/dist/prerender`) and pushes it to AWS ECR
-4. Runs database migrations via SSM
+4. Runs database migrations via SSM (`Compute-MigrateCodeMonet`)
 5. Creates GitHub Release with changelog
 6. Deploys to EC2 via SSM (`Compute-DeployCodeMonet`): recreates `drawing-agent`, health-gates it, proves it has no AWS path, then warms nginx's public cache
 7. Verifies `/api/version` reports the new version and nginx serves the pre-rendered `/gallery`
 8. Before step 7, writes the same artifact tag to `/fenton-home/prod/release/codemonet_migrate` and `codemonet_deploy`; the platform's home host (`ops/home-host`) runs that release only while it is the primary host
+
+Steps 4 and 6 run Platform's shared release step (its `deploy-release` action's script, fetched at
+the commit pinned in `scripts/ci/platform-release.sh`, since this public repository cannot use the
+private action directly).
 
 The platform's operations release must ship first whenever this repo's release
 depends on a new edge or host contract (see the platform runbook).
@@ -112,36 +116,21 @@ To change shared infra, open a PR against compute and follow its [RUNBOOK](https
 
 ## Remote Server Management (SSM)
 
-Use `scripts/remote.py` to manage the server via AWS SSM (no SSH needed):
+Use Platform's `box` CLI (`ops/scripts/box` in dmfenton/platform; see its `ops/scripts/README.md`
+and the `ssm-operations` skill). There is no SSH and no CodeMonet-specific SSM script.
 
 ```bash
-# View container logs
-uv run python scripts/remote.py logs
-
-# Restart container
-uv run python scripts/remote.py restart
-
-# Run migrations
-uv run python scripts/remote.py migrate
-
-# Create invite code
-uv run python scripts/remote.py create-invite
-
-# Create user directly
-uv run python scripts/remote.py create-user EMAIL [PASSWORD]
-
-# Run command in container
-uv run python scripts/remote.py exec "command"
-
-# Run command on host
-uv run python scripts/remote.py shell "command"
+box logs drawing-agent                          # last 200 lines of docker logs
+box logs drawing-agent --follow                 # stream
+box logs drawing-agent --since 6h --grep ERROR  # CloudWatch, current container
+box run --command 'docker restart drawing-agent'
+box run --command 'docker exec drawing-agent /app/server/.venv/bin/python -m code_monet.cli invite create'
+box shell
 ```
 
-**Note:** Commands that start Python inside the container can be slow (~30s) due to `uv run` overhead. For direct database access, use sqlite3 on the host:
-
-```bash
-uv run python scripts/remote.py shell "sqlite3 /home/ec2-user/data/codemonet/drawing_agent.db '.tables'"
-```
+Migrations run in each release (Platform's `migrate-codemonet.sh`). The agent sleeps when idle, so
+start it (or open the site) before a `docker exec`. For app-level traces and log queries use
+`scripts/diagnose.py` (X-Ray and the `/drawing-agent/app` log groups).
 
 ## SSH Access (if needed)
 
