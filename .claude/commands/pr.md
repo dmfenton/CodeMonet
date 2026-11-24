@@ -96,7 +96,7 @@ gh pr edit --body "## Summary
 ### 7. Request the Codex review and land
 
 The PR is open from step 2 and the local code review from steps 3 to 6 is done. Follow
-`.github/repo-kit/review-gate.md`, the shared procedure synced from Platform's `tools/repo-kit`,
+`.github/review-kit/review-gate.md`, the shared procedure synced from Platform's `tools/review-kit`,
 with CodeMonet's review rule (`CLAUDE.md`, Codex Review Gate):
 
 - Address every Codex comment regardless of severity: fix it (or reply why not), reply on the

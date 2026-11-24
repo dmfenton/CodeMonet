@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Managed by dmfenton/platform tools/repo-kit: change the canonical file there and sync; never edit this copy.
+# Managed by dmfenton/platform tools/review-kit: change the canonical file there and sync; never edit this copy.
 #
 # Audit one uv project's locked dependencies for known vulnerabilities.
 #   scripts/audit-python-dependencies.sh <uv project dir> [uv export options, e.g. --no-dev]

@@ -1,4 +1,4 @@
-<!-- Managed by dmfenton/platform tools/repo-kit: change the canonical file there and sync; never edit this copy. -->
+<!-- Managed by dmfenton/platform tools/review-kit: change the canonical file there and sync; never edit this copy. -->
 
 # Open, review and land
 
@@ -48,5 +48,5 @@ token), so a Dependabot head shows no gate status until its review completes.
 
 `scripts/request-review.py`, `.github/workflows/codex-p1-gate.yml`, this file and
 `scripts/audit-python-dependencies.sh` (where present) come from `dmfenton/platform`
-`tools/repo-kit`. `.github/repo-kit/manifest.json` records the Platform commit they were synced
+`tools/review-kit`. `.github/review-kit/manifest.json` records the Platform commit they were synced
 from. Never edit them here: change the kit in Platform, then sync every repository.

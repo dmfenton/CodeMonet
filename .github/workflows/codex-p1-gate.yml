@@ -1,4 +1,4 @@
-# Managed by dmfenton/platform tools/repo-kit: change the template there and sync; never edit this copy.
+# Managed by dmfenton/platform tools/review-kit: change the template there and sync; never edit this copy.
 name: Codex review gate
 run-name: 'Codex review gate PR #${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || 0 }}'
 

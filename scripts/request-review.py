@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Request a Codex review for a pull request when the two-round budget allows it.
 
-Canonical copy: dmfenton/platform tools/repo-kit/files/scripts/request-review.py. Every repository
-gets an identical copy through `tools/repo-kit/repo_kit.py sync`; never edit a copy, change the
-canonical file and sync (tools/repo-kit/README.md).
+Canonical copy: dmfenton/platform tools/review-kit/files/scripts/request-review.py. Every repository
+gets an identical copy through `tools/review-kit/review_kit.py sync`; never edit a copy, change the
+canonical file and sync (tools/review-kit/README.md).
 
 Run without --request to print the decision. With --request it posts `@codex review` only when
 the PR is open, ready (not a draft), targets the base branch, and the rules below allow a round.
