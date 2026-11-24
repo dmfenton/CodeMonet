@@ -25,7 +25,7 @@ repos:
         pass_filenames: false
       - id: python-dependency-audit
         name: Python dependency audit
-        entry: bash scripts/audit-python-dependencies.sh
+        entry: bash scripts/audit-python-dependencies.sh server --no-dev
         language: system
         files: ^(server/(pyproject\.toml|uv\.lock)|fenton-platform\.lock|scripts/audit-python-dependencies\.sh)$
         pass_filenames: false
