@@ -19,7 +19,9 @@ permissions:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    # A lightweight API-and-checkout job: GitHub-hosted starts in seconds, where an isolated
+    # PR container took 1-7 minutes to boot (2026-11-24), on every PR's critical path.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     # paths-filter lists PR files through the API, which needs pull-requests: read.
     # reuse-pr-result also reads the merged pull request's runs (actions: read).
@@ -363,7 +365,8 @@ jobs:
   # Required status check that passes if all relevant jobs pass or are skipped
   ci-success:
     name: CI Success
-    runs-on: ${{ fromJSON(github.event_name == 'pull_request' && '["self-hosted","pr-isolated","codemonet-pr"]' || '["self-hosted","codemonet-docker","lilserver"]') }}
+    # Reads only job results; a hosted runner starts at once instead of booting a container.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [changes, server, app, replay, docker, ios]
     if: always()
