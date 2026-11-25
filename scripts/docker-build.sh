@@ -14,7 +14,10 @@ if [[ "$(printf '%s\n' "$commits" | grep -c .)" -ne 1 ]]; then
   echo "docker-build: server/uv.lock must record exactly one Platform commit, found: ${commits:-none}" >&2
   exit 1
 fi
-src="$(mktemp -d "${TMPDIR:-/tmp}/platform-src.XXXXXX")"
+# RUNNER_TEMP first, as Chef's build does. lilserver's trusted runners set TMPDIR to a private
+# /dev/shm folder; built from there, the v1.44.7 release (2026-11-25) received a 1.73 kB
+# `platform-src` with no repository in it, and uv failed.
+src="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/platform-src.XXXXXX")"
 trap 'rm -rf -- "$src"' EXIT
 git init -q "$src"
 git -C "$src" fetch -q --tags "$url" "$commits"
