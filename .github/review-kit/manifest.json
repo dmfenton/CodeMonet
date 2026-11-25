@@ -1,14 +1,14 @@
 {
   "files": {
-    ".github/review-kit/review-gate.md": "3486cdf00fdd6a710fcfc89d6fbf2aa4ce6a5c49286c66dbc0e0ae2934026512",
+    ".github/review-kit/review-gate.md": "2a52396d58ff1b2f77f4a6ff6cb7d4e85a15efa264d3f95a51e077f335870f01",
     ".github/workflows/codex-p1-gate.yml": "1b61bf0ab7d3a7e4fe5e6edff25af570d3da1de26504238f9ec8bc13d546e3bc",
     "scripts/audit-python-dependencies.sh": "f5f86f21d0b39caef234ae02c99a7888aced3a6941cab6abb54d3cd72f01a19f",
-    "scripts/request-review.py": "d8355db85a975d0e951d150b82149adfbf75e98e083f8433a3bc5b129806b3f8"
+    "scripts/request-review.py": "4036907c1b0d6e417073eb6b77343960df69120b2ff4d869930010008efa6c86"
   },
   "params": {
     "control": true,
     "lane": "codemonet",
     "python_audit": true
   },
-  "platform_commit": "610a21b629320c252082b1d53f96b51f1b82e342"
+  "platform_commit": "1b58efab0e49c8c4a204e20403a05c8229148483"
 }

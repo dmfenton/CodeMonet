@@ -216,21 +216,32 @@ def pages(resource: str) -> list[Json]:
     return [item for page in gh("api", "--paginate", "--slurp", resource) for item in page]
 
 
-def requester_problem(user: Json | None) -> str | None:
+def inbox_route(repo: str, pr: str) -> str:
+    """The laptop approval inbox's request-review step (dmfenton/machine), which posts the
+    request with the laptop's gh, signed in as the owner. lilserver queues it this way."""
+    return (
+        " On lilserver, queue it for the laptop instead (no tap; run in the background from a "
+        "dmfenton/machine checkout): python3 scripts/approval-request.py submit --queue "
+        f'lilserver --action request-review --arg {repo} --arg {pr} --why "<why now>"'
+    )
+
+
+def requester_problem(user: Json | None, repo: str = "<owner>/<repo>", pr: int = 0) -> str | None:
     """Codex answers a request only from a person with a Codex account. A GitHub App
     or bot token (a runner host's, say) gets "create a Codex account" instead, so the
     request is refused here, before it posts, with the fix named."""
+    route = inbox_route(repo, str(pr) if pr else "<PR>")
     if user is None:
         return (
             "gh is not signed in as a person (an App or bot token cannot read /user); "
             "Codex ignores requests from bots. Request from a checkout where `gh` is "
-            "signed in as the repository owner."
+            "signed in as the repository owner." + route
         )
     login = str(user.get("login", ""))
     if user.get("type") == "Bot" or login.endswith("[bot]"):
         return (
             f"gh is signed in as the bot {login}; Codex ignores requests from bots. "
-            "Request from a checkout where `gh` is signed in as the repository owner."
+            "Request from a checkout where `gh` is signed in as the repository owner." + route
         )
     return None
 
@@ -274,7 +285,7 @@ def main() -> int:
     if not allowed:
         return 1
     if args.request:
-        problem = requester_problem(signed_in_user())
+        problem = requester_problem(signed_in_user(), repo, args.pr)
         if problem:
             print(problem)
             return 1
