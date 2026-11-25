@@ -17,7 +17,10 @@ review is always requested explicitly, right after the PR is ready.
    Without `--request` the script only reports whether a request is allowed. Never post
    `@codex review` by hand: the script refuses a draft, a head that already has a review, a review
    that is running or pending, a third round, and a `gh` signed in as a bot (Codex ignores bots,
-   so request from the laptop or a cloud session, never from a runner host).
+   so request from the laptop or a cloud session, never from a runner host). On lilserver, whose
+   `gh` is an App, the refusal prints the route: queue `request-review` for the laptop with
+   dmfenton/machine's `scripts/approval-request.py submit --queue lilserver --action
+   request-review --arg <owner>/<repo> --arg <PR> --why "..."`, which runs without a tap.
 3. Wait for CI and the review. Triage every finding in one pass by the repository's review rule.
 4. If round 1 reported P0/P1 findings, push all fixes together, rerun the checks, and request round
    2 with the same command. Round 2 is final. A round with no P0/P1 finding is already final.
