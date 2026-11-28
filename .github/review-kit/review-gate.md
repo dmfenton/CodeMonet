@@ -26,10 +26,9 @@ review is always requested explicitly, right after the PR is ready.
    2 with the same command. Round 2 is final. A round with no P0/P1 finding is already final.
 5. After the final round, fix any remaining blockers in child commits (never amend or rebase the
    reviewed commit), rerun the checks, resolve those threads, and dispatch the gate:
-   `gh workflow run codex-p1-gate.yml -f pr_number=<PR>` (in a Claude cloud session, which has no
-   GraphQL: `gh api -X POST repos/<owner>/<repo>/actions/workflows/codex-p1-gate.yml/dispatches
-   -f ref=main -f 'inputs[pr_number]=<PR>'`). Never request a third review or open a replacement
-   PR to reset the budget.
+   `python3 scripts/request-review.py <PR> --gate`. It uses the REST workflow dispatch, so it works
+   in a Claude cloud session too (`gh workflow run` needs GraphQL, which those sessions lack).
+   Never request a third review or open a replacement PR to reset the budget.
 6. Before merging, run the friction retro: for each thing that cost real time (a check that only
    failed in CI, a missing tool or permission, an unclear doc, a slow or flaky step), comment
    "Hit again" on a matching open issue labelled `friction` in this repository, or open one with

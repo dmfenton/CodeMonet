@@ -7,6 +7,8 @@ canonical file and sync (tools/review-kit/README.md).
 
 Run without --request to print the decision. With --request it posts `@codex review` only when
 the PR is open, ready (not a draft), targets the base branch, and the rules below allow a round.
+With --gate it dispatches the Codex review gate for the PR through the REST API (`gh workflow run`
+needs GraphQL, which Claude cloud sessions lack), for the step after the final round.
 Counting follows the gate's README: only completed Codex outcomes consume the budget. A trigger
 comment that Codex never completed does not, so a failed attempt can be requested again. A round
 that reported no P0/P1 finding is final, as in the gate, so no further round is requested.
@@ -41,6 +43,8 @@ ACTIVE = {"running", "queued", "pending", "in_progress"}
 # limit: observed on chef#404-#410 (2026-11-14/15); an hour with no answer means it was lost.
 PENDING_TIMEOUT = timedelta(hours=1)
 RETRYABLE = {"failed", "error", "errored", "cancelled", "canceled", "timed_out"}
+GATE_WORKFLOW = "codex-p1-gate.yml"
+GATE_HINT = "python3 scripts/request-review.py <PR> --gate"
 
 
 @dataclass(frozen=True)
@@ -136,7 +140,7 @@ def _round_block(head: str, rounds: list[Outcome]) -> str | None:
         return (
             "Review budget spent (two completed Codex rounds). Fix agreed P0/P1 blockers, rerun "
             "checks, resolve those threads, dispatch the gate "
-            "(gh workflow run codex-p1-gate.yml -f pr_number=<PR>), and merge. "
+            f"({GATE_HINT}), and merge. "
             "Never request a third review."
         )
     if any(_same_commit(head, r.commit) for r in rounds):
@@ -145,7 +149,7 @@ def _round_block(head: str, rounds: list[Outcome]) -> str | None:
         return (
             "The last Codex round reported no P0/P1 finding, so it was the final round. Later "
             "commits merge on the gate's descendant rule; dispatch the gate "
-            "(gh workflow run codex-p1-gate.yml -f pr_number=<PR>) instead of requesting again."
+            f"({GATE_HINT}) instead of requesting again."
         )
     return None
 
@@ -216,6 +220,22 @@ def pages(resource: str) -> list[Json]:
     return [item for page in gh("api", "--paginate", "--slurp", resource) for item in page]
 
 
+def gate_dispatch(repo: str, pr: int, ref: str) -> list[str]:
+    """The REST workflow dispatch for the gate; works with only a REST token (cloud sessions)."""
+    endpoint = f"repos/{repo}/actions/workflows/{GATE_WORKFLOW}/dispatches"
+    return [
+        "gh",
+        "api",
+        "-X",
+        "POST",
+        endpoint,
+        "-f",
+        f"ref={ref}",
+        "-f",
+        f"inputs[pr_number]={pr}",
+    ]
+
+
 def inbox_route(repo: str, pr: str) -> str:
     """The laptop approval inbox's request-review step (dmfenton/machine), which posts the
     request with the laptop's gh, signed in as the owner. lilserver queues it this way."""
@@ -259,7 +279,11 @@ def main() -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("pr", type=int)
-    parser.add_argument("--request", action="store_true", help="post the request when eligible")
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--request", action="store_true", help="post the request when eligible")
+    action.add_argument(
+        "--gate", action="store_true", help="dispatch the Codex review gate for this PR (REST)"
+    )
     parser.add_argument("--repo", help="owner/name; defaults to the current checkout's repository")
     parser.add_argument("--base", default="main", help="required base branch (default main)")
     args = parser.parse_args()
@@ -268,6 +292,10 @@ def main() -> int:
     if pr["state"] != "open" or pr["base"]["ref"] != args.base:
         print(f"Review requests require an open PR targeting {args.base}.")
         return 1
+    if args.gate:
+        subprocess.run(gate_dispatch(repo, args.pr, args.base), check=True)
+        print(f"Dispatched the Codex review gate for {repo}#{args.pr} on {args.base}.")
+        return 0
     if pr["draft"]:
         ready = f"gh api -X POST repos/{repo}/pulls/{args.pr}/ccr/ready_for_review"
         print(
@@ -281,7 +309,7 @@ def main() -> int:
         pages(f"repos/{repo}/issues/{args.pr}/comments?per_page=100"),
         pages(f"repos/{repo}/pulls/{args.pr}/comments?per_page=100"),
     )
-    print(message)
+    print(message.replace("<PR>", str(args.pr)))
     if not allowed:
         return 1
     if args.request:
